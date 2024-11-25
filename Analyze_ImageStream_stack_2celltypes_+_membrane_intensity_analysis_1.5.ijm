@@ -27,13 +27,28 @@ else exit("ERROR: Cellpose wrapper not found! Update Fiji and activate the PT-BI
 output = output + File.separator + File.getNameWithoutExtension(inputImageStack);
 if(!File.exists(output)) File.makeDirectory(output);
 
-/* ChangeLog
- *  v1.0.2: Store all script parameters
- *  v1.0.3: Store graphs as png, don't store the montage
- *  v1.0.4: Get ch_array with channel names
- *  v1.1: Added analysis of intensity along the membrane, for synapse detection
- *  v1.2: Updated saving results and some other small things (not affecting the analysis)
- *  v1.3: Adaptations for the updated BIOP Cellpose wrapper
+/* Macro to analyze Tumor-Tcell interactions in Imaging Flow Cytometry data and quantify membrane intensity enrichment at immunological synapses.
+ * More info on https://github.com/BioImaging-NKI/ImageStreamAnalysis/
+ * 
+ * ► Requires the following Fiji update sites:
+ * - CLIJ
+ * - CLIJ2
+ * - IJPB-plugins
+ * - PTBIOP, with proper settings for the Fiji Cellpose wrapper
+ * 
+ * ► A working Cellpose Python environment
+ * 
+ * 
+ * Authors: Bram van den Broek & Rolf Harkes, The Netherlands Cancer Institute, b.vd.broek@nki.nl
+ *
+ * ChangeLog
+ * v1.0.2: Store all script parameters
+ * v1.0.3: Store graphs as png, don't store the montage
+ * v1.0.4: Get ch_array with channel names
+ * v1.1: Added analysis of intensity along the membrane, for synapse detection
+ * v1.2: Updated saving results and some other small things (not affecting the analysis)
+ * v1.3: Adaptations for the updated BIOP Cellpose wrapper
+ * v1.5: Alignment of membrane profiles
  */
 
 

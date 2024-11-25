@@ -28,6 +28,24 @@
 #@ String (label = "Cellpose environment type", choices={"conda","venv"}, style="listBox") env_type
 #@ String (label = "Cellpose model", default="cyto3") CellposeModel
 #@ Boolean (label = "Debug mode (show extra images and info)", value = false) debugMode
+
+
+/* Macro to analyze cell-cell interactions in Imaging Flow Cytometry data
+ * More info on https://github.com/BioImaging-NKI/ImageStreamAnalysis/
+ * 
+ * ► Requires the following Fiji update sites:
+ * - CLIJ
+ * - CLIJ2
+ * - IJPB-plugins
+ * - PTBIOP, with proper settings for the Fiji Cellpose wrapper
+ * 
+ * ► A working Cellpose Python environment
+ * 
+ * 
+ * Authors: Bram van den Broek & Rolf Harkes, The Netherlands Cancer Institute, b.vd.broek@nki.nl
+ */
+
+
 List.setCommands;
 if (List.get("Cellpose ...")!="") oldCellposeWrapper = false;
 else if (List.get("Cellpose Advanced")!="") oldCellposeWrapper = true;
