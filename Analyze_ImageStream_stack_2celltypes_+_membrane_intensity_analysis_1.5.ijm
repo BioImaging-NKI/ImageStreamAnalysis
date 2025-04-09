@@ -14,7 +14,7 @@
 #@ Boolean (label = "Limit number of analyzed cells", value = false) bool_limitNrCells
 #@ Integer (label = "...to", value = 100, min=1) limitNrCells
 #@ Boolean (label = "Load labelmap instead of performing Cellpose", value = false) bool_loadLabelmap
-#@ File (label = "Labelmap file", style = "file") labelmapFile
+#@ File (label = "Labelmap file", style = "file", required=false) labelmapFile
 #@ File (label = "Cellpose environment path", style="Directory", value="D:\\Software\\Python\\Cellpose3\\venv") env_path
 #@ String (label = "Cellpose environment type", choices={"conda","venv"}, style="listBox") env_type
 #@ String (label = "Cellpose model", default="cyto3") CellposeModel
@@ -224,8 +224,9 @@ if(markerLoc == "nuclear") {
 			print("[INFO] Using old CellPose wrapper. Update Fiji / PT-BIOP Update site to use the new version.")
 		}
 		else run("Cellpose ...", "env_path="+env_path+" env_type="+env_type+" model="+CellposeModel+" model_path=path\\to\\own_cellpose_model diameter="+cellDiameter+" ch1=1 ch2=2 additional_flags=[--use_gpu, --flow_threshold, "+CellposeFlowThreshold+", --cellprob_threshold, 0.0]");
-	else open(labelmapFile);
 	}
+	else open(labelmapFile);
+
 }
 else if(markerLoc == "membrane") {	//Sum the membrane marker and the Brightfield image
 	selectWindow(original);
@@ -268,8 +269,9 @@ else if(markerLoc == "membrane") {	//Sum the membrane marker and the Brightfield
 			print("[INFO] Using old CellPose wrapper. Update Fiji / PT-BIOP Update site to use the new version.")
 		}
 		else run("Cellpose ...", "env_path="+env_path+" env_type="+env_type+" model="+CellposeModel+" model_path=path\\to\\own_cellpose_model diameter="+cellDiameter+" ch1=1 ch2=0 additional_flags=[--use_gpu, --flow_threshold, "+CellposeFlowThreshold+", --cellprob_threshold, 0.0]");
-	else open(labelmapFile);
 	}
+	else open(labelmapFile);
+
 	
 ///	if(!bool_loadLabelmap) run("Cellpose Advanced", "diameter="+cellDiameter+" cellproba_threshold=0.0 flow_threshold=0.5 anisotropy=1.0 diam_threshold=12.0 model=cyto2 nuclei_channel=2 cyto_channel=1 dimensionmode=2D stitch_threshold=-1.0 omni=false cluster=false additional_flags=");
 	if(!bool_loadLabelmap) run("Cellpose ...", "env_path="+env_path+" env_type="+env_type+" model="+CellposeModel+" model_path=path\\to\\own_cellpose_model diameter="+cellDiameter+" ch1=1 ch2=0 additional_flags=[--use_gpu, --flow_threshold, "+CellposeFlowThreshold+", --cellprob_threshold, 0.0]");
