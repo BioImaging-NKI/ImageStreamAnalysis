@@ -51,21 +51,53 @@ def add_neighbours(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
 
 
 def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
-    """Per cell type and neighbour type: the contacts (pairs), the cells of the type, and how many of them touch at
-    least one cell of the neighbour type. Every pair counts from both sides (A–B and B–A)."""
-    types = type_label(cells)
-    type_of = dict(zip(cells["label"].astype(int), types, strict=True))
-    rows = []
+    """Per cell type and neighbour type: the cells of the type, the contacts (every pair counts from both sides:
+    A–B and B–A), how many cells of the type touch at least one of that neighbour type, and the contacts expected by
+    chance: the mean over all ways of shuffling the cell types among the cells of each event (the composition of
+    every event is kept). Observed / expected > 1: the types touch more often than their numbers explain.
+
+    Expected, exactly: in an event of n cells with c_A cells of type A, a touching pair is of types A and B with
+    probability 2 c_A c_B / (n (n - 1)) (A != B), counted once from each side; A–A pairs with probability
+    c_A (c_A - 1) / (n (n - 1)), counted twice."""
+    types = type_label(cells).to_numpy()
+    names = sorted(set(types))
+    index = {t: k for k, t in enumerate(names)}
+    k = len(names)
+    type_idx = np.array([index[t] for t in types], dtype=np.int64)
+    row_of = {int(lab): r for r, lab in enumerate(cells["label"].astype(int))}
+    frames = cells["frame"].to_numpy(dtype=np.int64)
+    observed = np.zeros((k, k))
+    touching: list[list[set[int]]] = [[set() for _ in range(k)] for _ in range(k)]
+    pairs_per_event: dict[int, int] = {}
     for a, b in pairs:
-        ta, tb = type_of[int(a)], type_of[int(b)]
-        rows += [(ta, tb, int(a)), (tb, ta, int(b))]
-    contacts = pd.DataFrame(rows, columns=["cell type", "neighbour type", "label"])
-    n_cells = types.value_counts()
-    table = (contacts.groupby(["cell type", "neighbour type"])
-             .agg(contacts=("label", "size"), **{"cells touching": ("label", "nunique")}).reset_index())
-    table.insert(2, "cells", table["cell type"].map(n_cells).astype(int))
-    table["fraction touching"] = table["cells touching"] / table["cells"]
-    return table.sort_values(["cell type", "neighbour type"]).reset_index(drop=True)
+        ra, rb = row_of[int(a)], row_of[int(b)]
+        ta, tb = type_idx[ra], type_idx[rb]
+        observed[ta, tb] += 1
+        observed[tb, ta] += 1
+        touching[ta][tb].add(ra)
+        touching[tb][ta].add(rb)
+        pairs_per_event[int(frames[ra])] = pairs_per_event.get(int(frames[ra]), 0) + 1
+    expected = np.zeros((k, k))
+    for event, n_pairs in pairs_per_event.items():
+        c = np.bincount(type_idx[frames == event], minlength=k).astype(float)
+        n = c.sum()
+        if n < 2:
+            continue
+        p = np.outer(c, c) - np.diag(c)  # c_A c_B, and c_A (c_A - 1) on the diagonal
+        expected += n_pairs * 2 * p / (n * (n - 1))
+    n_cells = np.bincount(type_idx, minlength=k)
+    rows = []
+    for i in range(k):
+        for j in range(k):
+            if observed[i, j] or expected[i, j] > 1e-9:
+                rows.append({"cell type": names[i], "neighbour type": names[j], "cells": int(n_cells[i]),
+                             "contacts": int(observed[i, j]), "cells touching": len(touching[i][j]),
+                             "fraction touching": len(touching[i][j]) / n_cells[i],
+                             "expected": expected[i, j],
+                             "observed / expected": observed[i, j] / expected[i, j] if expected[i, j] > 0 else np.nan})
+    columns = ["cell type", "neighbour type", "cells", "contacts", "cells touching", "fraction touching", "expected",
+               "observed / expected"]
+    return pd.DataFrame(rows, columns=columns)
 
 
 def multiplets(cells: pd.DataFrame, pairs: np.ndarray, n_events: int) -> pd.DataFrame:

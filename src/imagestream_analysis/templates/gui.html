@@ -8,17 +8,20 @@
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #dde1e8; --accent: #2f6fd6;
   --accent-text: #ffffff; --warn: #b45309; --error: #c0262d; --ok: #1f8a4c; --input: #ffffff; --chip: #eef1f6;
+  --div-neg: #2a78d6; --div-mid: #f0efec; --div-pos: #e34948;
   --thumb-bg: #000000;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #14171d; --panel: #1c2028; --text: #e4e7ee; --muted: #9aa3b5; --line: #2e3440; --accent: #5b8ff0;
     --accent-text: #0d1117; --warn: #f0a24a; --error: #ff6b6b; --ok: #4cc38a; --input: #232833; --chip: #262c37;
+    --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
   }
 }
 :root[data-theme="dark"] {
   --bg: #14171d; --panel: #1c2028; --text: #e4e7ee; --muted: #9aa3b5; --line: #2e3440; --accent: #5b8ff0;
   --accent-text: #0d1117; --warn: #f0a24a; --error: #ff6b6b; --ok: #4cc38a; --input: #232833; --chip: #262c37;
+  --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
@@ -458,6 +461,36 @@ async function refreshOverview() {
         el("td", {}, el("button", { class: "link", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"))));
   }
   box.replaceChildren(table);
+  if (o.interactions && o.interactions.length) box.append(contactMatrices(o.interactions));
+}
+// the contacts of each experiment against chance (the cell types shuffled among the cells of each event), side by side
+function contactMatrices(rows) {
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), mix = (a, b, f) => a.map((x, i) => Math.round(x + (b[i] - x) * f));
+  const color = t => { t = Math.max(-1, Math.min(1, t)); const c = mix(hex(css("--div-mid")), hex(css(t < 0 ? "--div-neg" : "--div-pos")), Math.abs(t));
+    return [`rgb(${c.join(",")})`, (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 > 0.55 ? "#0b0b0b" : "#ffffff"]; };
+  const short = t => t === "Tumor" ? "tumor" : t === "Artefact" ? "artefact" : t.replace(/^Immune ?/, "immune ").trim();
+  const rank = t => t === "Tumor" ? "0" : t === "Artefact" ? "2" : "1" + t;
+  const NS = "http://www.w3.org/2000/svg", svgEl = (tag, a) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
+  const wrap = el("div", {}, el("h4", {}, "Interactions per experiment, compared with chance"),
+    el("p", { class: "hint" }, "Contacts observed / expected when the cell types are shuffled among the cells of each event (all datasets of the experiment); blue: fewer than chance, red: more. Rows: cell type; columns: the type it touches."));
+  const grid = el("div", { style: "display:flex;flex-wrap:wrap;gap:18px" });
+  for (const exp of [...new Set(rows.map(r => r.experiment))].sort()) {
+    const sub = rows.filter(r => r.experiment === exp), types = [...new Set(sub.flatMap(r => [r["cell type"], r["neighbour type"]]))].sort((a, b) => rank(a).localeCompare(rank(b)));
+    const lab = 22 + 6.4 * Math.max(...types.map(t => short(t).length)), cell = 40, top = 30, W = lab + cell * types.length + 4, H = top + cell * types.length + 4;
+    const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, style: "font:11px system-ui,sans-serif" });
+    types.forEach((t, k) => { const a = svgEl("text", { x: 4, y: top + k * cell + cell / 2 + 4, fill: "currentColor" }); a.textContent = short(t); svg.append(a);
+      const b = svgEl("text", { x: lab + k * cell + cell / 2, y: top - 8, "text-anchor": "middle", fill: "currentColor" }); b.textContent = short(t).replace(/^immune /, ""); svg.append(b); });
+    types.forEach((ta, i) => types.forEach((tb, j) => {
+      const r = sub.find(x => x["cell type"] === ta && x["neighbour type"] === tb); if (!r) return;
+      const oe = r["observed / expected"], [fill, ink] = oe ? color(Math.log2(Math.max(oe, 0.01)) / 2) : [css("--chip"), css("--text")];
+      const g = svgEl("g", {}); const t = svgEl("title", {}); t.textContent = `${short(ta)} touching ${short(tb)}: ${r.contacts} contacts, ${Number(r.expected).toFixed(1)} expected; ${r["cells touching"]} of ${r.cells} cells touch one`;
+      g.append(t, svgEl("rect", { x: lab + j * cell + 1, y: top + i * cell + 1, width: cell - 2, height: cell - 2, rx: 3, fill }));
+      const v = svgEl("text", { x: lab + j * cell + cell / 2, y: top + i * cell + cell / 2 + 4, "text-anchor": "middle", fill: ink }); v.textContent = oe ? Number(oe).toFixed(2) : "–"; g.append(v);
+      svg.append(g); }));
+    grid.append(el("div", {}, el("div", { style: "font-weight:600;margin-bottom:2px" }, exp), svg));
+  }
+  wrap.append(grid); return wrap;
 }
 
 // ---------- wiring

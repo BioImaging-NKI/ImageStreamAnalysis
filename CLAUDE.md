@@ -50,6 +50,7 @@ A local guard backs this up:
   - `project.py`: `project.toml` (the panel: roles by marker name; zips with their channel names; datasets with experiment labels; shared settings). Old projects with roles by number per zip are converted on loading.
     - `run_project` analyses every dataset into `<project>/<experiment>/<dataset>/` and writes `summary.json` and `overview.tsv`. With `classification.pool = "experiment"` it measures all datasets first, classifies each experiment together, then finishes each dataset.
   - `dashboard.py` + `templates/dashboard.html`: the results page of each dataset (`dashboard.html` + `dashboard_files/*.webp`).
+    - Live in the page (2026-11-01): subtype thresholds (sliders), cell-type colours, the contact matrix against chance and partner bars, the membrane pair (recomputed from every cell's profile and neighbour track, as `membrane.py`). No Node here: check the page in the browser (no console errors) and with headless Edge screenshots.
     - Written by `pipeline.save`.
     - Self-contained and works from file://. Event images are drawn onto canvases but never read back (tainted canvases are fine).
     - Linked hover and selection; `#cell=N` / `#event=N` in the address selects on opening.

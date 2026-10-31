@@ -5,19 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ImageStream Dashboard</title>
 <style>
+/* Colours: the validated reference palette of the dataviz skill. Categorical slots in fixed order: tumor cells slot 2,
+   immune cells (or subtypes) slots 1, 4, 5, 6, 7, 8; the interface slot 3; artefacts muted grey. */
 :root {
   color-scheme: light;
   --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --grid: #e1e0d9;
   --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); --chip: #f0efec;
-  --t-cell: #2a78d6; --tumor: #eb6834; --interface: #1baf7a;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --other: #c3c2b7;
   --div-neg: #2a78d6; --div-mid: #f0efec; --div-pos: #e34948;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a;
     --axis: #383835; --ring: rgba(255,255,255,0.10); --chip: #262624;
-    --t-cell: #3987e5; --tumor: #d95926; --interface: #199e70;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --other: #52514e;
     --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
   }
 }
@@ -25,7 +30,8 @@
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a;
   --axis: #383835; --ring: rgba(255,255,255,0.10); --chip: #262624;
-  --t-cell: #3987e5; --tumor: #d95926; --interface: #199e70;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --other: #52514e;
   --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
 }
 * { box-sizing: border-box; }
@@ -35,6 +41,7 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; pad
 header h1 { font-size: 17px; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .chip { background: var(--chip); border-radius: 12px; padding: 2px 10px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
 .chip b { color: var(--ink); font-weight: 600; }
+.chip button { border: 0; background: none; padding: 0 0 0 6px; color: var(--ink-2); }
 .spacer { flex: 1; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 16px; background: var(--surface);
   border-bottom: 1px solid var(--ring); position: sticky; top: var(--header-h, 52px); z-index: 4; }
@@ -53,6 +60,8 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); 
 .card .sub { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
 .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .span2 { grid-column: 1 / -1; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
 #gallery { position: relative; height: 70vh; min-height: 360px; overflow-y: auto; background: var(--page); border-radius: 6px; }
 #gallery .inner { position: relative; }
 .tile { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
@@ -62,13 +71,16 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); 
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 4px 0; }
 .legend .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
 .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.legend .item { cursor: pointer; border-radius: 4px; padding: 0 3px; }
+.legend .item.faded { opacity: 0.35; }
 .plot { position: relative; }
 .plot canvas, .plot svg { display: block; width: 100%; }
 svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg text.ink { fill: var(--ink-2); }
 svg .grid { stroke: var(--grid); stroke-width: 1; }
 svg .axis { stroke: var(--axis); stroke-width: 1; }
 #tooltip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
-  box-shadow: 0 2px 8px rgba(0,0,0,.15); border-radius: 6px; padding: 6px 8px; font-size: 12px; display: none; z-index: 10; max-width: 280px; }
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); border-radius: 6px; padding: 6px 8px; font-size: 12px; display: none; z-index: 10; max-width: 300px; }
 #tooltip .v { font-weight: 600; }
 #tooltip .l { color: var(--ink-2); }
 #cellcard .empty { color: var(--muted); }
@@ -84,9 +96,21 @@ tr.hover td { background: var(--chip); }
 tr.selected td { box-shadow: inset 0 -2px 0 var(--ink); }
 tbody tr { cursor: pointer; }
 .tablebox { max-height: 420px; overflow: auto; }
-.tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
 .tabs button.on { border-color: var(--ink); font-weight: 600; }
 .note { color: var(--muted); font-size: 12px; }
+.marker { border-top: 1px solid var(--grid); padding-top: 6px; margin-top: 6px; }
+.marker:first-of-type { border-top: 0; margin-top: 0; }
+.marker .head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.marker input[type=range] { width: 100%; }
+.changed { color: var(--ink); font-weight: 600; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); border: 1px solid var(--ring);
+  border-radius: 12px; padding: 2px 10px; }
+.badge .icon { width: 16px; height: 16px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 11px;
+  display: inline-flex; align-items: center; justify-content: center; }
+.pairpick { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 4px 0 8px; }
+.pairpick label { color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
+pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
 </style>
 </head>
 <body>
@@ -103,30 +127,38 @@ tbody tr { cursor: pointer; }
     <option value="both">with immune cells and tumor cells</option>
     <option value="doublets">one tumor + one immune cell</option>
     <option value="interface">with an interface</option>
+    <option value="touching">with touching cells</option>
   </select></label>
+  <span id="contact-chip" style="display:contents"></span>
   <label>Sort <select id="f-sort"></select></label>
   <label>Size <input type="range" id="f-zoom" min="0.5" max="2.5" step="0.25" value="1"></label>
   <label><input type="checkbox" id="f-outlines" checked> outlines</label>
   <label><input type="checkbox" id="f-interfaces" checked> interfaces</label>
+  <label><input type="checkbox" id="f-contacts"> contacts</label>
   <span id="channels" style="display:contents"></span>
 </div>
 <main>
   <div class="card">
     <h2>Events</h2>
     <p class="sub" id="gallery-sub"></p>
-    <div class="legend">
-      <span><span class="key" style="border-color:var(--t-cell)"></span>Immune cell</span>
-      <span><span class="key" style="border-color:var(--tumor)"></span>tumor cell</span>
-      <span><span class="key" style="border-color:var(--interface)"></span>interface</span>
-      <span class="note">hover a cell; click to select it</span>
-    </div>
+    <div class="legend" id="gallery-legend"></div>
     <div id="gallery"><div class="inner"></div></div>
   </div>
   <div class="col">
     <div class="card" id="cellcard"><h2>Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p></div>
+    <div class="card" id="markers-card" hidden>
+      <h2>Subtype markers</h2>
+      <p class="sub">The threshold of each marker on the immune cells, on log(intensity − min + 1). Drag to change the
+        subtypes everywhere on this page; the tumor / immune split and the artefacts stay as computed.</p>
+      <div id="markers"></div>
+      <div class="tabs" style="margin-top:8px"><button id="export">Copy the thresholds as settings</button>
+        <button id="reset-all">Reset all</button></div>
+      <pre class="export" id="export-text" hidden></pre>
+    </div>
     <div class="card">
       <h2>Cell classes</h2>
-      <p class="sub">Area against marker ratio (immune / tumor marker), log–log, as the k-means classification</p>
+      <p class="sub">Area against marker ratio (immune / tumor marker), log–log, as the k-means classification. Click a
+        type in the legend to bring it forward.</p>
       <div class="legend" id="classes-legend"></div>
       <div class="plot"><canvas id="classes" height="300"></canvas></div>
     </div>
@@ -136,15 +168,38 @@ tbody tr { cursor: pointer; }
       <div class="plot"><canvas id="iface" height="280"></canvas></div>
     </div>
   </div>
+  <div class="card span2" id="contacts-card">
+    <h2>Interactions</h2>
+    <p class="sub" id="contacts-sub"></p>
+    <div class="grid2">
+      <div>
+        <div class="tabs"><button id="mx-ratio" class="on">compared with chance</button><button id="mx-fraction">fraction touching</button></div>
+        <div class="legend" id="matrix-legend"></div>
+        <div class="plot"><svg id="matrix"></svg></div>
+        <p class="note">Rows: cell type; columns: the type it touches. Click a square to show the events with that contact.</p>
+      </div>
+      <div>
+        <div class="tabs"><button id="bars-share" class="on">share of contacts</button><button id="bars-count">number of contacts</button></div>
+        <div class="legend" id="bars-legend"></div>
+        <div class="plot"><svg id="bars"></svg></div>
+        <p class="note">Whom each cell type touches; on the right the share of its cells that touch any cell.</p>
+      </div>
+    </div>
+  </div>
   <div class="card span2" id="membrane-card" hidden>
     <h2>Membrane enrichment</h2>
+    <div class="pairpick">
+      <label>Membrane of <select id="pair-cells"></select></label>
+      <label>interface with <select id="pair-partners"></select></label>
+      <span id="expression-badge"></span>
+    </div>
     <p class="sub" id="membrane-sub"></p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+    <div class="grid3">
       <div>
-        <div class="legend"><span><span class="key" style="border-color:var(--interface)"></span>interface</span>
+        <div class="legend"><span><span class="key" style="border-color:var(--s3)"></span>interface</span>
           <span><span class="key" style="border-color:var(--muted);border-top-style:dashed"></span>control (random windows)</span></div>
         <div class="plot"><svg id="hist" viewBox="0 0 420 240"></svg></div>
-        <p class="note">Standard deviations above the mean of the membrane outside the interface; fraction of cells per bin.</p>
+        <p class="note">Standard deviations above the mean of the membrane that touches no cell; fraction of cells per bin.</p>
       </div>
       <div>
         <div class="legend"><span class="note">Average profile of the cells with an interface, centred at the interface</span></div>
@@ -159,7 +214,7 @@ tbody tr { cursor: pointer; }
   </div>
   <div class="card span2">
     <div class="tabs"><button id="tab-cells" class="on">Cells</button><button id="tab-events">Events</button>
-      <span class="note" id="table-note" style="align-self:center"></span></div>
+      <button id="tab-contacts">Contacts</button><span class="note" id="table-note"></span></div>
     <div class="tablebox"><table id="table"></table></div>
   </div>
 </main>
@@ -169,40 +224,70 @@ tbody tr { cursor: pointer; }
 "use strict";
 const D = "__ISA_DATA__";
 const [TW, TH] = D.tile, [SC, SR] = D.sheet, PER_SHEET = SC * SR;
-const C = D.cells, E = D.events, M = D.membranes;
+const C = D.cells, E = D.events, MK = D.markers || [], PAIRS = D.pairs || [], MP = D.membranes;
 const NC = C.event.length, NE = D.n_events;
 const OF_INTEREST = D.cell_of_interest;  // "Tumor" or "Immune"
 const LUT = { gray: "#ffffff", azure: "#3fa2ff", green: "#3cdc3c", magenta: "#ff40ff", yellow: "#ffe640",
               red: "#ff4040", cyan: "#40ffff", orange: "#ffa040" };
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const fmt = (v, d = 3) => v == null ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : Number(v.toFixed(d)).toString());
-const typeColor = t => css(t === "Immune" ? "--t-cell" : t === "Artefact" ? "--muted" : "--tumor");
-const typeName = i => C.type[i] === "Immune" ? "immune cell" + (C.subtype[i] ? " " + C.subtype[i] : "") : C.type[i] === "Artefact" ? "artefact" : "tumor cell";
-const state = { filter: "all", sort: "event", zoom: 1, outlines: true, interfaces: true, hover: -1, selected: -1, event: -1, tab: "cells",
-                tableSort: null, tableDesc: false };
+const fmt = (v, d = 3) => v == null || (typeof v === "number" && !isFinite(v)) ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : Number(v.toFixed(d)).toString());
+const pct = v => v == null || !isFinite(v) ? "–" : Math.round(v * 100) + " %";
+const state = { filter: "all", sort: "event", zoom: 1, outlines: true, interfaces: true, contacts: false, hover: -1, selected: -1,
+                event: -1, tab: "cells", tableSort: null, tableDesc: false, contact: null, focus: null, matrix: "ratio", bars: "share" };
+
+// ---------- cell types: tumor, immune (or immune subtypes, live from the marker thresholds), artefact
+for (const m of MK) { m.thr0 = m.threshold; m.thr = m.threshold; }
+const TYPE = new Array(NC);
+function subtypeOf(i) {
+  if (!MK.length) return "";
+  const pos = MK.filter(m => m.thr != null && C.type[i] === "Immune" && m.values[i] != null && m.values[i] > m.thr).map(m => m.name + "+");
+  return pos.length ? pos.join(" ") : "negative";
+}
+function recomputeTypes() { for (let i = 0; i < NC; i++) TYPE[i] = C.type[i] === "Immune" && MK.length ? "Immune " + subtypeOf(i) : C.type[i]; }
+// the possible immune types, in a fixed order (by the combination of positive markers), so colours follow the entity
+const IMMUNE_TYPES = MK.length ? Array.from({ length: 2 ** MK.length }, (_, b) => {
+  const pos = MK.filter((m, k) => b & (1 << k)).map(m => m.name + "+"); return "Immune " + (pos.length ? pos.join(" ") : "negative"); })
+  : ["Immune"];
+const IMMUNE_SLOTS = ["--s1", "--s4", "--s5", "--s6", "--s7", "--s8"];
+function colorVar(t) {
+  if (t === "Tumor") return "--s2";
+  if (t === "Artefact") return "--muted";
+  const k = IMMUNE_TYPES.indexOf(t);
+  return k >= 0 && k < IMMUNE_SLOTS.length ? IMMUNE_SLOTS[k] : "--other";
+}
+const typeColor = t => css(colorVar(t));
+const ORDER = ["Tumor", ...IMMUNE_TYPES, "Artefact"];
+const typesPresent = (ids = null) => { const s = new Set(); for (let i = 0; i < NC; i++) if (!ids || ids.has(i)) s.add(TYPE[i]); return ORDER.filter(t => s.has(t)); };
+const shortType = t => t === "Tumor" ? "tumor" : t === "Artefact" ? "artefact" : t === "Immune" ? "immune" : t.replace(/^Immune /, "immune ");
+const typeName = i => shortType(TYPE[i]) + (TYPE[i] === "Tumor" || TYPE[i] === "Immune" ? " cell" : "");
 
 // ---------- derived data
 const cellsOfEvent = Array.from({ length: NE }, () => []);
 for (let i = 0; i < NC; i++) cellsOfEvent[C.event[i]].push(i);
-const memOfCell = new Int32Array(NC).fill(-1);
-if (M) M.cell.forEach((c, k) => { if (c >= 0) memOfCell[c] = k; });
+const neighbours = Array.from({ length: NC }, () => []);
+const pairsOfEvent = Array.from({ length: NE }, () => []);
+for (let k = 0; k < PAIRS.length; k += 2) { const a = PAIRS[k], b = PAIRS[k + 1];
+  neighbours[a].push(b); neighbours[b].push(a); pairsOfEvent[C.event[a]].push([a, b]); }
+const centroid = C.outline.map(o => { let x = 0, y = 0; const n = o.length / 2; for (let k = 0; k < o.length; k += 2) { x += o[k]; y += o[k + 1]; } return n ? [x / n / 2, y / n / 2] : [0, 0]; });
+let M = null, memOfCell = new Int32Array(NC).fill(-1);
+const eventEnrichment = new Float64Array(NE).fill(NaN);
 const iInterface = OF_INTEREST === "Tumor" ? E.tu_interface : E.t_interface;
 const iRest = OF_INTEREST === "Tumor" ? E.tu_rest : E.t_rest;
 const iRatio = OF_INTEREST === "Tumor" ? E.tu_ratio : E.t_ratio;
-const eventEnrichment = new Float64Array(NE).fill(NaN);
-if (M) M.sd.forEach((v, k) => { const c = M.cell[k]; if (c >= 0 && v != null) { const e = C.event[c];
-  if (!(eventEnrichment[e] >= v)) eventEnrichment[e] = v; } });
 const isDoublet = e => E.t_cells[e] === 1 && E.tumor_cells[e] === 1 && E.t_interface[e] != null;
+const hasContact = (e, [a, b]) => pairsOfEvent[e].some(([x, y]) => (TYPE[x] === a && TYPE[y] === b) || (TYPE[x] === b && TYPE[y] === a));
 const FILTERS = { all: () => true, both: e => E.t_cells[e] > 0 && E.tumor_cells[e] > 0, doublets: isDoublet,
-                  interface: e => E.interfaces[e].length > 0 };
+                  interface: e => E.interfaces[e].length > 0, touching: e => pairsOfEvent[e].length > 0 };
 const SORTS = [["event", "event order"], ["ratio", "membrane ratio of the " + (OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell")]];
-if (M) SORTS.push(["sd", "enrichment (SD above mean)"]);
+if (MP) SORTS.push(["sd", "enrichment (SD above mean)"]);
+SORTS.push(["contacts", "number of contacts"]);
 if (E.object) SORTS.splice(1, 0, ["object", "object number"]);
-let shown = [];  // event indices in view order
-let shownSet = new Set();
+let base = [], shown = [], shownSet = new Set();  // base: the events filter only; shown: also the contact filter
 function applyFilter() {
-  shown = [...Array(NE).keys()].filter(FILTERS[state.filter]);
-  const key = { event: e => e, object: e => E.object[e], ratio: e => -(iRatio[e] ?? -Infinity), sd: e => -(isNaN(eventEnrichment[e]) ? -Infinity : eventEnrichment[e]) }[state.sort];
+  base = [...Array(NE).keys()].filter(FILTERS[state.filter]);
+  shown = state.contact ? base.filter(e => hasContact(e, state.contact)) : [...base];
+  const key = { event: e => e, object: e => E.object[e], ratio: e => -(iRatio[e] ?? -Infinity),
+                sd: e => -(isNaN(eventEnrichment[e]) ? -Infinity : eventEnrichment[e]), contacts: e => -pairsOfEvent[e].length }[state.sort];
   shown.sort((a, b) => key(a) - key(b) || a - b);
   shownSet = new Set(shown);
 }
@@ -247,18 +332,27 @@ function drawEvent(canvas, e, scale) {
   ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.imageSmoothingEnabled = scale < 1;
   drawImageOf(ctx, e);
   if (state.interfaces) {
-    ctx.strokeStyle = css("--interface"); ctx.lineWidth = 1.5 / scale;
+    ctx.strokeStyle = css("--s3"); ctx.lineWidth = 1.5 / scale;
     for (const o of E.interfaces[e]) ctx.stroke(pathOf(o));
   }
   for (const i of cellsOfEvent[e]) {
     const sel = i === state.selected, hov = i === state.hover;
     if (!state.outlines && !sel && !hov) continue;
-    ctx.strokeStyle = sel || hov ? "#ffffff" : typeColor(C.type[i]);
+    ctx.strokeStyle = sel || hov ? "#ffffff" : typeColor(TYPE[i]);
     ctx.lineWidth = (sel ? 3 : hov ? 2.5 : 1.5) / scale;
     ctx.setLineDash(hov && !sel ? [4 / scale, 3 / scale] : []);
     ctx.stroke(cellPath(i));
   }
   ctx.setLineDash([]);
+  if (state.contacts || state.contact) {  // a line between the centres of touching cells
+    for (const [a, b] of pairsOfEvent[e]) {
+      const match = state.contact && ((TYPE[a] === state.contact[0] && TYPE[b] === state.contact[1]) || (TYPE[a] === state.contact[1] && TYPE[b] === state.contact[0]));
+      if (!state.contacts && !match) continue;
+      ctx.strokeStyle = match ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)"; ctx.lineWidth = (match ? 2.5 : 1.25) / scale;
+      ctx.beginPath(); ctx.moveTo(...centroid[a]); ctx.lineTo(...centroid[b]); ctx.stroke();
+      for (const c of [a, b]) { ctx.beginPath(); ctx.arc(...centroid[c], 1.8 / scale + 0.6, 0, 2 * Math.PI); ctx.fillStyle = "#fff"; ctx.fill(); }
+    }
+  }
 }
 function cellAt(e, x, y, ctx) {
   for (const i of cellsOfEvent[e]) if (ctx.isPointInPath(cellPath(i), x, y)) return i;
@@ -315,6 +409,13 @@ function scrollToEvent(e) {
   const top = Math.floor(k / layout.cols) * (layout.h + layout.gap);
   if (top < gallery.scrollTop || top + layout.h > gallery.scrollTop + gallery.clientHeight) gallery.scrollTop = top - 20;
 }
+function renderGalleryLegend() {
+  const items = typesPresent().map(t => [colorVar(t), shortType(t)]);
+  const box = document.getElementById("gallery-legend"); box.replaceChildren();
+  for (const [v, t] of items) { const s = document.createElement("span"); const k = document.createElement("span"); k.className = "key"; k.style.borderColor = `var(${v})`; s.append(k, t); box.append(s); }
+  const i = document.createElement("span"); const k = document.createElement("span"); k.className = "key"; k.style.borderColor = "var(--s3)"; i.append(k, "interface"); box.append(i);
+  const n = document.createElement("span"); n.className = "note"; n.textContent = "hover a cell; click to select it"; box.append(n);
+}
 
 // ---------- linking
 function setHover(i) {
@@ -349,15 +450,15 @@ function showTip(ev, rows) {
 }
 function hideTip() { tip.style.display = "none"; }
 function cellTip(i) {
-  const rows = [[typeName(i), `in event #${C.event[i] + 1}`], [fmt(C.area[i], 0), "px area"],
-                [fmt(C.ratio[i]), "marker ratio"]];
+  const rows = [[typeName(i), `in event #${C.event[i] + 1}`], [fmt(C.area[i], 0), "px area"], [fmt(C.ratio[i]), "marker ratio"]];
+  if (neighbours[i].length) rows.push([String(neighbours[i].length), "touching: " + neighbours[i].map(j => shortType(TYPE[j])).join(", ")]);
   const k = memOfCell[i];
-  if (k >= 0) rows.push(M.sd[k] != null ? [fmt(M.sd[k], 2), "SD above mean at the interface"] : [fmt(M.control[k], 2), "control (no interface)"]);
+  if (M && k >= 0) rows.push(M.sd[k] != null ? [fmt(M.sd[k], 2), "SD above mean at the interface"] : [fmt(M.control[k], 2), "control (no interface)"]);
   return rows;
 }
 function eventTip(e) {
   return [[`#${e + 1}`, E.object ? `object ${E.object[e]}` : "event"], [`${E.t_cells[e]} immune · ${E.tumor_cells[e]} tumor`, "cells"],
-          [fmt(iRatio[e]), "membrane ratio"]];
+          [String(pairsOfEvent[e].length), "pairs of touching cells"], [fmt(iRatio[e]), "membrane ratio"]];
 }
 
 // ---------- plots (canvas with an overlay for hover/selection)
@@ -401,20 +502,22 @@ function scatter(name, canvasId, pts, opts) {
   if (opts.identity) { const lo = Math.max(sx.d[0], sy.d[0]), hi = Math.min(sx.d[1], sy.d[1]);
     ctx.strokeStyle = css("--axis"); ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(sx(lo), sy(lo)); ctx.lineTo(sx(hi), sy(hi)); ctx.stroke(); ctx.setLineDash([]); }
   const surface = css("--surface");
-  for (const p of pts) { p.px = sx(p.x); p.py = sy(p.y);
-    ctx.beginPath(); ctx.arc(p.px, p.py, 3.2, 0, 2 * Math.PI); ctx.fillStyle = p.color; ctx.globalAlpha = 0.75; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.strokeStyle = surface; ctx.lineWidth = 0.75; ctx.stroke(); }
+  const order = opts.front ? [...pts].sort((a, b) => (a.group === opts.front) - (b.group === opts.front)) : pts;
+  for (const p of order) { p.px = sx(p.x); p.py = sy(p.y);
+    const dim = opts.front && p.group !== opts.front;
+    ctx.beginPath(); ctx.arc(p.px, p.py, 3.2, 0, 2 * Math.PI); ctx.fillStyle = p.color; ctx.globalAlpha = dim ? 0.12 : 0.8; ctx.fill(); ctx.globalAlpha = 1;
+    if (!dim) { ctx.strokeStyle = surface; ctx.lineWidth = 0.75; ctx.stroke(); } }
   const base = ctx.getImageData(0, 0, cv.width, cv.height);
   plots[name] = { pts, cv, ctx, base, kind: opts.kind };
   if (!cv._wired) {
     cv._wired = true;
-    cv.addEventListener("pointermove", ev => { const P = plots[name]; const r = cv.getBoundingClientRect(); const x = ev.clientX - r.left, y = ev.clientY - r.top;
-      let best = null, bd = 144; for (const p of P.pts) { const d = (p.px - x) ** 2 + (p.py - y) ** 2; if (d < bd) { bd = d; best = p; } }
+    const nearest = ev => { const P = plots[name]; const r = cv.getBoundingClientRect(); const x = ev.clientX - r.left, y = ev.clientY - r.top;
+      let best = null, bd = 144; for (const p of P.pts) { const d = (p.px - x) ** 2 + (p.py - y) ** 2; if (d < bd) { bd = d; best = p; } } return best; };
+    cv.addEventListener("pointermove", ev => { const P = plots[name], best = nearest(ev);
       if (!best) { hideTip(); if (P.kind === "cell") setHover(-1); return; }
       if (P.kind === "cell") { setHover(best.id); showTip(ev, cellTip(best.id)); } else showTip(ev, eventTip(best.id)); });
     cv.addEventListener("pointerleave", () => { hideTip(); if (plots[name].kind === "cell") setHover(-1); });
-    cv.addEventListener("click", ev => { const P = plots[name]; const r = cv.getBoundingClientRect(); const x = ev.clientX - r.left, y = ev.clientY - r.top;
-      let best = null, bd = 144; for (const p of P.pts) { const d = (p.px - x) ** 2 + (p.py - y) ** 2; if (d < bd) { bd = d; best = p; } }
+    cv.addEventListener("click", ev => { const P = plots[name], best = nearest(ev);
       if (best) { if (P.kind === "cell") select(best.id); else selectEvent(best.id); } });
   }
 }
@@ -432,49 +535,311 @@ function drawOverlay() {
 function drawPlots() {
   const cellPts = [];
   for (let i = 0; i < NC; i++) if (shownSet.has(C.event[i]) && C.area[i] > 0 && C.ratio[i] > 0)
-    cellPts.push({ x: C.area[i], y: C.ratio[i], id: i, color: typeColor(C.type[i]) });
-  scatter("classes", "classes", cellPts, { kind: "cell", xlog: true, ylog: true, xlabel: "area (px)", ylabel: "marker ratio" });
-  const nT = cellPts.filter(p => C.type[p.id] === "Immune").length;
-  const nA = cellPts.filter(p => C.type[p.id] === "Artefact").length;
-  legend("classes-legend", [["--t-cell", `immune cells (${nT.toLocaleString()})`], ["--tumor", `tumor cells (${(cellPts.length - nT - nA).toLocaleString()})`]]
-    .concat(nA ? [["--muted", `artefacts (${nA.toLocaleString()})`]] : []));
-  const evPts = shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--tumor" : "--t-cell") }));
+    cellPts.push({ x: C.area[i], y: C.ratio[i], id: i, color: typeColor(TYPE[i]), group: TYPE[i] });
+  scatter("classes", "classes", cellPts, { kind: "cell", xlog: true, ylog: true, xlabel: "area (px)", ylabel: "marker ratio", front: state.focus });
+  const counts = new Map(); for (const p of cellPts) counts.set(p.group, (counts.get(p.group) || 0) + 1);
+  const lg = document.getElementById("classes-legend"); lg.replaceChildren();
+  for (const t of ORDER.filter(t => counts.has(t))) { const s = document.createElement("span"); s.className = "item" + (state.focus && state.focus !== t ? " faded" : "");
+    const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = `var(${colorVar(t)})`;
+    s.append(dot, `${shortType(t)} (${counts.get(t).toLocaleString()})`); s.onclick = () => { state.focus = state.focus === t ? null : t; drawPlots(); }; lg.append(s); }
+  const evPts = shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--s2" : "--s1") }));
   const who = OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell";
   document.getElementById("iface-sub").textContent = `Per event: mean of the marker of interest in the ${who} membrane at the interface against the rest of its membrane (${evPts.length.toLocaleString()} events; dashed: equal)`;
   const all = evPts.flatMap(p => [p.x, p.y]); const d = extent(all, false); d[0] = Math.min(0, d[0]);
   scatter("iface", "iface", evPts, { kind: "event", xd: d, yd: d, identity: true, xlabel: "rest of the membrane", ylabel: "at the interface" });
+  drawContacts();
   drawOverlay();
   if (M) drawMembranes();
 }
-function legend(id, items) {
-  document.getElementById(id).replaceChildren(...items.map(([v, t]) => { const s = document.createElement("span");
-    const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = `var(${v})`; s.append(dot, t); return s; }));
+
+// ---------- svg helpers
+function svgEl(tag, attrs) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+function svgText(svg, x, y, text, attrs = {}) { const t = svgEl("text", { x, y, ...attrs }); t.textContent = text; svg.append(t); return t; }
+function svgAxes(svg, sx, sy, W, H, xlabel, ylabel, xt, yt) {
+  for (const v of yt) { svg.append(svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: sy(v), y2: sy(v), class: "grid" })); svgText(svg, PAD.l - 4, sy(v) + 4, tickLabel(v), { "text-anchor": "end" }); }
+  for (const v of xt) svgText(svg, sx(v), H - PAD.b + 14, tickLabel(v), { "text-anchor": "middle" });
+  svg.append(svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: H - PAD.b, y2: H - PAD.b, class: "axis" }));
+  svgText(svg, (PAD.l + W - PAD.r) / 2, H - 4, xlabel, { "text-anchor": "middle" });
+  svgText(svg, 0, 0, ylabel, { "text-anchor": "middle", transform: `translate(11 ${(PAD.t + H - PAD.b) / 2}) rotate(-90)` });
+}
+const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mixRgb = (a, b, f) => a.map((x, i) => Math.round(x + (b[i] - x) * f));
+function divergingRgb(t) { t = Math.max(-1, Math.min(1, t)); return mixRgb(hexRgb(css("--div-mid")), hexRgb(css(t < 0 ? "--div-neg" : "--div-pos")), Math.abs(t)); }
+const SEQ = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];  // the blue sequential ramp
+function sequentialRgb(t) { t = Math.max(0, Math.min(1, t)) * (SEQ.length - 1); const k = Math.min(SEQ.length - 2, Math.floor(t)); return mixRgb(hexRgb(SEQ[k]), hexRgb(SEQ[k + 1]), t - k); }
+const rgbCss = c => `rgb(${c.join(",")})`;
+// an svg drawn at its real pixel width (no scaling, so the text keeps its size); returns that width
+function fitSvg(svg, H, minW = 280) { const W = Math.max(minW, Math.floor(svg.parentElement.clientWidth || minW));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H); svg.style.width = "100%"; svg.style.maxWidth = W + "px"; return W; }
+const labelWidth = names => 22 + 6.4 * Math.max(4, ...names.map(n => n.length));
+const inkOn = c => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 > 0.55 ? "#0b0b0b" : "#ffffff";
+
+// ---------- interactions: contact matrix (observed against chance) and partner bars
+// Expected by chance: the mean over all ways of shuffling the cell types among the cells of each event (exact, as
+// interactions.contact_table): an A–B pair with probability 2 c_A c_B / (n (n - 1)), an A–A pair c_A (c_A - 1) / (n (n - 1)).
+function contactStats() {
+  const events = new Set(base), cells = new Set(); for (const e of base) for (const i of cellsOfEvent[e]) cells.add(i);
+  const types = typesPresent(cells), K = types.length, idx = new Map(types.map((t, k) => [t, k]));
+  const obs = Array.from({ length: K }, () => new Float64Array(K)), exp = Array.from({ length: K }, () => new Float64Array(K));
+  const touch = Array.from({ length: K }, () => Array.from({ length: K }, () => new Set()));
+  const nCells = new Float64Array(K), touchingAny = new Float64Array(K);
+  for (const i of cells) { nCells[idx.get(TYPE[i])]++; if (neighbours[i].length) touchingAny[idx.get(TYPE[i])]++; }
+  for (const e of events) {
+    const pairs = pairsOfEvent[e]; if (!pairs.length) continue;
+    const c = new Float64Array(K); for (const i of cellsOfEvent[e]) c[idx.get(TYPE[i])]++;
+    const n = cellsOfEvent[e].length;
+    for (const [a, b] of pairs) { const ta = idx.get(TYPE[a]), tb = idx.get(TYPE[b]); obs[ta][tb]++; obs[tb][ta]++; touch[ta][tb].add(a); touch[tb][ta].add(b); }
+    if (n < 2) continue;
+    for (let x = 0; x < K; x++) for (let y = 0; y < K; y++) exp[x][y] += pairs.length * 2 * (x === y ? c[x] * (c[x] - 1) : c[x] * c[y]) / (n * (n - 1));
+  }
+  return { types, obs, exp, touch, nCells, touchingAny };
+}
+let contactCache = null;
+function drawContacts() {
+  const S = contactCache = contactStats(), K = S.types.length;
+  const totalPairs = base.reduce((a, e) => a + pairsOfEvent[e].length, 0);
+  document.getElementById("contacts-sub").textContent = `${totalPairs.toLocaleString()} pairs of touching cells in ${base.length.toLocaleString()} events; ` +
+    `two cells touch when they come within the interface width of each other. Chance: the cell types shuffled among the cells of each event.`;
+  // matrix
+  const svg = document.getElementById("matrix"); svg.replaceChildren();
+  const lab = labelWidth(S.types.map(shortType)), avail = Math.max(280, svg.parentElement.clientWidth || 420);
+  const cell = Math.max(30, Math.min(64, Math.floor((avail - lab - 10) / Math.max(K, 1)))), top = 44, H = top + cell * K + 6;
+  fitSvg(svg, H, Math.min(avail, lab + cell * K + 10));
+  S.types.forEach((t, k) => {
+    svg.append(svgEl("circle", { cx: 8, cy: top + k * cell + cell / 2, r: 4, fill: `var(${colorVar(t)})` }));
+    svgText(svg, 16, top + k * cell + cell / 2 + 4, shortType(t), { class: "ink" });
+    const x = lab + k * cell + cell / 2;
+    svg.append(svgEl("circle", { cx: x, cy: top - 30, r: 4, fill: `var(${colorVar(t)})` }));
+    svgText(svg, x, top - 8, shortType(t).replace(/^immune /, ""), { "text-anchor": "middle", class: "ink" });
+  });
+  for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) {
+    const o = S.obs[a][b], e = S.exp[a][b], frac = S.nCells[a] ? S.touch[a][b].size / S.nCells[a] : 0;
+    let fill, label;
+    if (state.matrix === "ratio") { fill = e > 0 ? divergingRgb(Math.log2(Math.max(o, 0.5) / e) / 2) : hexRgb(css("--div-mid")); label = e > 0 ? fmt(o / e, 2) : (o ? "∞" : "–"); }
+    else { fill = sequentialRgb(frac / Math.max(0.01, ...S.types.map((_, x) => Math.max(...S.types.map((__, y) => S.nCells[x] ? S.touch[x][y].size / S.nCells[x] : 0))))); label = pct(frac); }
+    const g = svgEl("g", { style: "cursor:pointer" });
+    const r = svgEl("rect", { x: lab + b * cell + 1, y: top + a * cell + 1, width: cell - 2, height: cell - 2, rx: 3, fill: rgbCss(fill) });
+    const isOn = state.contact && ((state.contact[0] === S.types[a] && state.contact[1] === S.types[b]) || (state.contact[1] === S.types[a] && state.contact[0] === S.types[b]));
+    if (isOn) { r.setAttribute("stroke", css("--ink")); r.setAttribute("stroke-width", 2); }
+    g.append(r);
+    const tx = svgEl("text", { x: lab + b * cell + cell / 2, y: top + a * cell + cell / 2 + 4, "text-anchor": "middle", style: `fill:${inkOn(fill)};font-size:11px` });
+    tx.textContent = label; g.append(tx);
+    g.addEventListener("pointermove", ev => showTip(ev, [[`${shortType(S.types[a])} touching ${shortType(S.types[b])}`, ""],
+      [String(o), `contacts (expected by chance ${fmt(e, 1)})`], [e > 0 ? fmt(o / e, 2) : "–", "observed / expected"],
+      [`${S.touch[a][b].size} of ${S.nCells[a]}`, `${shortType(S.types[a])} cells touch one (${pct(frac)})`]]));
+    g.addEventListener("pointerleave", hideTip);
+    g.addEventListener("click", () => setContact(isOn ? null : [S.types[a], S.types[b]]));
+    svg.append(g);
+  }
+  const ml = document.getElementById("matrix-legend"); ml.replaceChildren();
+  const bar = document.createElement("span"); bar.style.cssText = "display:inline-block;width:120px;height:8px;border-radius:2px;vertical-align:middle;";
+  const a = document.createElement("span"); a.className = "note"; const b = document.createElement("span"); b.className = "note";
+  if (state.matrix === "ratio") { bar.style.background = "linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))"; a.textContent = "¼× (fewer than chance) "; b.textContent = " 4× (more); the number: observed / expected"; }
+  else { bar.style.background = `linear-gradient(90deg,${SEQ.join(",")})`; a.textContent = "0 "; b.textContent = " the most; the share of the row's cells touching one"; }
+  ml.append(a, bar, b);
+  drawBars(S);
+}
+function drawBars(S) {
+  const svg = document.getElementById("bars"); svg.replaceChildren();
+  const K = S.types.length, lab = labelWidth(S.types.map(shortType)), right = 48, rowH = 26, H = K * rowH + 30;
+  const W = fitSvg(svg, H);
+  const totals = S.obs.map(row => row.reduce((x, y) => x + y, 0)), maxTotal = Math.max(1, ...totals);
+  const x0 = lab, x1 = W - right;
+  S.types.forEach((t, a) => {
+    const y = 6 + a * rowH;
+    svg.append(svgEl("circle", { cx: 8, cy: y + 9, r: 4, fill: `var(${colorVar(t)})` }));
+    svgText(svg, 16, y + 13, shortType(t), { class: "ink" });
+    const scaleTo = state.bars === "share" ? (totals[a] || 1) : maxTotal;
+    let x = x0;
+    S.types.forEach((n, b) => { const v = S.obs[a][b]; if (!v) return;
+      const w = (x1 - x0) * v / scaleTo, seg = svgEl("rect", { x: x + 1, y, width: Math.max(0, w - 2), height: 18, rx: 2, fill: `var(${colorVar(n)})` });
+      seg.addEventListener("pointermove", ev => showTip(ev, [[`${shortType(t)} → ${shortType(n)}`, ""], [String(v), "contacts"], [pct(v / (totals[a] || 1)), `of the ${shortType(t)} contacts`]]));
+      seg.addEventListener("pointerleave", hideTip); seg.style.cursor = "pointer"; seg.addEventListener("click", () => setContact([t, n]));
+      svg.append(seg); x += w; });
+    svgText(svg, W - 4, y + 13, pct(S.nCells[a] ? S.touchingAny[a] / S.nCells[a] : 0), { "text-anchor": "end", class: "ink" });
+  });
+  svg.append(svgEl("line", { x1: x0, x2: x0, y1: 2, y2: K * rowH + 4, class: "axis" }));
+  svgText(svg, (x0 + x1) / 2, H - 4, state.bars === "share" ? "share of the row's contacts" : "contacts", { "text-anchor": "middle" });
+  const lg = document.getElementById("bars-legend"); lg.replaceChildren();
+  for (const t of S.types) { const s = document.createElement("span"); const d = document.createElement("span"); d.className = "dot"; d.style.background = `var(${colorVar(t)})`; s.append(d, shortType(t)); lg.append(s); }
+}
+function setContact(c) {
+  state.contact = c;
+  const box = document.getElementById("contact-chip"); box.replaceChildren();
+  if (c) { const s = document.createElement("span"); s.className = "chip"; const b = document.createElement("b"); b.textContent = `${shortType(c[0])} – ${shortType(c[1])}`;
+    const x = document.createElement("button"); x.textContent = "✕"; x.title = "show all events again"; x.onclick = () => setContact(null);
+    s.append("contact ", b, x); box.append(s); }
+  gallery.scrollTop = 0; update();
+}
+document.getElementById("mx-ratio").onclick = () => { state.matrix = "ratio"; toggleOn("mx-ratio", "mx-fraction"); drawContacts(); };
+document.getElementById("mx-fraction").onclick = () => { state.matrix = "fraction"; toggleOn("mx-fraction", "mx-ratio"); drawContacts(); };
+document.getElementById("bars-share").onclick = () => { state.bars = "share"; toggleOn("bars-share", "bars-count"); drawContacts(); };
+document.getElementById("bars-count").onclick = () => { state.bars = "count"; toggleOn("bars-count", "bars-share"); drawContacts(); };
+function toggleOn(on, offId) { document.getElementById(on).classList.add("on"); document.getElementById(offId).classList.remove("on"); }
+
+// ---------- subtype markers: live thresholds
+function renderMarkers() {
+  const card = document.getElementById("markers-card"); if (!MK.length) return; card.hidden = false;
+  const box = document.getElementById("markers"); box.replaceChildren();
+  const immune = [...Array(NC).keys()].filter(i => C.type[i] === "Immune");
+  for (const m of MK) {
+    const vals = immune.map(i => m.values[i]).filter(v => v != null), lo = Math.min(...vals), logv = v => Math.log(v - lo + 1);
+    const xs = vals.map(logv), xmax = Math.max(...xs, 0.01), bins = 50, hist = new Array(bins).fill(0);
+    for (const x of xs) hist[Math.min(bins - 1, Math.floor(x / xmax * bins))]++;
+    const div = document.createElement("div"); div.className = "marker";
+    const head = document.createElement("div"); head.className = "head";
+    const name = document.createElement("b"); name.textContent = m.name + "+";
+    const info = document.createElement("span"); info.className = "note";
+    head.append(name, info);
+    const H = 64, svg = svgEl("svg", { style: "width:100%;display:block" });
+    div.append(head, svg); box.append(div);
+    const W = fitSvg(svg, H, 200);
+    const hmax = Math.max(...hist, 1), bw = (W - 8) / bins;
+    hist.forEach((c, k) => { if (c) svg.append(svgEl("rect", { x: 4 + k * bw + 0.5, y: H - 2 - (H - 6) * c / hmax, width: Math.max(1, bw - 1), height: (H - 6) * c / hmax, rx: 1, fill: "var(--axis)" })); });
+    svg.append(svgEl("line", { x1: 4, x2: W - 4, y1: H - 2, y2: H - 2, class: "axis" }));
+    const line = svgEl("line", { y1: 2, y2: H - 2, stroke: "var(--ink)", "stroke-width": 2 }); svg.append(line);
+    const runLine = svgEl("line", { y1: 2, y2: H - 2, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 2" }); svg.append(runLine);
+    const slider = document.createElement("input"); slider.type = "range"; slider.min = 0; slider.max = xmax; slider.step = xmax / 500;
+    const place = () => { const x = 4 + (W - 8) * Math.min(1, Math.max(0, logv(m.thr) / xmax));
+      line.setAttribute("x1", x); line.setAttribute("x2", x);
+      const r = 4 + (W - 8) * Math.min(1, Math.max(0, logv(m.thr0) / xmax)); runLine.setAttribute("x1", r); runLine.setAttribute("x2", r);
+      const n = immune.filter(i => m.values[i] > m.thr).length;
+      info.textContent = `threshold ${fmt(m.thr, 2)} · ${n} of ${immune.length} immune cells positive`;
+      info.classList.toggle("changed", Math.abs(m.thr - m.thr0) > 1e-9); };
+    slider.value = logv(m.thr);
+    let pending = false;
+    slider.oninput = () => { m.thr = Math.exp(+slider.value) - 1 + lo; place(); if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; typesChanged(); }); } };
+    const note = document.createElement("div"); note.className = "note"; note.textContent = `log(intensity − min + 1) of the immune cells. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)` + (m.threshold_all != null ? `; over all detections, for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
+    div.append(slider, note); place();
+    m._reset = () => { m.thr = m.thr0; slider.value = logv(m.thr); place(); };
+  }
+}
+document.getElementById("reset-all").onclick = () => { for (const m of MK) m._reset(); typesChanged(); };
+document.getElementById("export").onclick = async () => {
+  const q = s => JSON.stringify(s);
+  const text = `[classification]\nthresholds = { ${MK.map(m => `${q(m.name)} = ${+m.thr.toPrecision(6)}`).join(", ")} }\n`;
+  const pre = document.getElementById("export-text"); pre.hidden = false;
+  pre.textContent = text + "\n# Paste into the settings file or project.toml and run again. To skip Cellpose, set segmentation.method = 'labelmap'\n" +
+    "# and segmentation.labelmap_file to this dataset's labelmap_cells.tif. A threshold set by hand also applies to the artefact rule.";
+  try { await navigator.clipboard.writeText(text); } catch (e) {}
+};
+function typesChanged() {
+  recomputeTypes(); renderGalleryLegend(); fillPairOptions(); computeM();
+  applyFilter(); redrawAll(); drawPlots(); renderTable(); renderHeader();
 }
 
-// ---------- membranes
-let profiles = null, heatRows = [];
-function decodeProfiles() {
-  const bin = atob(M.profiles), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf);
-  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  profiles = new Float32Array(buf);
+// ---------- membranes: any pair, computed here from every cell's profile and neighbour track (as membrane.py)
+const INTERFACE_OFFSET = 20, HIST_MIN = -5;
+let PROF = null, TRACK = null, OFFS = null;
+function decodeMembranes() {
+  const dec = (b64, T) => { const bin = atob(b64), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new T(buf); };
+  PROF = dec(MP.profile, Float32Array); TRACK = dec(MP.track, Int32Array);
+  OFFS = new Int32Array(MP.length.length + 1); MP.length.forEach((n, k) => OFFS[k + 1] = OFFS[k] + n);
 }
-function svgEl(tag, attrs) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
-function svgAxes(svg, sx, sy, W, H, xlabel, ylabel, xt, yt) {
-  for (const v of yt) { svg.append(svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: sy(v), y2: sy(v), class: "grid" }));
-    const t = svgEl("text", { x: PAD.l - 4, y: sy(v) + 4, "text-anchor": "end" }); t.textContent = tickLabel(v); svg.append(t); }
-  for (const v of xt) { const t = svgEl("text", { x: sx(v), y: H - PAD.b + 14, "text-anchor": "middle" }); t.textContent = tickLabel(v); svg.append(t); }
-  svg.append(svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: H - PAD.b, y2: H - PAD.b, class: "axis" }));
-  const xl = svgEl("text", { x: (PAD.l + W - PAD.r) / 2, y: H - 4, "text-anchor": "middle" }); xl.textContent = xlabel; svg.append(xl);
-  const yl = svgEl("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(11 ${(PAD.t + H - PAD.b) / 2}) rotate(-90)` }); yl.textContent = ylabel; svg.append(yl);
+function selectorOptions() {
+  const opts = [["Tumor", "tumor cells"], ["Immune", "immune cells (all)"]];
+  if (MK.length) { for (const t of IMMUNE_TYPES) if (TYPE.includes(t)) opts.push([t, shortType(t) + " cells"]);
+    for (const m of MK) opts.push([m.name + "+", `immune cells ${m.name}+ (any other markers)`]); }
+  return opts;
+}
+function matches(i, sel) {
+  if (sel === "Tumor" || sel === "Immune" || sel === "Artefact") return C.type[i] === sel;
+  if (sel.startsWith("Immune ")) return TYPE[i] === sel;
+  const m = MK.find(x => x.name + "+" === sel);
+  return !!m && C.type[i] === "Immune" && m.values[i] > m.thr;
+}
+const pair = { cells: null, partners: null };
+function fillPairOptions() {
+  if (!MP) return;
+  const opts = selectorOptions();
+  for (const [id, key] of [["pair-cells", "cells"], ["pair-partners", "partners"]]) {
+    const sel = document.getElementById(id), keep = pair[key];
+    sel.replaceChildren(...opts.map(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; return o; }));
+    if (!opts.some(([v]) => v === keep)) { const o = document.createElement("option"); o.value = keep; o.textContent = keep + " (none now)"; sel.append(o); }
+    sel.value = keep;
+  }
+}
+function mulberry32(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+const nn = v => v != null && isFinite(v) ? v : null;
+const sdev = a => { if (a.length < 2) return NaN; const m = mean(a); return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1)); };
+const median = a => { const s = [...a].sort((x, y) => x - y), n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : NaN; };
+const roundEven = x => { const r = Math.round(x); return Math.abs(x % 1) === 0.5 && r % 2 ? r - 1 : r; };
+function score(win, rest) { if (!win.length || rest.length < 2) return NaN; const s = sdev(rest); return s > 0 ? (mean(win) - mean(rest)) / s : NaN; }
+function longestRun(f) {  // the longest run of true in a circular array: [start, length] (the first if tied)
+  const n = f.length; if (f.every(Boolean)) return [0, n];
+  const z = f.indexOf(false); let best = [0, 0], start = -1, len = 0;
+  for (let k = 1; k <= n; k++) { const j = (z + k) % n;
+    if (f[j]) { if (start < 0) { start = j; len = 0; } len++; if (len > best[1]) best = [start, len]; } else start = -1; }
+  return best;
+}
+function computeM() {
+  if (!MP) return;
+  if (!PROF) decodeMembranes();
+  const cellsSel = pair.cells, partnerSel = pair.partners, rng = mulberry32(48);
+  const rows = [];
+  for (let k = 0; k < MP.cell.length; k++) { const c = MP.cell[k]; if (!matches(c, cellsSel)) continue;
+    const p = Array.from(PROF.subarray(OFFS[k], OFFS[k + 1])), tr = TRACK.subarray(OFFS[k], OFFS[k + 1]);
+    rows.push({ c, p, f: Array.from(tr, t => t >= 0 && matches(t, partnerSel)), free: Array.from(tr, t => t < 0) }); }
+  const ilen = rows.filter(r => r.f.some(Boolean)).map(r => r.f.filter(Boolean).length);
+  const window = ilen.length ? roundEven(median(ilen)) : 25;
+  const out = { cell: [], sd: [], ratio: [], control: [], interface_length: [], length: [], aligned: [], window, control_scores: [] };
+  for (const { c, p, f, free } of rows) {
+    const rest = p.filter((_, j) => free[j]), win = p.filter((_, j) => f[j]);
+    const iMean = win.length ? mean(win) : NaN, rMean = rest.length ? mean(rest) : NaN, rSd = sdev(rest);
+    let norm = p.map(v => rSd > 0 ? (v - rMean) / rSd : NaN), ctrl = NaN;
+    if (win.length) { const [s, n] = longestRun(f); const shift = INTERFACE_OFFSET - (s + Math.floor(n / 2)), L = p.length;
+      norm = norm.map((_, j) => norm[((j - shift) % L + L) % L]); }
+    else if (rest.length > window) { const sc = [];
+      for (let r = 0; r < MP.control_repeats; r++) { const s = Math.floor(rng() * rest.length), m = new Array(rest.length).fill(false);
+        for (let j = 0; j < window; j++) m[(s + j) % rest.length] = true;
+        sc.push(score(rest.filter((_, j) => m[j]), rest.filter((_, j) => !m[j]))); }
+      out.control_scores.push(...sc); const fin = sc.filter(isFinite); ctrl = fin.length ? mean(fin) : NaN; }
+    out.cell.push(c); out.sd.push(win.length ? nn(score(win, rest)) : null); out.ratio.push(rMean ? nn(iMean / rMean) : null);
+    out.control.push(nn(ctrl)); out.interface_length.push(win.length); out.length.push(p.length); out.aligned.push(norm);
+  }
+  out.width = Math.max(0, ...out.length);
+  out.profiles = new Float32Array(out.cell.length * out.width).fill(NaN);
+  out.aligned.forEach((a, k) => out.profiles.set(a, k * out.width));
+  const has = out.cell.map((_, k) => out.interface_length[k] > 0), lens = out.length.filter((_, k) => has[k]);
+  const length = lens.length > 1 ? Math.min(Math.round(mean(lens) + sdev(lens)), out.width) : 0;
+  out.average = Array.from({ length }, (_, j) => { const v = out.aligned.filter((_, k) => has[k]).map(a => a[j]).filter(x => x != null && isFinite(x)); return v.length ? mean(v) : null; });
+  const nb = Math.round((MP.max_histogram_value - HIST_MIN) / MP.bin_width), bw = (MP.max_histogram_value - HIST_MIN) / nb;
+  const hist = vals => { const h = new Array(nb).fill(0); for (const v of vals) { if (v == null || !isFinite(v) || v < HIST_MIN || v > MP.max_histogram_value) continue; h[Math.min(nb - 1, Math.floor((v - HIST_MIN) / bw))]++; } return h; };
+  out.hist_bin_start = Array.from({ length: nb }, (_, k) => HIST_MIN + k * bw); out.bin_width = bw;
+  out.hist_interface = hist(out.sd); out.hist_control = hist(out.control_scores);
+  out.expression = expressionCheck(cellsSel, partnerSel);
+  M = out;
+  memOfCell = new Int32Array(NC).fill(-1); M.cell.forEach((c, k) => memOfCell[c] = k);
+  eventEnrichment.fill(NaN); M.sd.forEach((v, k) => { if (v != null) { const e = C.event[M.cell[k]]; if (!(eventEnrichment[e] >= v)) eventEnrichment[e] = v; } });
+}
+function expressionCheck(cellsSel, partnerSel) {  // as membrane.expression_check
+  const free = k => { const v = []; for (let j = OFFS[k]; j < OFFS[k + 1]; j++) if (TRACK[j] < 0) v.push(PROF[j]); return v.length ? mean(v) : NaN; };
+  const a = [], b = [];
+  for (let k = 0; k < MP.cell.length; k++) { const c = MP.cell[k]; if (matches(c, cellsSel)) a.push(free(k)); if (matches(c, partnerSel)) b.push(free(k)); }
+  const ma = median(a.filter(isFinite)), mb = median(b.filter(isFinite)), ratio = ma > 0 ? mb / ma : Infinity;
+  const level = !isFinite(ma) || !isFinite(mb) ? "none" : ratio >= 1 ? "critical" : ratio >= 0.25 ? "warning" : "good";
+  return { ma, mb, ratio, level };
 }
 function drawMembranes() {
   document.getElementById("membrane-card").hidden = false;
-  if (!profiles) decodeProfiles();
-  const shownMem = M.cell.map((c, k) => k).filter(k => M.cell[k] >= 0 && shownSet.has(C.event[M.cell[k]]));
+  const shownMem = M.cell.map((c, k) => k).filter(k => shownSet.has(C.event[M.cell[k]]));
   const withIf = shownMem.filter(k => M.sd[k] != null);
-  document.getElementById("membrane-sub").textContent = `${shownMem.length.toLocaleString()} ${OF_INTEREST === "Tumor" ? "tumor cells" : "immune cells"}, ${withIf.length.toLocaleString()} with an interface; ` +
-    `control: ${M.control_windows.toLocaleString()} random windows of ${M.window} px on the cells without an interface (all events)`;
-  // histogram: fractions (the control has many more values than the interface)
+  document.getElementById("membrane-sub").textContent = `${shownMem.length.toLocaleString()} cells, ${withIf.length.toLocaleString()} with an interface; ` +
+    `control: ${M.control_scores.length.toLocaleString()} random windows of ${M.window} px on the free membrane of the cells without an interface (all events)` +
+    (MP.inside_only ? "; straightened inside the cells only" : "");
+  const x = M.expression, badge = document.getElementById("expression-badge"); badge.replaceChildren();
+  if (x.level !== "none") {
+    const b = document.createElement("span"); b.className = "badge"; const ic = document.createElement("span"); ic.className = "icon";
+    ic.style.background = `var(--${x.level === "warning" ? "warning" : x.level})`; ic.style.color = x.level === "warning" ? "#0b0b0b" : "#fff";
+    ic.textContent = x.level === "good" ? "✓" : "!";
+    const words = x.level === "good" ? "marker mainly on the measured cells" : x.level === "warning" ? "partners carry part of the marker" : "marker brighter on the partners";
+    b.append(ic, `${words}: partners / measured ${pct(x.ratio)}`);
+    b.title = `Median free-membrane intensity of the marker of interest: measured cells ${fmt(x.ma, 1)}, partners ${fmt(x.mb, 1)}. ` +
+      "If the partners carry the marker too, their membrane lies against the measured one at the interface and looks like enrichment.";
+    badge.append(b);
+  }
   const svg = document.getElementById("hist"); svg.replaceChildren(); const W = 420, H = 240;
   const bw = M.bin_width, starts = M.hist_bin_start, sumI = M.hist_interface.reduce((a, b) => a + b, 0) || 1, sumC = M.hist_control.reduce((a, b) => a + b, 0) || 1;
   const fi = M.hist_interface.map(v => v / sumI), fc = M.hist_control.map(v => v / sumC);
@@ -482,9 +847,8 @@ function drawMembranes() {
   svgAxes(svg, sx, sy, W, H, "SD above mean", "fraction", niceTicks(sx.d[0], sx.d[1], 6), niceTicks(0, ymax, 4));
   const step = f => f.map((v, i) => `${i ? "L" : "M"}${sx(starts[i])},${sy(v)}H${sx(starts[i] + bw)}`).join("");
   svg.append(svgEl("path", { d: step(fc), fill: "none", stroke: "var(--muted)", "stroke-width": 2, "stroke-dasharray": "5 3" }));
-  svg.append(svgEl("path", { d: step(fi), fill: "none", stroke: "var(--interface)", "stroke-width": 2 }));
+  svg.append(svgEl("path", { d: step(fi), fill: "none", stroke: "var(--s3)", "stroke-width": 2 }));
   svg.append(svgEl("line", { x1: sx(0), x2: sx(0), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "2 3" }));
-  // average profile
   const ps = document.getElementById("profile"); ps.replaceChildren();
   const avg = M.average, px = D.pixel_size, n = avg.length;
   const vals = avg.filter(v => v != null), lo = Math.min(0, ...vals), hi = Math.max(1, ...vals) * 1.1;
@@ -492,32 +856,27 @@ function drawMembranes() {
   svgAxes(ps, psx, psy, W, H, "position along the membrane (µm)", "SD above mean", niceTicks(psx.d[0], psx.d[1], 6), niceTicks(lo, hi, 4));
   ps.append(svgEl("line", { x1: psx(20 * px), x2: psx(20 * px), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "4 3" }));
   const d = avg.map((v, i) => v == null ? "" : `${i && avg[i - 1] != null ? "L" : "M"}${psx(i * px)},${psy(v)}`).join("");
-  ps.append(svgEl("path", { d, fill: "none", stroke: "var(--interface)", "stroke-width": 2 }));
+  ps.append(svgEl("path", { d, fill: "none", stroke: "var(--s3)", "stroke-width": 2 }));
   const hair = svgEl("line", { y1: PAD.t, y2: H - PAD.b, stroke: "var(--ink-2)", visibility: "hidden" }); ps.append(hair);
-  ps.onpointermove = ev => { const r = ps.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+  ps.onpointermove = ev => { if (!n) return; const r = ps.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
     const i = Math.max(0, Math.min(n - 1, Math.round(((x - PAD.l) / (W - PAD.l - PAD.r)) * (n - 1)))); hair.setAttribute("x1", psx(i * px)); hair.setAttribute("x2", psx(i * px)); hair.setAttribute("visibility", "visible");
     showTip(ev, [[fmt(avg[i], 2), "SD above mean"], [fmt(i * px, 1) + " µm", i === 20 ? "(interface centre)" : ""]]); };
   ps.onpointerleave = () => { hair.setAttribute("visibility", "hidden"); hideTip(); };
   drawHeat(withIf);
 }
+document.getElementById("pair-cells").onchange = e => { pair.cells = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
+document.getElementById("pair-partners").onchange = e => { pair.partners = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
 const HEAT_RANGE = 6;
-function divergingColor(v) {
-  const t = Math.max(-1, Math.min(1, v / HEAT_RANGE));
-  const mix = (a, b, f) => a.map((x, i) => Math.round(x + (b[i] - x) * f));
-  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-  const mid = hex(css("--div-mid")), c = mix(mid, hex(css(t < 0 ? "--div-neg" : "--div-pos")), Math.abs(t));
-  return c;
-}
-let heatBase = null;
+let heatBase = null, heatRows = [];
 function drawHeat(rows) {
   heatRows = [...rows].sort((a, b) => M.sd[b] - M.sd[a]);
   const cv = document.getElementById("heat"), ctx = setupCanvas(cv), w = cv._w, h = cv._h;
   const cols = Math.min(M.width, M.average.length || M.width);
   ctx.clearRect(0, 0, w, h);
-  if (!heatRows.length || !cols) { heatBase = null; return; }
+  if (!heatRows.length || !cols) { heatBase = null; document.getElementById("heat-legend").replaceChildren(); return; }
   const img = ctx.createImageData(cols, heatRows.length);
-  heatRows.forEach((k, r) => { for (let c = 0; c < cols; c++) { const v = profiles[k * M.width + c]; const o = (r * cols + c) * 4;
-    if (isNaN(v)) { img.data[o + 3] = 0; continue; } const col = divergingColor(v); img.data.set([...col, 255], o); } });
+  heatRows.forEach((k, r) => { for (let c = 0; c < cols; c++) { const v = M.profiles[k * M.width + c]; const o = (r * cols + c) * 4;
+    if (isNaN(v)) { img.data[o + 3] = 0; continue; } img.data.set([...divergingRgb(v / HEAT_RANGE), 255], o); } });
   const tmp = document.createElement("canvas"); tmp.width = cols; tmp.height = heatRows.length; tmp.getContext("2d").putImageData(img, 0, 0);
   ctx.imageSmoothingEnabled = false; ctx.drawImage(tmp, 0, 0, w, h);
   heatBase = ctx.getImageData(0, 0, cv.width, cv.height);
@@ -535,7 +894,7 @@ function drawHeatOverlay() {
   const cv = document.getElementById("heat"); if (!heatBase || !M) return;
   const ctx = cv.getContext("2d"); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.putImageData(heatBase, 0, 0); ctx.restore();
   const rowH = cv._h / heatRows.length;
-  for (const [i, wd] of [[state.selected, 2], [state.hover, 1]]) { const k = memOfCell[i] ?? -1; const r = heatRows.indexOf(k); if (i < 0 || r < 0) continue;
+  for (const [i, wd] of [[state.selected, 2], [state.hover, 1]]) { const k = i >= 0 ? memOfCell[i] : -1; const r = heatRows.indexOf(k); if (i < 0 || r < 0) continue;
     ctx.strokeStyle = css("--ink"); ctx.lineWidth = wd; ctx.strokeRect(0.5, r * rowH - 1, cv._w - 1, Math.max(rowH, 1) + 2); }
 }
 
@@ -548,64 +907,76 @@ function renderCard() {
   const cv = document.createElement("canvas"); const z = 1.5; cv.width = TW * z; cv.height = TH * z; cv.style.cssText = "background:#000;border-radius:4px";
   drawEvent(cv, e, z);
   const dl = document.createElement("dl");
-  const rows = [["object", E.object ? E.object[e] : "–"], ["area", fmt(C.area[i], 0) + " px"], ["immune marker", fmt(C.t_int[i])], ["tumor marker", fmt(C.tu_int[i])],
+  const rows = [["object", E.object ? E.object[e] : "–"], ["label", C.label[i]], ["area", fmt(C.area[i], 0) + " px"], ["immune marker", fmt(C.t_int[i])], ["tumor marker", fmt(C.tu_int[i])],
                 ["marker ratio", fmt(C.ratio[i])], [`cells in the event`, `${E.t_cells[e]} immune, ${E.tumor_cells[e]} tumor`]];
-  if (k >= 0) rows.push(["membrane length", fmt(M.length[k], 0) + " px"], ["interface", M.interface_length[k] ? fmt(M.interface_length[k], 0) + " px" : "none"],
+  for (const m of MK) rows.push([m.name, `${fmt(m.values[i], 1)} (${m.values[i] > m.thr ? "positive" : "negative"}; threshold ${fmt(m.thr, 1)})`]);
+  rows.push(["touching", neighbours[i].length ? neighbours[i].map(j => `${shortType(TYPE[j])} (${C.label[j]})`).join(", ") : "none"]);
+  if (M && k >= 0) rows.push(["membrane length", fmt(M.length[k], 0) + " px"], ["interface", M.interface_length[k] ? fmt(M.interface_length[k], 0) + " px" : "none"],
                         M.sd[k] != null ? ["SD above mean", fmt(M.sd[k], 2)] : ["control (mean of windows)", fmt(M.control[k], 2)],
                         ["ratio interface / rest", fmt(M.ratio[k])]);
   for (const [a, b] of rows) { const dt = document.createElement("dt"); dt.textContent = a; const dd = document.createElement("dd"); dd.textContent = b; dl.append(dt, dd); }
   const row = document.createElement("div"); row.className = "cardrow"; row.append(cv, dl);
   card.replaceChildren(h2, row);
-  if (k >= 0 && profiles) {
+  if (M && k >= 0) {
     const W = 360, H = 120, svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, style: "width:100%;max-width:420px;display:block;margin-top:8px" });
-    const len = M.length[k], vals = Array.from(profiles.subarray(k * M.width, k * M.width + len));
+    const len = M.length[k], vals = Array.from(M.profiles.subarray(k * M.width, k * M.width + len));
     const fin = vals.filter(v => !isNaN(v)), lo = Math.min(-2, ...fin), hi = Math.max(2, ...fin);
     const sx = scale([0, Math.max(1, (len - 1) * D.pixel_size)], [PAD.l, W - PAD.r]), sy = scale([lo, hi], [H - PAD.b, PAD.t]);
     svgAxes(svg, sx, sy, W, H, M.sd[k] != null ? "µm (interface centred at " + fmt(20 * D.pixel_size, 0) + ")" : "µm", "SD", niceTicks(sx.d[0], sx.d[1], 5), niceTicks(lo, hi, 3));
     svg.append(svgEl("path", { d: vals.map((v, j) => `${j ? "L" : "M"}${sx(j * D.pixel_size)},${sy(isNaN(v) ? 0 : v)}`).join(""), fill: "none",
-                               stroke: typeColor(C.type[i]), "stroke-width": 2 }));
+                               stroke: typeColor(TYPE[i]), "stroke-width": 2 }));
     card.append(svg);
   }
 }
 
 // ---------- tables
-const CELL_COLS = [["event", "event", i => C.event[i] + 1], ["object", "object", i => E.object ? E.object[C.event[i]] : null], ["type", "type", i => C.type[i]], ["subtype", "subtype", i => C.subtype[i]],
-  ["area", "area (px)", i => C.area[i]], ["t", "immune marker", i => C.t_int[i]], ["tu", "tumor marker", i => C.tu_int[i]], ["ratio", "marker ratio", i => C.ratio[i]]];
-if (M) CELL_COLS.push(["sd", "SD above mean", i => memOfCell[i] >= 0 ? M.sd[memOfCell[i]] : null], ["mratio", "membrane ratio", i => memOfCell[i] >= 0 ? M.ratio[memOfCell[i]] : null]);
+const CELL_COLS = [["event", "event", i => C.event[i] + 1], ["object", "object", i => E.object ? E.object[C.event[i]] : null], ["label", "label", i => C.label[i]],
+  ["type", "type", i => shortType(TYPE[i])], ["area", "area (px)", i => C.area[i]], ["t", "immune marker", i => C.t_int[i]], ["tu", "tumor marker", i => C.tu_int[i]],
+  ["ratio", "marker ratio", i => C.ratio[i]], ["n", "touching", i => neighbours[i].length]];
+for (const m of MK) CELL_COLS.push(["m_" + m.name, m.name, i => m.values[i]]);
+if (MP) CELL_COLS.push(["sd", "SD above mean", i => M && memOfCell[i] >= 0 ? M.sd[memOfCell[i]] : null], ["mratio", "membrane ratio", i => M && memOfCell[i] >= 0 ? M.ratio[memOfCell[i]] : null]);
 const EVENT_COLS = [["event", "event", e => e + 1], ["object", "object", e => E.object ? E.object[e] : null], ["t", "immune cells", e => E.t_cells[e]], ["tu", "tumor cells", e => E.tumor_cells[e]],
+  ["pairs", "touching pairs", e => pairsOfEvent[e].length],
   ["ti", "immune interface", e => E.t_interface[e]], ["tr", "immune rest", e => E.t_rest[e]], ["ui", "tumor interface", e => E.tu_interface[e]], ["ur", "tumor rest", e => E.tu_rest[e]],
   ["tratio", "immune ratio", e => E.t_ratio[e]], ["uratio", "tumor ratio", e => E.tu_ratio[e]]];
+const CONTACT_COLS = [["a", "cell type", r => shortType(r.a)], ["b", "neighbour type", r => shortType(r.b)], ["cells", "cells", r => r.cells], ["o", "contacts", r => r.o],
+  ["touch", "cells touching", r => r.touch], ["frac", "fraction touching", r => r.frac], ["e", "expected", r => r.e], ["oe", "observed / expected", r => r.oe]];
 const LIMIT = 2000;
-let tableIds = [];
+function contactRows() { const S = contactCache || contactStats(), out = [];
+  S.types.forEach((a, x) => S.types.forEach((b, y) => { if (S.obs[x][y] || S.exp[x][y] > 1e-9) out.push({ a, b, cells: S.nCells[x], o: S.obs[x][y], touch: S.touch[x][y].size,
+    frac: S.nCells[x] ? S.touch[x][y].size / S.nCells[x] : null, e: S.exp[x][y], oe: S.exp[x][y] > 0 ? S.obs[x][y] / S.exp[x][y] : null }); })); return out; }
 function renderTable() {
-  const cells = state.tab === "cells", cols = cells ? CELL_COLS : EVENT_COLS;
-  let ids = cells ? [...Array(NC).keys()].filter(i => shownSet.has(C.event[i])) : [...shown];
+  const kind = state.tab, cols = kind === "cells" ? CELL_COLS : kind === "events" ? EVENT_COLS : CONTACT_COLS;
+  let ids = kind === "cells" ? [...Array(NC).keys()].filter(i => shownSet.has(C.event[i])) : kind === "events" ? [...shown] : contactRows();
   if (state.tableSort) { const col = cols.find(c => c[0] === state.tableSort); if (col) { const f = col[2];
     ids.sort((a, b) => { const x = f(a), y = f(b); if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (state.tableDesc ? -1 : 1); }); } }
   document.getElementById("table-note").textContent = ids.length > LIMIT ? `the first ${LIMIT.toLocaleString()} of ${ids.length.toLocaleString()} rows (sort to see others)` : `${ids.length.toLocaleString()} rows`;
-  ids = ids.slice(0, LIMIT); tableIds = ids;
+  ids = ids.slice(0, LIMIT);
   const table = document.getElementById("table");
   const head = document.createElement("thead"), hr = document.createElement("tr");
   for (const [key, label] of cols) { const th = document.createElement("th"); th.textContent = label + (state.tableSort === key ? (state.tableDesc ? " ↓" : " ↑") : "");
     th.onclick = () => { state.tableDesc = state.tableSort === key ? !state.tableDesc : false; state.tableSort = key; renderTable(); }; hr.append(th); }
   head.append(hr);
   const body = document.createElement("tbody");
-  for (const id of ids) { const tr = document.createElement("tr"); tr.dataset.id = id;
+  ids.forEach((id, n) => { const tr = document.createElement("tr"); tr.dataset.id = kind === "contacts" ? n : id;
     for (const [, , f] of cols) { const td = document.createElement("td"); const v = f(id); td.textContent = typeof v === "number" ? fmt(v) : (v ?? "–"); tr.append(td); }
-    body.append(tr); }
-  body.onpointerover = ev => { const tr = ev.target.closest("tr"); if (!tr) return; const id = +tr.dataset.id; if (cells) setHover(id); };
-  body.onpointerleave = () => { if (cells) setHover(-1); };
-  body.onclick = ev => { const tr = ev.target.closest("tr"); if (!tr) return; const id = +tr.dataset.id; if (cells) select(id); else selectEvent(id); };
+    if (kind === "contacts") tr.onclick = () => setContact([id.a, id.b]);
+    body.append(tr); });
+  if (kind !== "contacts") {
+    body.onpointerover = ev => { const tr = ev.target.closest("tr"); if (!tr) return; if (kind === "cells") setHover(+tr.dataset.id); };
+    body.onpointerleave = () => { if (kind === "cells") setHover(-1); };
+    body.onclick = ev => { const tr = ev.target.closest("tr"); if (!tr) return; const id = +tr.dataset.id; if (kind === "cells") select(id); else selectEvent(id); };
+  }
   table.replaceChildren(head, body); markRows();
 }
 function markRows() {
+  if (state.tab === "contacts") return;
   const cells = state.tab === "cells";
   for (const tr of document.querySelectorAll("#table tbody tr")) { const id = +tr.dataset.id;
     tr.classList.toggle("hover", cells && id === state.hover); tr.classList.toggle("selected", cells ? id === state.selected : id === state.event); }
 }
-document.getElementById("tab-cells").onclick = () => { state.tab = "cells"; state.tableSort = null; tabs(); renderTable(); };
-document.getElementById("tab-events").onclick = () => { state.tab = "events"; state.tableSort = null; tabs(); renderTable(); };
-function tabs() { document.getElementById("tab-cells").classList.toggle("on", state.tab === "cells"); document.getElementById("tab-events").classList.toggle("on", state.tab === "events"); }
+for (const t of ["cells", "events", "contacts"]) document.getElementById("tab-" + t).onclick = () => { state.tab = t; state.tableSort = null;
+  for (const u of ["cells", "events", "contacts"]) document.getElementById("tab-" + u).classList.toggle("on", u === t); renderTable(); };
 
 // ---------- header and filters
 function chip(label, value) { const s = document.createElement("span"); s.className = "chip"; const b = document.createElement("b"); b.textContent = value; s.append(b, " " + label); return s; }
@@ -614,10 +985,13 @@ function renderHeader() {
   const nT = C.type.filter(t => t === "Immune").length, nA = C.type.filter(t => t === "Artefact").length;
   const nD = [...Array(NE).keys()].filter(isDoublet).length;
   const chips = [chip("events", NE.toLocaleString()), chip("cells", NC.toLocaleString()), chip("immune cells", nT.toLocaleString()),
-                 chip("tumor cells", (NC - nT - nA).toLocaleString()), chip("one tumor + one immune cell", nD.toLocaleString())];
+                 chip("tumor cells", (NC - nT - nA).toLocaleString()), chip("one tumor + one immune cell", nD.toLocaleString()),
+                 chip("touching pairs", (PAIRS.length / 2).toLocaleString())];
   if (nA) chips.push(chip("artefacts", nA.toLocaleString()));
   if (M) chips.push(chip("with an interface", M.sd.filter(v => v != null).length.toLocaleString()));
   document.getElementById("chips").replaceChildren(...chips);
+}
+function renderControls() {
   const sort = document.getElementById("f-sort");
   sort.replaceChildren(...SORTS.map(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; return o; }));
   const box = document.getElementById("channels"); box.replaceChildren();
@@ -639,6 +1013,7 @@ document.getElementById("f-sort").onchange = e => { state.sort = e.target.value;
 document.getElementById("f-zoom").oninput = e => { state.zoom = +e.target.value; relayout(); };
 document.getElementById("f-outlines").onchange = e => { state.outlines = e.target.checked; redrawAll(); };
 document.getElementById("f-interfaces").onchange = e => { state.interfaces = e.target.checked; redrawAll(); };
+document.getElementById("f-contacts").onchange = e => { state.contacts = e.target.checked; redrawAll(); };
 document.getElementById("theme").onclick = () => {
   const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("isa-theme", root.dataset.theme); } catch (e) {}
@@ -647,7 +1022,9 @@ document.addEventListener("keydown", ev => { if (ev.key === "Escape") { select(-
 try { const t = localStorage.getItem("isa-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 new ResizeObserver(() => document.documentElement.style.setProperty("--header-h", document.getElementById("header").offsetHeight + "px")).observe(document.getElementById("header"));
 
-renderHeader();
+recomputeTypes();
+if (MP) { pair.cells = MP.cells[0]; pair.partners = MP.partners[0]; fillPairOptions(); computeM(); }
+renderMarkers(); renderControls(); renderHeader(); renderGalleryLegend();
 update();
 // #cell=N (1-based row of the cell table) or #event=N (1-based) selects on opening, e.g. in a link
 function fromHash() {

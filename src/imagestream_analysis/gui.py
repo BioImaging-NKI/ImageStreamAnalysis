@@ -26,9 +26,11 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from . import __version__, ideas
 from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
-from .project import Project, overview
+from .project import INTERACTIONS_FILE, Project, overview
 
 log = logging.getLogger(__name__)
 STATE_DIR = Path.home() / ".imagestream_analysis"
@@ -244,9 +246,14 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
             SERVED["root"] = folder
         table = overview(folder) if folder.is_dir() else None
         if table is None or table.empty:
-            return {"columns": [], "rows": []}
+            return {"columns": [], "rows": [], "interactions": []}
+        contacts = folder / INTERACTIONS_FILE
+        summed = pd.read_csv(contacts, sep="	") if contacts.exists() else pd.DataFrame()
+        if len(summed):
+            summed = summed[summed["dataset"] == "(all)"]
         return {"columns": list(table.columns),
-                "rows": json.loads(table.to_json(orient="records", force_ascii=False))}
+                "rows": json.loads(table.to_json(orient="records", force_ascii=False)),
+                "interactions": json.loads(summed.to_json(orient="records", force_ascii=False)) if len(summed) else []}
     if api == "open":
         target = Path(str(data["path"]))
         if not target.exists():

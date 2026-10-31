@@ -54,3 +54,18 @@ def test_pipeline_writes_the_interactions(synthetic):
     assert row["contacts"] == 10 and row["fraction touching"] == 1
     m = pd.read_csv(result.out_dir / f"{MULTIPLETS_TABLE}.tsv", sep="\t")
     assert m.loc[m["n"] == 2, "events with n cells"].item() == 10
+
+
+def test_expected_contacts_keep_the_total_and_follow_the_composition():
+    """Event 0: tumor 1 touches immune 2; event 1: tumor 3, tumor 4, immune 5, with 3–4 and 4–5 touching."""
+    cells = pd.DataFrame({"label": [1, 2, 3, 4, 5], "frame": [0, 0, 1, 1, 1],
+                          "Cell type": ["Tumor", "Immune", "Tumor", "Tumor", "Immune"], "Subtype": [""] * 5})
+    pairs = np.array([[1, 2], [3, 4], [4, 5]])
+    t = contact_table(cells, pairs).set_index(["cell type", "neighbour type"])
+    assert t["contacts"].sum() == pytest.approx(t["expected"].sum()) == 6  # 3 pairs, each from both sides
+    # event 0 (1 pair, one tumor and one immune): certainly tumor–immune; event 1 (2 pairs; 2 tumor, 1 immune):
+    # a pair is tumor–immune with probability 2*2*1/(3*2) = 2/3, tumor–tumor with 2*1/(3*2) = 1/3
+    assert t.loc[("Tumor", "Immune"), "expected"] == pytest.approx(1 + 2 * 2 / 3)
+    assert t.loc[("Tumor", "Tumor"), "expected"] == pytest.approx(2 * 2 * 1 / 3)  # counted from both sides
+    assert t.loc[("Tumor", "Immune"), "observed / expected"] == pytest.approx(2 / (1 + 4 / 3))
+    assert ("Immune", "Immune") not in t.index  # one immune cell per event: impossible

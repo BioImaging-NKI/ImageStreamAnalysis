@@ -25,6 +25,7 @@ from skimage import measure
 
 from . import __version__
 from .config import CellOfInterest, Settings
+from .membrane import pair_of
 
 if TYPE_CHECKING:
     from .pipeline import Result
@@ -175,6 +176,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
     interfaces = [_outlines_of_masks(interface[e]) if interface[e].any() else [] for e in range(t)]
 
     ev = result.events
+    row_of = {int(lab): r for r, lab in enumerate(cells["label"])}
     data: dict[str, Any] = {
         "version": __version__,
         "name": stack.name,
@@ -186,6 +188,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "files": FILES,
         "channels": channels,
         "cell_of_interest": of_interest,
+        "artefact_min_positive": settings.classification.artefact_min_positive,
         "events": {
             "object": _column(ids) if ids is not None else None,
             "t_cells": _column(ev["Immune cells"]), "tumor_cells": _column(ev["Tumor cells"]),
@@ -200,28 +203,42 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
             "t_int": _column(cells["Immune intensity"]), "tu_int": _column(cells["Tumor intensity"]),
             "ratio": _column(cells["Marker ratio"]), "outline": outlines,
         },
+        "markers": markers_data(result, settings),
+        "pairs": [row_of[int(v)] for v in result.pairs.ravel()],  # cells that touch, as rows of the cell table
         "membranes": None,
     }
-    mem = result.membranes
-    if mem is not None:
-        tab = mem.table
-        index = {(int(f) - 1, int(lab)): i for i, (f, lab) in enumerate(zip(cells["frame"] + 1, cells["label"],
-                                                                                strict=True))}
+    if result.profiles is not None:  # every cell's membrane: the page computes the enrichment of any pair
+        prof = result.profiles
+        m = settings.membrane
+        wanted, partners = pair_of(m, settings.channels.cell_of_interest)
+        track_rows = [np.array([row_of.get(int(v), -1) for v in t], dtype=np.int32) for t in prof.tracks]
         data["membranes"] = {
-            "cell": [index.get((int(f) - 1, int(lab)), -1) for f, lab in zip(tab["Frame"], tab["Label"],
-                                                                               strict=True)],
-            "sd": _column(tab["stdDevs above mean"]), "ratio": _column(tab["Ratio interface/non-interface"]),
-            "control": _column(tab["control stdDevs above mean"]), "interface_length": _column(tab["interface length"]),
-            "length": _column(mem.lengths), "width": int(mem.profiles.shape[1]),
-            "profiles": float32_b64(mem.profiles),
-            "average": _column(mem.average["profile"]),
-            "hist_bin_start": _column(mem.histogram_interface["bin_start"]),
-            "hist_interface": _column(mem.histogram_interface["counts"]),
-            "hist_control": _column(mem.histogram_control["counts"]),
-            "control_windows": len(mem.control_scores), "window": mem.window,
-            "bin_width": settings.membrane.histogram_bin_width,
+            "cell": [row_of[int(lab)] for lab in prof.labels],
+            "length": [len(p) for p in prof.profiles],
+            "profile": float32_b64(np.concatenate(prof.profiles) if prof.profiles else np.zeros(0)),
+            "track": base64.b64encode(np.concatenate(track_rows).astype("<i4").tobytes() if track_rows
+                                      else b"").decode("ascii"),
+            "cells": wanted, "partners": partners, "control_repeats": m.control_repeats,
+            "max_histogram_value": m.max_histogram_value, "bin_width": m.histogram_bin_width,
+            "inside_only": m.inside_only, "expression": result.expression,
         }
     return data
+
+
+def markers_data(result: Result, settings: Settings) -> list[dict[str, Any]]:
+    """The functional (subtype) markers: per cell the background-subtracted mean, and the thresholds of the run."""
+    cells, th = result.cells, result.thresholds
+    out = []
+    for number in settings.channels.functional:
+        prefix = f"Mean ch{result.stack.number(number)} ("
+        column = next(c for c in cells.columns if c.startswith(prefix))
+        name = column[len(prefix) : -1]
+        rows = th[th["marker"] == name]
+        thr = {str(c): float(v) for c, v in zip(rows["cells"], rows["threshold"], strict=True)}
+        out.append({"name": name, "values": _column(cells[column], 3), "threshold": thr.get("immune cells"),
+                    "threshold_all": thr.get("all cells"),
+                    "method": str(rows["method"].iloc[0]) if len(rows) else ""})
+    return out
 
 
 def write_dashboard(result: Result, settings: Settings) -> Path:

@@ -360,12 +360,13 @@ def write_overview(folder: str | Path) -> pd.DataFrame:
     if parts:
         each = pd.concat(parts, ignore_index=True)
         keys = ["experiment", "cell type", "neighbour type"]
-        summed = (each.groupby(keys, as_index=False)[["contacts", "cells touching"]].sum()
+        summed = (each.groupby(keys, as_index=False)[["contacts", "cells touching", "expected"]].sum()
                   .merge(each.drop_duplicates(["experiment", "dataset", "cell type"])
                          .groupby(["experiment", "cell type"], as_index=False)["cells"].sum(), on=keys[:2]))
         summed["fraction touching"] = summed["cells touching"] / summed["cells"]
+        summed["observed / expected"] = summed["contacts"] / summed["expected"].where(summed["expected"] > 0)
         summed.insert(1, "dataset", "(all)")
         columns = ["experiment", "dataset", "cell type", "neighbour type", "cells", "contacts", "cells touching",
-                   "fraction touching"]
+                   "fraction touching", "expected", "observed / expected"]
         save_table(pd.concat([each[columns], summed[columns]], ignore_index=True), folder / INTERACTIONS_FILE)
     return table

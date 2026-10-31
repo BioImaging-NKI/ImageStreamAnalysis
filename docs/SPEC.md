@@ -252,18 +252,38 @@ percentile, brightfield 0.2-99.8th percentile; sheets of 10 x 10 events, WebP). 
 from the import page (served from the project folder, token-protected). No external resources.
 
 - Gallery of the events (only the visible tiles are drawn): channels composed in the page (colour per channel,
-  on/off, brightness; brightfield starts at half brightness), cell outlines in the class colour, interfaces.
+  on/off, brightness; brightfield starts at half brightness), cell outlines in the colour of their type,
+  interfaces, and optionally *contacts*: a line between the centres of touching cells.
+- **Cell types (2026-11-01)**: tumor, immune (or one type per immune subtype), artefact. Colours follow the entity in
+  a fixed order (dataviz palette): tumor slot 2, the immune types slots 1, 4, 5, 6, 7, 8 in the order of their
+  combination of positive markers (bit order of `channels.functional`, "negative" first), more than six: grey
+  "other"; artefacts muted grey; the interface slot 3. Legends name every type; in the class scatter (more than
+  three colours fails the all-pairs colour-blind check) a click on a legend entry brings that type forward.
+- **Subtype markers (live)**: per functional marker a histogram of log(v − min + 1) of the immune cells with the
+  run's threshold (dashed) and a slider; moving it re-labels the subtypes everywhere (gallery, plots, contacts,
+  membrane pairs, tables). The tumor / immune split and the artefacts stay as computed. "Copy the thresholds as
+  settings" gives `[classification] thresholds = {...}` to paste and run again (with the labelmap, no Cellpose).
+- **Interactions**: a contact matrix (cell type × the type it touches), coloured by observed / expected (diverging,
+  ¼× to 4×, log scale; expected exactly as `interactions.contact_table`, so page and TSV agree) or by the fraction
+  touching (sequential); a click on a square filters the gallery to the events with that contact (a chip in the
+  filter row clears it) and draws those contacts. Partner bars: per cell type, its contacts by neighbour type
+  (share or number), and the share of its cells that touch any cell. A Contacts tab in the table.
 - Cell classes: area against marker ratio, log-log (the macro's `cell Classes.png`).
 - Per event: MOI at the interface against the rest of the membrane of the cell of interest (the macro's
   `Channel N in ... membrane plot`), with the identity line.
-- Membrane analysis (if computed): histograms of interface and control as fractions, the average aligned profile,
-  and a heatmap of all profiles (diverging, ±6 SD).
-- Cell card, cell and event tables (sortable). Hover and selection are linked in all views; one filter row (events:
-  all / both cell types / one tumor + one immune cell / with an interface; sort) scopes everything. `#cell=N` or
-  `#event=N` in the address selects on opening.
-- Colours: the validated reference palette (dataviz skill): T cells slot 1 blue, tumor cells slot 2 orange,
-  interface slot 3 aqua, in light and dark mode; aqua is below 3:1 on the light surface, so it is always named in
-  a legend and the values are in the tables.
+- **Membrane analysis (any pair, live)**: "membrane of" and "interface with" (a cell type, an immune subtype, or a
+  marker); the page computes the enrichment from every cell's profile and neighbour track as `membrane.py` does
+  (the control windows with a seeded generator, so they differ from the TSV's random ones; on the test data the
+  medians agree to 0.01 SD), with the histograms, the average aligned profile and the heatmap, and the expression
+  check as a badge (icon and words: ok / partners carry part of the marker / marker brighter on the partners).
+- Cell card (with the subtype markers, the touching cells and the membrane), cell, event and contact tables
+  (sortable). Hover and selection are linked in all views; one filter row (events: all / both cell types / one
+  tumor + one immune cell / with an interface / with touching cells; a contact; sort) scopes everything. `#cell=N`
+  or `#event=N` in the address selects on opening.
+- Colours: the validated reference palette (dataviz skill), in light and dark mode; aqua and yellow are below 3:1
+  on the light surface, so they are always named in a legend and the values are in the tables.
+- Project overview (import page): the contact matrix of each experiment against chance, side by side (from
+  `interactions.tsv`).
 - Cost on the full test dataset: about 6 s; outlines are traced on each cell's bounding box.
 
 ## Merging ClassifyCellTypes 2.8 (decided 2026-10-31; classification and interactions built)

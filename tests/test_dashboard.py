@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import shutil
@@ -34,9 +35,14 @@ def test_dashboard_is_written_with_data_and_image_sheets(synthetic):
     assert outline.min() >= 0 and outline.max() <= 60
     assert all(len(o) >= 8 for o in data["cells"]["outline"])
     assert sum(len(i) for i in data["events"]["interfaces"]) >= 10  # every event has an interface
-    m = data["membranes"]
-    assert len(m["sd"]) == 10 and all(c >= 0 for c in m["cell"])
-    assert len(m["hist_interface"]) == len(m["hist_bin_start"])
+    m = data["membranes"]  # every cell's membrane; the page computes the enrichment of any pair
+    assert sorted(m["cell"]) == list(range(20)) and m["cells"] == ["Tumor"] and m["partners"] == ["Immune"]
+    profile = np.frombuffer(base64.b64decode(m["profile"]), "<f4")
+    track = np.frombuffer(base64.b64decode(m["track"]), "<i4")
+    assert len(profile) == len(track) == sum(m["length"])
+    assert set(np.unique(track)) <= set(range(-1, 20)) and (track >= 0).any()
+    assert m["expression"]["check"]
+    assert len(data["pairs"]) == 20 and data["markers"] == []  # 10 touching pairs, as rows of the cell table
 
 
 def test_outline_of_a_square_is_its_four_corners_on_pixel_edges():
