@@ -202,5 +202,10 @@ def test_datasets_of_an_experiment_are_classified_together(ideas_zip, pool):
         assert info["classified with"] == "1 other dataset(s)"
     else:
         assert ta["of"].iloc[0] == 20 and info["classified with"] == "this dataset only"
+    inter = pd.read_csv(folder / "interactions.tsv", sep="	")
+    total = inter[(inter["dataset"] == "(all)") & (inter["cell type"] == "Tumor")
+                  & inter["neighbour type"].str.startswith("Immune")]  # immune subtypes: one row each
+    assert total["contacts"].sum() == 20 and (total["cells"] == 20).all()  # both datasets of the experiment
+    assert (table["interactions"] == 10).all()
     log_text = (a / "log.txt").read_text(encoding="utf-8")
     assert "Marker normalization" in log_text and "Done in" in log_text  # one log over both stages

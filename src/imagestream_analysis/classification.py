@@ -197,4 +197,5 @@ def classification_output(cells: pd.DataFrame) -> pd.DataFrame:
     out = out.assign(Frame=cells["frame"] + 1, Label=cells["label"], **{"Cell type": cells["Cell type"]})
     extra = ["Area (µm²)", "Edge"] + [c for c in cells.columns if c.startswith("Mean ch")]
     extra += [c for c in cells.columns if c.endswith("+")] + ["Positive markers", "Subtype"]
+    extra += [c for c in ("Neighbours", "Touching (labels)", "Neighbour types") if c in cells]
     return pd.concat([out, cells[extra].assign(Edge=cells["Edge"].astype(int))], axis=1)

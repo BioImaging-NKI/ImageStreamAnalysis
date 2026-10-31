@@ -46,6 +46,7 @@ from .io import save_table
 log = logging.getLogger(__name__)
 PROJECT_FILE = "project.toml"
 OVERVIEW_FILE = "overview.tsv"
+INTERACTIONS_FILE = "interactions.tsv"
 
 
 @dataclass
@@ -202,6 +203,10 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
         "tumor cells": int((cells["Cell type"] == "Tumor").sum()),
         "artefacts": int((cells["Cell type"] == "Artefact").sum()),
         "single tumor + single immune cell": int(len(d)),
+        "interactions": int(len(result.pairs)),
+        "tumor–immune contacts": int(result.contacts.loc[(result.contacts["cell type"] == "Tumor")
+                                                         & result.contacts["neighbour type"].str.startswith("Immune"),
+                                                         "contacts"].sum()),
         "doublet fraction": round(len(d) / len(events), 4) if len(events) else None,
         f"median {side} (doublets)": _median(d[side]) if len(d) else None,
     }
@@ -341,6 +346,24 @@ def overview(folder: str | Path) -> pd.DataFrame:
 
 
 def write_overview(folder: str | Path) -> pd.DataFrame:
+    """overview.tsv, and interactions.tsv: the contact tables of all datasets, and summed per experiment."""
+    folder = Path(folder)
     table = overview(folder)
-    save_table(table, Path(folder) / OVERVIEW_FILE)
+    save_table(table, folder / OVERVIEW_FILE)
+    parts = []
+    for row in table.itertuples():
+        f = folder / str(row.folder) / "Interactions.tsv"
+        if f.exists():
+            parts.append(pd.read_csv(f, sep="	").assign(experiment=row.experiment, dataset=row.dataset))
+    if parts:
+        each = pd.concat(parts, ignore_index=True)
+        keys = ["experiment", "cell type", "neighbour type"]
+        summed = (each.groupby(keys, as_index=False)[["contacts", "cells touching"]].sum()
+                  .merge(each.drop_duplicates(["experiment", "dataset", "cell type"])
+                         .groupby(["experiment", "cell type"], as_index=False)["cells"].sum(), on=keys[:2]))
+        summed["fraction touching"] = summed["cells touching"] / summed["cells"]
+        summed.insert(1, "dataset", "(all)")
+        columns = ["experiment", "dataset", "cell type", "neighbour type", "cells", "contacts", "cells touching",
+                   "fraction touching"]
+        save_table(pd.concat([each[columns], summed[columns]], ignore_index=True), folder / INTERACTIONS_FILE)
     return table

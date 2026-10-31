@@ -242,7 +242,7 @@ from the import page (served from the project folder, token-protected). No exter
   a legend and the values are in the tables.
 - Cost on the full test dataset: about 6 s; outlines are traced on each cell's bounding box.
 
-## Merging ClassifyCellTypes 2.8 (decided 2026-10-31; classification built, interactions not yet)
+## Merging ClassifyCellTypes 2.8 (decided 2026-10-31; classification and interactions built)
 
 The later macro `ClassifyCellTypes_2_8.ijm` (same upstream repository) classifies several immune subtypes and
 records which cells touch; it has no membrane analysis. It is merged into this port so that v1.8 is the special case
@@ -296,6 +296,24 @@ flagged on thresholds over all cells, before the k-means, which then runs withou
 6. Outputs: `Marker thresholds.tsv` (marker, role, cells it was computed on, method, threshold, positive, of);
    `run.json` and the overview count artefacts and subtypes and say what a dataset was classified with. The
    dashboard draws artefacts in grey and shows the subtype (the colours per subtype come with the dashboard work).
+
+**Interactions (`interactions.py`, 2026-11-01) ✅ (synthetic tests; consistent with the interfaces on the test data)**
+
+- 2.8 records which cells touch with MorphoLibJ's Region Adjacency Graph on the eroded montage labels (lines
+  479-484, 609-632): `Interaction with (IDs)` (1-based row numbers), the subtypes of up to four partners, the number
+  of interactions per image, and a `multiplets` table; the notebook `Summarize_Interactions.ipynb` then
+  cross-tabulates the partner types.
+- The port: two cells of the same event interact when one comes within `membrane.thickness` pixels (4-connected
+  steps) of the other, the reach of the interfaces, so a cell with an interface always has its partner in the list
+  (verified on the test data: every event with an interface has an interaction). Artefacts take part as detections.
+  Cells are named by their label (`Label`, unique in the dataset), not by row number.
+- Cell table: `Neighbours`, `Touching (labels)`, `Neighbour types` (each partner's type: Tumor, Artefact, Immune or
+  "Immune <subtype>"). Event table: `Artefacts`, `Interactions` (pairs), at the end, after the macro's columns.
+- `Interactions.tsv` (replaces the notebook): per cell type and neighbour type, the cells of the type, the contacts
+  (each pair counts from both sides), the cells touching at least one such neighbour, and that fraction.
+  `Multiplets.tsv`: the number of events with n cells and with n interactions.
+- Project: `interactions.tsv` with the tables of all datasets and their sum per experiment (dataset "(all)"); the
+  overview gets `interactions` and `tumor–immune contacts`. A chart of it comes with the dashboard work.
 
 ## 11. Settings and outputs
 

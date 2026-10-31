@@ -39,6 +39,7 @@ A local guard backs this up:
   - `measure.py`: the first stage: the per-cell measurements (normalized markers, every loaded channel minus its background, area in µm²) and cells cut by the edge of their event image.
   - `classification.py`: functional-marker thresholds (log, ImageJ MaxEntropy/Otsu), artefacts, k-means on the rest (tumor/immune), immune subtypes; `classify_pool` for several datasets at once; class map.
   - `interfaces.py`: membrane and interface masks, the per-event table, doublets.
+  - `interactions.py`: touching cells per event (within the interface reach), neighbour lists, the contact table by cell type (replaces the notebook), multiplets.
   - `membrane.py`: the optional membrane analysis (`membrane.analysis`): outline, straighten, profiles, unseeded bootstrap control, aligned average, histograms.
   - `pipeline.py`: `load(settings)` reads an IDEAS zip or a Combiner `.tif`; `run(settings)` writes the output folder.
   - `ideas.py`: reads IDEAS zips directly (replaces ImageStreamCombiner).

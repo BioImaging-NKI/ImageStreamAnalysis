@@ -20,6 +20,7 @@ from . import __version__, ideas
 from .classification import class_map, classification_output, classify
 from .config import CellOfInterest, Settings
 from .dashboard import write_dashboard
+from .interactions import add_neighbours, contact_table, interactions_per_event, multiplets, touching_pairs
 from .interfaces import InterfaceMasks, doublets, event_table, interface_masks
 from .io import EventStack, read_stack, save_stack, save_table
 from .measure import edge_labels, measure_cells
@@ -34,6 +35,8 @@ EVENT_TABLE = "All cell combinations"
 DOUBLETS_TABLE = "Single Tumor Single Immune cell"  # macro v1.8: ... Single T cell
 MEMBRANE_TABLE = "Membrane intensity analysis"
 THRESHOLDS_TABLE = "Marker thresholds"
+CONTACTS_TABLE = "Interactions"
+MULTIPLETS_TABLE = "Multiplets"
 AVERAGE_PROFILE = f"Average normalized membrane profile values - interfaces centered at {INTERFACE_OFFSET}"
 
 
@@ -54,6 +57,9 @@ class Result:
     classes: np.ndarray  # (T, Y, X) 1 = immune cell, 2 = tumor cell, 3 = artefact
     cells: pd.DataFrame
     thresholds: pd.DataFrame  # the marker thresholds (of the pool)
+    pairs: np.ndarray  # (P, 2) labels of the cells that touch
+    contacts: pd.DataFrame  # interactions.contact_table
+    multiplets: pd.DataFrame
     events: pd.DataFrame
     doublets: pd.DataFrame
     masks: InterfaceMasks
@@ -90,11 +96,17 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
            out_dir: Path) -> Result:
     """The interfaces and membranes of the classified cells."""
     stack, labels = measured.stack, measured.labels
+    pairs = touching_pairs(labels, settings.membrane.thickness)
+    cells = add_neighbours(cells, pairs)
     classes = class_map(labels, cells)
     masks = interface_masks(classes, settings.membrane.thickness)
     moi = stack.channel(settings.channels.marker_of_interest)
     events = event_table(cells, stack.n_events, masks, moi)
-    result = Result(stack, labels, classes, cells, thresholds, events, doublets(events), masks, out_dir)
+    events["Artefacts"] = np.bincount(cells.loc[cells["Cell type"] == "Artefact", "frame"].to_numpy(dtype=int),
+                                      minlength=stack.n_events)
+    events["Interactions"] = interactions_per_event(cells, pairs, stack.n_events)
+    result = Result(stack, labels, classes, cells, thresholds, pairs, contact_table(cells, pairs),
+                    multiplets(cells, pairs, stack.n_events), events, doublets(events), masks, out_dir)
     ch = settings.channels
     if settings.membrane.analysis:
         immune = ch.cell_of_interest == CellOfInterest.IMMUNE_CELL
@@ -117,6 +129,8 @@ def save(result: Result, settings: Settings) -> None:
     ids = result.stack.object_ids
     save_table(_with_object_ids(classification_output(result.cells), ids), out / f"{CELL_TABLE}.tsv")
     save_table(result.thresholds, out / f"{THRESHOLDS_TABLE}.tsv")
+    save_table(result.contacts, out / f"{CONTACTS_TABLE}.tsv")
+    save_table(result.multiplets, out / f"{MULTIPLETS_TABLE}.tsv")
     save_table(_with_object_ids(result.events, ids), out / f"{EVENT_TABLE}.tsv")
     d = _with_object_ids(result.doublets, ids)
     d.insert(0, " ", np.arange(len(d)))  # the macro shows the row numbers in this table

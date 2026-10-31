@@ -82,7 +82,7 @@ def test_cells_match_reference(result, reference):
 def test_event_tables_match_reference(result, reference, name):
     ref = _read_reference(reference, name)
     own = _read(result.out_dir, name)
-    assert list(own.columns) == list(ref.columns)
+    assert list(own.columns[: len(ref.columns)]) == list(ref.columns)  # the port adds columns at the end
     assert len(own) == len(ref)
     for col in ref.columns:
         assert np.allclose(own[col], ref[col], atol=0.0015, rtol=0, equal_nan=True), col
