@@ -124,6 +124,10 @@ class SegmentationSettings:
     exclude_edge_cells: bool = False
 
 
+# the threshold methods offered on the page (any method of imagej.THRESHOLD_BINS works, plus " strict")
+THRESHOLD_METHODS = ["MaxEntropy", "MaxEntropy strict", "Otsu"]
+
+
 class Pool(StrEnum):
     EXPERIMENT = "experiment"  # the datasets of one experiment (project) are classified together
     DATASET = "dataset"
@@ -132,13 +136,15 @@ class Pool(StrEnum):
 @dataclass
 class ClassificationSettings:
     # Thresholds of the functional markers: on log(intensity - min + 1) of the background-subtracted cell means (as
-    # ClassifyCellTypes 2.8), with an ImageJ auto-threshold method: "MaxEntropy" (2.8) or "Otsu"
+    # ClassifyCellTypes 2.8), with an ImageJ auto-threshold method: "MaxEntropy" (2.8), "Otsu", "Yen" or
+    # "RenyiEntropy"; "<method> strict" raises it to at least 2 robust SDs above the negative cells
     threshold_method: str = "MaxEntropy"
     # a threshold set by hand: marker name -> background-subtracted intensity; overrides the automatic one
     thresholds: dict[str, float] = field(default_factory=dict)
     # a detection positive in at least this many functional markers (thresholded on all detections) is not a cell
-    # but an artefact; it is left out of the tumor / immune clustering. 0 = no artefacts
-    artefact_min_positive: int = 0
+    # but an artefact; it is left out of the tumor / immune clustering. None (default) = all functional markers, when
+    # there are two or more (with one, its positive cells are real cells); 0 = no artefacts
+    artefact_min_positive: int | None = None
     # in a project: classify the datasets of each experiment together (one set of thresholds, comparable
     # subtypes), or each dataset on its own
     pool: Pool = Pool.EXPERIMENT

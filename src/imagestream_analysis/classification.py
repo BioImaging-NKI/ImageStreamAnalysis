@@ -51,14 +51,28 @@ def marker_columns(cells: pd.DataFrame, ch: ChannelSettings) -> list[tuple[Marke
     return out
 
 
+STRICT = " strict"
+STRICT_SDS = 2.0  # "<method> strict": at least this many robust SDs above the median of the negative cells
+
+
 def log_threshold(values: np.ndarray, method: str) -> float:
     """A threshold on intensities that are roughly log-normal (2.8, lines 935-991): the auto-threshold of
-    log(v - min + 1), transformed back to intensity."""
+    log(v - min + 1), transformed back to intensity.
+
+    '<method> strict' (new): the threshold is raised, if needed, to the median plus STRICT_SDS robust SDs
+    (1.4826 x MAD) of the values below it, all on the log scale: no closer to the bulk of the negative cells. On
+    synthetic log-normal mixtures this roughly halves the false positives of MaxEntropy, for a few more misses."""
     v = values[np.isfinite(values)]
     if len(v) < 2:
         return float("inf")
     lo = float(v.min())
-    t = imagej.auto_threshold_dark(np.log(v - lo + 1.0), method)
+    x = np.log(v - lo + 1.0)
+    t = imagej.auto_threshold_dark(x, method.removesuffix(STRICT))
+    if method.endswith(STRICT):
+        negative = x[x <= t]
+        if len(negative) >= 2:
+            median = float(np.median(negative))
+            t = max(t, median + STRICT_SDS * 1.4826 * float(np.median(np.abs(negative - median))))
     return float(np.exp(t) - 1.0 + lo)
 
 
@@ -122,11 +136,13 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
     # 1. the functional markers on all detections: the artefacts are positive in too many of them
     positive_all = [pool[f"_m {m.key}"] > threshold(m, everyone) for m in markers]
     pool["Positive markers"] = np.sum(positive_all, axis=0).astype(int) if markers else 0
-    artefact = (pool["Positive markers"] >= settings.artefact_min_positive if settings.artefact_min_positive > 0
-                else pd.Series(False, index=pool.index))
+    n_min = settings.artefact_min_positive
+    if n_min is None:  # all functional markers, when there are at least two
+        n_min = len(markers) if len(markers) >= 2 else 0
+    artefact = (pool["Positive markers"] >= n_min if n_min > 0 else pd.Series(False, index=pool.index))
     if artefact.any():
         log.info("%d of %d detections are positive in %d or more functional markers: artefacts", artefact.sum(),
-                 len(pool), settings.artefact_min_positive)
+                 len(pool), n_min)
     # 2. tumor or immune cell: k-means on the other detections
     cells_ok = pool[~artefact]
     if len(cells_ok) < N_CLUSTERS:

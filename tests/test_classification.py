@@ -71,7 +71,7 @@ def measured(rng, n_tumor=200, n_immune=200, n_artefact=0, numbers=(3, 4, 5, 6))
 
 def test_lineage_and_subtypes():
     df, ch, kind, a_pos, b_pos = measured(np.random.default_rng(2))
-    cells, thresholds = classify(df, ch, ClassificationSettings())
+    cells, thresholds = classify(df, ch, ClassificationSettings(artefact_min_positive=0))
     assert (cells["Cell type"].to_numpy() == np.where(kind == "T", "Tumor", "Immune")).all()
     assert (cells["Class"] == (kind == "I").astype(int)).all()
     immune = kind == "I"
@@ -88,8 +88,13 @@ def test_lineage_and_subtypes():
 
 def test_artefacts_are_left_out_of_the_clustering():
     df, ch, kind, _, _ = measured(np.random.default_rng(3), n_artefact=25)
-    cells, _ = classify(df, ch, ClassificationSettings())
-    assert "Artefact" not in set(cells["Cell type"])  # off by default
+    cells, _ = classify(df, ch, ClassificationSettings(artefact_min_positive=0))
+    assert "Artefact" not in set(cells["Cell type"])  # off
+    # default: positive in all functional markers (here 2), as 2.8; with one functional marker never
+    assert classify(df, ch, ClassificationSettings(artefact_min_positive=2))[0].equals(
+        classify(df, ch, ClassificationSettings())[0])
+    one = ChannelSettings(tumor=ch.tumor, immune=ch.immune, functional=ch.functional[:1])
+    assert "Artefact" not in set(classify(df, one, ClassificationSettings())[0]["Cell type"])
     cells, _ = classify(df, ch, ClassificationSettings(artefact_min_positive=2))
     assert (cells.loc[kind == "X", "Cell type"] == "Artefact").all()
     assert (cells["Cell type"] == "Artefact").sum() < 25 + 15  # a few immune cells positive in both by chance
@@ -116,3 +121,23 @@ def test_a_pool_shares_thresholds_and_matches_channels_by_role():
     assert ((c2["Mean ch11 (A)"] > t_a) == c2["A+"].astype(bool)).all()  # the pool's threshold in both datasets
     alone = classify(second, ch2, ClassificationSettings())[1]
     assert alone.query("marker == 'A' and cells == 'immune cells'")["threshold"].item() != pytest.approx(t_a)
+
+
+@pytest.mark.parametrize("method", ["Yen", "RenyiEntropy"])
+def test_more_imagej_methods_split_two_peaks(method):
+    """Yen and RenyiEntropy equalled Fiji on 12 log-normal mixtures (2026-10-31)."""
+    rng = np.random.default_rng(0)
+    v = np.concatenate([rng.normal(50, 5, 1000), rng.normal(150, 10, 200)])
+    assert 55 < imagej.auto_threshold_dark(v, method) < 135
+
+
+def test_strict_threshold_is_never_below_the_plain_one():
+    rng = np.random.default_rng(6)
+    for _ in range(20):
+        v = np.concatenate([rng.lognormal(1.5, 0.5, 900), rng.lognormal(3.0, 0.5, 100)]) - 3
+        plain, strict = log_threshold(v, "MaxEntropy"), log_threshold(v, "MaxEntropy strict")
+        assert strict >= plain
+        x = np.log(v - v.min() + 1)
+        neg = x[x <= np.log(plain - v.min() + 1)]
+        bound = np.exp(np.median(neg) + 2 * 1.4826 * np.median(np.abs(neg - np.median(neg)))) - 1 + v.min()
+        assert strict == pytest.approx(max(plain, bound))

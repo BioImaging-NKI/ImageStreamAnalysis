@@ -3,7 +3,7 @@ for reproducing its numbers. See docs/SPEC.md for the source of each definition.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 import numpy as np
 from scipy import ndimage as ndi
@@ -64,7 +64,81 @@ def max_entropy_bin(histogram: np.ndarray) -> int:
     return threshold
 
 
-THRESHOLD_BINS = {"Otsu": otsu_bin, "MaxEntropy": max_entropy_bin}
+def yen_bin(histogram: np.ndarray) -> int:
+    """ImageJ AutoThresholder 'Yen' (Yen, Chang and Chang 1995) on a histogram."""
+    h = histogram.astype(np.float64)
+    total = h.sum()
+    if total == 0:
+        return 0
+    p = h / total
+    p1 = np.cumsum(p)
+    p1_sq = np.cumsum(p * p)
+    p2_sq = np.concatenate([np.cumsum((p * p)[::-1])[::-1][1:], [0.0]])  # sum over the bins above
+    a, b = p1_sq * p2_sq, p1 * (1.0 - p1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_a = np.where(a > 0, np.log(np.where(a > 0, a, 1.0)), 0.0)
+        log_b = np.where(b > 0, np.log(np.where(b > 0, b, 1.0)), 0.0)
+    crit = -log_a + 2 * log_b
+    best: float = 5e-324  # Double.MIN_VALUE
+    threshold = -1
+    for it, c in enumerate(crit):
+        if c > best:
+            best, threshold = float(c), it
+    return threshold
+
+
+def renyi_entropy_bin(histogram: np.ndarray) -> int:
+    """ImageJ AutoThresholder 'RenyiEntropy' (Kapur, Sahoo and Wong 1985): the Renyi entropy thresholds of order
+    0.5, 1 (MaxEntropy) and 2, combined."""
+    h = histogram.astype(np.float64)
+    total = h.sum()
+    if total == 0:
+        return 0
+    n = len(h)
+    p = h / total
+    p1 = np.cumsum(p)
+    p2 = 1.0 - p1
+    eps = 2.220446049250313e-16
+    nonzero = np.flatnonzero(np.abs(p1) >= eps)
+    first = int(nonzero[0]) if len(nonzero) else 0
+    nonzero = np.flatnonzero(np.abs(p2[first:]) >= eps)
+    last = first + int(nonzero[-1]) if len(nonzero) else n - 1
+
+    def best_of(score: Callable[[int], float]) -> int:
+        best, threshold = 0.0, 0  # here ImageJ starts at 0.0
+        for it in range(first, last + 1):
+            v = score(it)
+            if v > best:
+                best, threshold = v, it
+        return threshold
+
+    def kapur(it: int) -> float:
+        back = p[: it + 1][h[: it + 1] != 0] / p1[it]
+        obj = p[it + 1 :][h[it + 1 :] != 0] / p2[it] if p2[it] > 0 else np.array([])
+        return float(-(back * np.log(back)).sum() - (obj * np.log(obj)).sum())
+
+    def renyi(alpha: float) -> Callable[[int], float]:
+        def score(it: int) -> float:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                back = float((np.sqrt(p[: it + 1] / p1[it]) if alpha == 0.5 else (p[: it + 1] / p1[it]) ** 2).sum())
+                obj = float((np.sqrt(p[it + 1 :] / p2[it]) if alpha == 0.5 else (p[it + 1 :] / p2[it]) ** 2).sum())
+            prod = back * obj
+            return 1.0 / (1.0 - alpha) * (float(np.log(prod)) if prod > 0 and np.isfinite(prod) else 0.0)
+        return score
+
+    t1, t2, t3 = best_of(renyi(0.5)), best_of(kapur), best_of(renyi(2.0))
+    t1, t2 = min(t1, t2), max(t1, t2)  # sorted as ImageJ does
+    t2, t3 = min(t2, t3), max(t2, t3)
+    t1, t2 = min(t1, t2), max(t1, t2)
+    if abs(t1 - t2) <= 5:
+        b1, b2, b3 = (1, 2, 1) if abs(t2 - t3) <= 5 else (0, 1, 3)
+    else:
+        b1, b2, b3 = (3, 1, 0) if abs(t2 - t3) <= 5 else (1, 2, 1)
+    omega = p1[t3] - p1[t1]
+    return int(t1 * (p1[t1] + 0.25 * omega * b1) + 0.25 * t2 * omega * b2 + t3 * (p2[t3] + 0.25 * omega * b3))
+
+
+THRESHOLD_BINS = {"Otsu": otsu_bin, "MaxEntropy": max_entropy_bin, "Yen": yen_bin, "RenyiEntropy": renyi_entropy_bin}
 
 
 def auto_threshold_dark(image: np.ndarray, method: str = "Otsu") -> float:

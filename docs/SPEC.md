@@ -264,16 +264,23 @@ flagged on thresholds over all cells, before the k-means, which then runs withou
 
 1. *Thresholds* (2.8, lines 929-1000): per functional marker, on log(v − min + 1) of the background-subtracted
    cell means (`Mean ch<N>`), with ImageJ's auto-threshold on the 8-bit histogram, as for the Otsu normalization:
-   `classification.threshold_method` "MaxEntropy" (2.8's choice) or "Otsu"; back-transformed, exp(t) − 1 + min.
+   `classification.threshold_method` "MaxEntropy" (2.8's choice), "Otsu", "Yen" or "RenyiEntropy" (all four ported
+   from ImageJ's AutoThresholder and equal to Fiji), or "MaxEntropy strict" (new, 2026-10-31: the MaxEntropy
+   threshold, raised if needed to the median + 2 robust SDs (1.4826 × MAD) of the values below it, on the log
+   scale); back-transformed, exp(t) − 1 + min. On synthetic log-normal mixtures Yen and RenyiEntropy were not
+   stricter than MaxEntropy, and Otsu was more liberal when positives are rare; "MaxEntropy strict" roughly halved
+   the false positives of well-separated markers for a few more misses.
    Positive: v > threshold. MaxEntropy is transcribed from ImageJ's AutoThresholder (Kapur, Sahoo and Wong);
    verified against Fiji: equal to 1e-11 on 12 log-normal mixtures, and a fixed case is in the tests. A threshold
    can be set by hand per marker name (`classification.thresholds`). MaxEntropy cuts in the upper tail of the
    negative population, so it calls a few negative cells positive.
 2. *Artefacts*: a detection positive in at least `classification.artefact_min_positive` functional markers, with
-   the thresholds over **all** detections (0 = no artefacts, the default). Cell type `Artefact`, Class 2, class map 3;
-   not counted as tumor or immune cells, not part of the interfaces. Only the functional markers count: on the test
-   data an automatic threshold of the tumor or immune marker over all detections calls far more cells positive than
-   the k-means finds (so the lineage markers are not thresholded at all). 2.8 had: positive in all functional
+   the thresholds over **all** detections. Default (the user, 2026-10-31): positive in all functional markers, when
+   there are two or more; 0 = no artefacts. Cell type `Artefact`, Class 2, class map 3;
+   not counted as tumor or immune cells, not part of the interfaces. Only the functional markers count. (Counting
+   the tumor and immune markers too, so that a detection bright in both would be an artefact, was tried and dropped:
+   it needs a positive/negative split of those markers, and on the test data an automatic threshold over all
+   detections calls far more cells positive than the k-means finds. Tumor against immune stays the k-means alone.) 2.8 had: positive in all functional
    markers (`removeBadDetections`, switched off, and it read the positives before they were computed).
 3. *Lineage*: the k-means of v1.8 on the other detections (features and the tumor-cluster rule unchanged). 2.8
    clustered on the sum of the phenotypic markers, the tumor marker, optionally the functional markers (added
