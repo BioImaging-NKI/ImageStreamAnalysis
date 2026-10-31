@@ -1,0 +1,145 @@
+import json
+import threading
+import urllib.request
+from http.server import ThreadingHTTPServer
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from conftest import IDEAS_IDS
+from imagestream_analysis import gui
+from imagestream_analysis.config import CellOfInterest
+from imagestream_analysis.pipeline import CELL_TABLE, EVENT_TABLE
+from imagestream_analysis.project import OVERVIEW_FILE, DatasetEntry, Project, ZipEntry, run_project
+
+ROLES = {"brightfield": 1, "marker_of_interest": 3, "t_cell": 6, "tumor": 9}
+
+
+def make_project(ideas_zip, folder) -> Project:
+    p = Project(folder)
+    p.settings.segmentation.method = "labelmap"  # no Cellpose in the tests
+    p.settings.segmentation.labelmap_file = ideas_zip["labelmap"]
+    p.settings.channels.cell_of_interest = CellOfInterest.TUMOR_CELL
+    p.settings.membrane.thickness = 2
+    p.settings.membrane.analysis = True
+    p.zips.append(ZipEntry(ideas_zip["zip"], 0.5, [1, 3, 6, 9], ["BF", "MOI's name", "T cells", "Tumor"], dict(ROLES),
+                           [DatasetEntry("Sample A", "Experiment 1")]))
+    return p
+
+
+def test_project_round_trip(ideas_zip):
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    path = p.save()
+    loaded = Project.load(path.parent)
+    assert loaded.zips == p.zips  # including a name with a quote
+    assert loaded.settings == p.settings
+
+
+def test_problems(ideas_zip):
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    assert p.problems() == []
+    p.zips[0].pixel_size = None
+    del p.zips[0].roles["tumor"]
+    msgs = p.problems()
+    assert any("pixel size" in m for m in msgs) and any("tumor" in m for m in msgs)
+    p.zips[0].datasets[0].include = False
+    assert "No datasets selected" in p.problems()
+
+
+def test_run_project_writes_results_and_overview(ideas_zip):
+    folder = ideas_zip["tmp"] / "project"
+    make_project(ideas_zip, folder).save()
+    table = run_project(folder)
+    assert len(table) == 1
+    row = table.iloc[0]
+    assert row["experiment"] == "Experiment 1" and row["dataset"] == "Sample A"
+    assert row["cells"] == 20 and row["T cells"] == 10 and row["single tumor + single T cell"] == 10
+    assert row["with interface"] == 10
+    out = folder / "Experiment 1" / "Sample A"
+    cells = pd.read_csv(out / f"{CELL_TABLE}.tsv", sep="\t")
+    assert sorted(set(cells["Object ID"])) == sorted(IDEAS_IDS)
+    events = pd.read_csv(out / f"{EVENT_TABLE}.tsv", sep="\t")
+    assert events["Object ID"].tolist() == sorted(IDEAS_IDS)
+    assert (folder / OVERVIEW_FILE).exists()
+
+
+def test_a_failing_dataset_does_not_stop_the_others(ideas_zip):
+    folder = ideas_zip["tmp"] / "project"
+    p = make_project(ideas_zip, folder)
+    p.zips[0].datasets.append(DatasetEntry("missing", "Experiment 2"))
+    p.save()
+    table = run_project(folder)
+    assert len(table) == 2
+    failed = table[table["dataset"] == "missing"].iloc[0]
+    assert "no dataset" in failed["error"]
+
+
+@pytest.fixture
+def server(tmp_path, monkeypatch):
+    monkeypatch.setattr(gui, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(gui, "PREFS", tmp_path / "state" / "prefs.json")
+    token = "test-token"
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), gui.make_handler(token, gui.Job(), [0.0]))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}", token
+    srv.shutdown()
+
+
+def call(server, api, data=None, token=None):
+    url, tok = server
+    req = urllib.request.Request(f"{url}/api/{api}", data=json.dumps(data or {}).encode(), method="POST",
+                                 headers={"X-Token": token if token is not None else tok})
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
+
+
+def test_page_and_token(server):
+    url, token = server
+    with urllib.request.urlopen(url + "/") as r:
+        html = r.read().decode()
+    assert token in html and "ImageStream Analysis" in html
+    with pytest.raises(urllib.error.HTTPError) as err:
+        call(server, "state", token="wrong")
+    assert err.value.code == 403
+
+
+def test_api_scan_save_and_overview(server, ideas_zip):
+    state = call(server, "state")["result"]
+    assert "brightfield" in state["roles"] and state["defaults"]["segmentation"]["model"] == "cyto3"
+    scanned = call(server, "scan", {"path": str(ideas_zip["zip"])})["result"]
+    assert scanned["datasets"][0]["objects"] == len(IDEAS_IDS)
+    assert sorted(int(c) for c in scanned["thumbnails"]) == [1, 3, 6, 9]
+    bad = call(server, "scan", {"path": str(ideas_zip["tmp"] / "nothing.zip")})
+    assert not bad["ok"] and "zip" in bad["error"]
+
+    folder = ideas_zip["tmp"] / "from page"
+    project = gui.project_to_json(make_project(ideas_zip, folder))
+    saved = call(server, "save", {"project": project})["result"]
+    assert saved["problems"] == [] and (folder / "project.toml").exists()
+    assert Project.load(folder).zips[0].roles == ROLES
+    run_project(folder)
+    o = call(server, "overview", {"folder": str(folder)})["result"]
+    assert o["rows"][0]["cells"] == 20 and "experiment" in o["columns"]
+
+
+def test_object_ids_follow_the_frames():
+    from imagestream_analysis.pipeline import _with_object_ids
+
+    t = pd.DataFrame({"Frame": [2, 1, 3]})
+    assert _with_object_ids(t, np.array([7, 9, 11]))["Object ID"].tolist() == [9, 7, 11]
+    assert "Object ID" not in _with_object_ids(t, None)
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_empty_max_events_from_the_page_means_all_events(ideas_zip, value):
+    data = gui.project_to_json(make_project(ideas_zip, ideas_zip["tmp"] / "p"))
+    assert data["settings"]["input"]["max_events"] is None  # the default: all events
+    data["settings"]["input"]["max_events"] = 500
+    assert gui.project_from_json(data).settings.input.max_events == 500
+    data["settings"]["input"]["max_events"] = value  # the field cleared on the page
+    p = gui.project_from_json(data)
+    assert p.settings.input.max_events is None
+    p.save()
+    assert Project.load(p.folder).settings.input.max_events is None
+    assert all(s.input.max_events is None for _, _, s in p.samples())

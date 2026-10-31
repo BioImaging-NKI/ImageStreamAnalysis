@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ImageStream Dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --grid: #e1e0d9;
+  --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); --chip: #f0efec;
+  --t-cell: #2a78d6; --tumor: #eb6834; --interface: #1baf7a;
+  --div-neg: #2a78d6; --div-mid: #f0efec; --div-pos: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a;
+    --axis: #383835; --ring: rgba(255,255,255,0.10); --chip: #262624;
+    --t-cell: #3987e5; --tumor: #d95926; --interface: #199e70;
+    --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a;
+  --axis: #383835; --ring: rgba(255,255,255,0.10); --chip: #262624;
+  --t-cell: #3987e5; --tumor: #d95926; --interface: #199e70;
+  --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--surface);
+  border-bottom: 1px solid var(--ring); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 17px; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.chip { background: var(--chip); border-radius: 12px; padding: 2px 10px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.chip b { color: var(--ink); font-weight: 600; }
+.spacer { flex: 1; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 16px; background: var(--surface);
+  border-bottom: 1px solid var(--ring); position: sticky; top: var(--header-h, 52px); z-index: 4; }
+.filters label { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+select, input, button { font: inherit; color: var(--ink); }
+select, button { background: var(--surface); border: 1px solid var(--axis); border-radius: 5px; padding: 3px 8px; }
+button { cursor: pointer; }
+button:hover, select:hover { border-color: var(--ink-2); }
+.chan { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--axis); border-radius: 5px; padding: 2px 6px; }
+.chan input[type=range] { width: 70px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 14px; padding: 14px 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.card h2 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.span2 { grid-column: 1 / -1; }
+#gallery { position: relative; height: 70vh; min-height: 360px; overflow-y: auto; background: var(--page); border-radius: 6px; }
+#gallery .inner { position: relative; }
+.tile { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+.tile canvas { background: #000; border-radius: 3px; outline: 2px solid transparent; }
+.tile.selected canvas { outline-color: var(--ink); }
+.tile span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 4px 0; }
+.legend .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
+.legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.plot { position: relative; }
+.plot canvas, .plot svg { display: block; width: 100%; }
+svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .grid { stroke: var(--grid); stroke-width: 1; }
+svg .axis { stroke: var(--axis); stroke-width: 1; }
+#tooltip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); border-radius: 6px; padding: 6px 8px; font-size: 12px; display: none; z-index: 10; max-width: 280px; }
+#tooltip .v { font-weight: 600; }
+#tooltip .l { color: var(--ink-2); }
+#cellcard .empty { color: var(--muted); }
+#cellcard dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 13px; }
+#cellcard dt { color: var(--ink-2); }
+#cellcard dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cardrow { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 3px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { color: var(--ink-2); font-weight: 500; cursor: pointer; position: sticky; top: 0; background: var(--surface); }
+th:first-child, td:first-child { text-align: left; }
+tr.hover td { background: var(--chip); }
+tr.selected td { box-shadow: inset 0 -2px 0 var(--ink); }
+tbody tr { cursor: pointer; }
+.tablebox { max-height: 420px; overflow: auto; }
+.tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.tabs button.on { border-color: var(--ink); font-weight: 600; }
+.note { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header id="header">
+  <h1 id="title"></h1>
+  <span id="chips" style="display:contents"></span>
+  <span class="spacer"></span>
+  <span class="note">ImageStream analysis v__ISA_VERSION__</span>
+  <button id="theme" title="Light / dark">◐</button>
+</header>
+<div class="filters" id="filters">
+  <label>Events <select id="f-events">
+    <option value="all">all</option>
+    <option value="both">with T cells and tumor cells</option>
+    <option value="doublets">one tumor + one T cell</option>
+    <option value="interface">with an interface</option>
+  </select></label>
+  <label>Sort <select id="f-sort"></select></label>
+  <label>Size <input type="range" id="f-zoom" min="0.5" max="2.5" step="0.25" value="1"></label>
+  <label><input type="checkbox" id="f-outlines" checked> outlines</label>
+  <label><input type="checkbox" id="f-interfaces" checked> interfaces</label>
+  <span id="channels" style="display:contents"></span>
+</div>
+<main>
+  <div class="card">
+    <h2>Events</h2>
+    <p class="sub" id="gallery-sub"></p>
+    <div class="legend">
+      <span><span class="key" style="border-color:var(--t-cell)"></span>T cell</span>
+      <span><span class="key" style="border-color:var(--tumor)"></span>tumor cell</span>
+      <span><span class="key" style="border-color:var(--interface)"></span>interface</span>
+      <span class="note">hover a cell; click to select it</span>
+    </div>
+    <div id="gallery"><div class="inner"></div></div>
+  </div>
+  <div class="col">
+    <div class="card" id="cellcard"><h2>Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p></div>
+    <div class="card">
+      <h2>Cell classes</h2>
+      <p class="sub">Area against marker ratio (T-cell / tumor marker), log–log, as the k-means classification</p>
+      <div class="legend" id="classes-legend"></div>
+      <div class="plot"><canvas id="classes" height="300"></canvas></div>
+    </div>
+    <div class="card">
+      <h2 id="iface-title">Marker of interest at the interface</h2>
+      <p class="sub" id="iface-sub"></p>
+      <div class="plot"><canvas id="iface" height="280"></canvas></div>
+    </div>
+  </div>
+  <div class="card span2" id="membrane-card" hidden>
+    <h2>Membrane enrichment</h2>
+    <p class="sub" id="membrane-sub"></p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+      <div>
+        <div class="legend"><span><span class="key" style="border-color:var(--interface)"></span>interface</span>
+          <span><span class="key" style="border-color:var(--muted);border-top-style:dashed"></span>control (random windows)</span></div>
+        <div class="plot"><svg id="hist" viewBox="0 0 420 240"></svg></div>
+        <p class="note">Standard deviations above the mean of the membrane outside the interface; fraction of cells per bin.</p>
+      </div>
+      <div>
+        <div class="legend"><span class="note">Average profile of the cells with an interface, centred at the interface</span></div>
+        <div class="plot"><svg id="profile" viewBox="0 0 420 240"></svg></div>
+      </div>
+      <div>
+        <div class="legend" id="heat-legend"></div>
+        <div class="plot"><canvas id="heat" height="240"></canvas></div>
+        <p class="note">One row per cell with an interface, highest enrichment on top.</p>
+      </div>
+    </div>
+  </div>
+  <div class="card span2">
+    <div class="tabs"><button id="tab-cells" class="on">Cells</button><button id="tab-events">Events</button>
+      <span class="note" id="table-note" style="align-self:center"></span></div>
+    <div class="tablebox"><table id="table"></table></div>
+  </div>
+</main>
+<div id="tooltip"></div>
+
+<script>
+"use strict";
+const D = "__ISA_DATA__";
+const [TW, TH] = D.tile, [SC, SR] = D.sheet, PER_SHEET = SC * SR;
+const C = D.cells, E = D.events, M = D.membranes;
+const NC = C.event.length, NE = D.n_events;
+const OF_INTEREST = D.cell_of_interest;  // "Tumor" or "T cell"
+const LUT = { gray: "#ffffff", azure: "#3fa2ff", green: "#3cdc3c", magenta: "#ff40ff", yellow: "#ffe640",
+              red: "#ff4040", cyan: "#40ffff", orange: "#ffa040" };
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const fmt = (v, d = 3) => v == null ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : Number(v.toFixed(d)).toString());
+const typeColor = t => css(t === "T cell" ? "--t-cell" : "--tumor");
+const state = { filter: "all", sort: "event", zoom: 1, outlines: true, interfaces: true, hover: -1, selected: -1, event: -1, tab: "cells",
+                tableSort: null, tableDesc: false };
+
+// ---------- derived data
+const cellsOfEvent = Array.from({ length: NE }, () => []);
+for (let i = 0; i < NC; i++) cellsOfEvent[C.event[i]].push(i);
+const memOfCell = new Int32Array(NC).fill(-1);
+if (M) M.cell.forEach((c, k) => { if (c >= 0) memOfCell[c] = k; });
+const iInterface = OF_INTEREST === "Tumor" ? E.tu_interface : E.t_interface;
+const iRest = OF_INTEREST === "Tumor" ? E.tu_rest : E.t_rest;
+const iRatio = OF_INTEREST === "Tumor" ? E.tu_ratio : E.t_ratio;
+const eventEnrichment = new Float64Array(NE).fill(NaN);
+if (M) M.sd.forEach((v, k) => { const c = M.cell[k]; if (c >= 0 && v != null) { const e = C.event[c];
+  if (!(eventEnrichment[e] >= v)) eventEnrichment[e] = v; } });
+const isDoublet = e => E.t_cells[e] === 1 && E.tumor_cells[e] === 1 && E.t_interface[e] != null;
+const FILTERS = { all: () => true, both: e => E.t_cells[e] > 0 && E.tumor_cells[e] > 0, doublets: isDoublet,
+                  interface: e => E.interfaces[e].length > 0 };
+const SORTS = [["event", "event order"], ["ratio", "membrane ratio of the " + (OF_INTEREST === "Tumor" ? "tumor cell" : "T cell")]];
+if (M) SORTS.push(["sd", "enrichment (SD above mean)"]);
+if (E.object) SORTS.splice(1, 0, ["object", "object number"]);
+let shown = [];  // event indices in view order
+let shownSet = new Set();
+function applyFilter() {
+  shown = [...Array(NE).keys()].filter(FILTERS[state.filter]);
+  const key = { event: e => e, object: e => E.object[e], ratio: e => -(iRatio[e] ?? -Infinity), sd: e => -(isNaN(eventEnrichment[e]) ? -Infinity : eventEnrichment[e]) }[state.sort];
+  shown.sort((a, b) => key(a) - key(b) || a - b);
+  shownSet = new Set(shown);
+}
+
+// ---------- image sheets
+const sheets = new Map();
+function sheet(ch, s) {
+  const key = ch + "_" + s;
+  let img = sheets.get(key);
+  if (!img) {
+    img = new Image(); img.decoding = "async"; img.src = `${D.files}/c${ch}_${s}.webp`;
+    img.onload = () => redrawEventsOfSheet(s);
+    sheets.set(key, img);
+  }
+  return img;
+}
+const off = document.createElement("canvas"); off.width = TW; off.height = TH;
+const offCtx = off.getContext("2d");
+function drawImageOf(ctx, e) {
+  ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, TW, TH);
+  const s = Math.floor(e / PER_SHEET), k = e % PER_SHEET, sx = (k % SC) * TW, sy = Math.floor(k / SC) * TH;
+  for (const ch of D.channels) {
+    if (!ch.on) continue;
+    const img = sheet(ch.number, s);
+    if (!img.complete || !img.naturalWidth) continue;
+    offCtx.globalCompositeOperation = "source-over"; offCtx.filter = `brightness(${ch.gain ?? 1})`;
+    offCtx.drawImage(img, sx, sy, TW, TH, 0, 0, TW, TH); offCtx.filter = "none";
+    offCtx.globalCompositeOperation = "multiply"; offCtx.fillStyle = LUT[ch.lut] || "#fff"; offCtx.fillRect(0, 0, TW, TH);
+    ctx.globalCompositeOperation = "lighter"; ctx.drawImage(off, 0, 0);
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+const paths = new Map();
+function pathOf(points) {
+  const p = new Path2D();
+  for (let i = 0; i < points.length; i += 2) p[i ? "lineTo" : "moveTo"](points[i] / 2, points[i + 1] / 2);
+  p.closePath(); return p;
+}
+function cellPath(i) { let p = paths.get(i); if (!p) { p = pathOf(C.outline[i]); paths.set(i, p); } return p; }
+function drawEvent(canvas, e, scale) {
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.imageSmoothingEnabled = scale < 1;
+  drawImageOf(ctx, e);
+  if (state.interfaces) {
+    ctx.strokeStyle = css("--interface"); ctx.lineWidth = 1.5 / scale;
+    for (const o of E.interfaces[e]) ctx.stroke(pathOf(o));
+  }
+  for (const i of cellsOfEvent[e]) {
+    const sel = i === state.selected, hov = i === state.hover;
+    if (!state.outlines && !sel && !hov) continue;
+    ctx.strokeStyle = sel || hov ? "#ffffff" : typeColor(C.type[i]);
+    ctx.lineWidth = (sel ? 3 : hov ? 2.5 : 1.5) / scale;
+    ctx.setLineDash(hov && !sel ? [4 / scale, 3 / scale] : []);
+    ctx.stroke(cellPath(i));
+  }
+  ctx.setLineDash([]);
+}
+function cellAt(e, x, y, ctx) {
+  for (const i of cellsOfEvent[e]) if (ctx.isPointInPath(cellPath(i), x, y)) return i;
+  return -1;
+}
+
+// ---------- gallery (only the visible tiles exist)
+const gallery = document.getElementById("gallery"), inner = gallery.querySelector(".inner");
+const tiles = new Map();  // event -> tile element
+let layout = { cols: 1, w: TW, h: TH + 16, gap: 8 };
+function relayout() {
+  const w = Math.round(TW * state.zoom), h = Math.round(TH * state.zoom) + 16;
+  const cols = Math.max(1, Math.floor((gallery.clientWidth - 8) / (w + 8)));
+  layout = { cols, w, h, gap: 8 };
+  inner.style.height = Math.ceil(shown.length / cols) * (h + 8) + "px";
+  for (const t of tiles.values()) t.remove();
+  tiles.clear(); renderVisible();
+  document.getElementById("gallery-sub").textContent = `${shown.length.toLocaleString()} of ${NE.toLocaleString()} events` +
+    (D.n_events_in_file > NE ? ` (the first ${NE.toLocaleString()} of ${D.n_events_in_file.toLocaleString()} analysed)` : "");
+}
+function renderVisible() {
+  const { cols, w, h, gap } = layout;
+  const first = Math.max(0, Math.floor(gallery.scrollTop / (h + gap)) - 1) * cols;
+  const last = Math.min(shown.length, (Math.ceil((gallery.scrollTop + gallery.clientHeight) / (h + gap)) + 1) * cols);
+  const keep = new Set(shown.slice(first, last));
+  for (const [e, t] of tiles) if (!keep.has(e)) { t.remove(); tiles.delete(e); }
+  for (let k = first; k < last; k++) {
+    const e = shown[k];
+    if (tiles.has(e)) continue;
+    const t = document.createElement("div"); t.className = "tile" + (e === state.event ? " selected" : "");
+    t.style.left = (k % cols) * (w + gap) + 4 + "px"; t.style.top = Math.floor(k / cols) * (h + gap) + 4 + "px";
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h - 16; cv.style.width = w + "px";
+    const label = document.createElement("span");
+    label.textContent = `#${e + 1}` + (E.object ? ` · obj ${E.object[e]}` : "");
+    t.append(cv, label); inner.append(t); tiles.set(e, t);
+    drawEvent(cv, e, state.zoom);
+    cv.addEventListener("pointermove", ev => {
+      const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) / state.zoom, y = (ev.clientY - r.top) / state.zoom;
+      const ctx = cv.getContext("2d"); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const i = cellAt(e, x, y, ctx); ctx.restore();
+      setHover(i);
+      if (i >= 0) showTip(ev, cellTip(i)); else showTip(ev, eventTip(e));
+    });
+    cv.addEventListener("pointerleave", () => { setHover(-1); hideTip(); });
+    cv.addEventListener("click", () => { if (state.hover >= 0) select(state.hover); else selectEvent(e); });
+  }
+}
+gallery.addEventListener("scroll", () => requestAnimationFrame(renderVisible));
+new ResizeObserver(() => { relayout(); drawPlots(); }).observe(gallery);
+function redrawEvent(e) { const t = tiles.get(e); if (t) drawEvent(t.querySelector("canvas"), e, state.zoom); }
+function redrawEventsOfSheet(s) { for (const e of tiles.keys()) if (Math.floor(e / PER_SHEET) === s) redrawEvent(e); if (state.selected >= 0) renderCard(); }
+function scrollToEvent(e) {
+  const k = shown.indexOf(e); if (k < 0) return;
+  const top = Math.floor(k / layout.cols) * (layout.h + layout.gap);
+  if (top < gallery.scrollTop || top + layout.h > gallery.scrollTop + gallery.clientHeight) gallery.scrollTop = top - 20;
+}
+
+// ---------- linking
+function setHover(i) {
+  if (i === state.hover) return;
+  const old = state.hover; state.hover = i;
+  for (const c of [old, i]) if (c >= 0) redrawEvent(C.event[c]);
+  drawOverlay(); markRows();
+}
+function select(i) {
+  const old = state.selected; state.selected = i;
+  if (old >= 0) redrawEvent(C.event[old]);
+  if (i >= 0) { selectEvent(C.event[i], true); redrawEvent(C.event[i]); }
+  renderCard(); drawOverlay(); markRows();
+}
+function selectEvent(e, keepCell) {
+  const old = state.event; state.event = e;
+  if (!keepCell && state.selected >= 0 && C.event[state.selected] !== e) { const s = state.selected; state.selected = -1; redrawEvent(C.event[s]); renderCard(); }
+  for (const x of [old, e]) { const t = tiles.get(x); if (t) t.classList.toggle("selected", x === e); }
+  scrollToEvent(e); drawOverlay(); markRows();
+}
+
+// ---------- tooltip
+const tip = document.getElementById("tooltip");
+function showTip(ev, rows) {
+  tip.replaceChildren(...rows.map(([v, l]) => { const d = document.createElement("div");
+    const a = document.createElement("span"); a.className = "v"; a.textContent = v;
+    const b = document.createElement("span"); b.className = "l"; b.textContent = l ? " " + l : "";
+    d.append(a, b); return d; }));
+  tip.style.display = "block";
+  const x = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(ev.clientY + 14, innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+function cellTip(i) {
+  const rows = [[C.type[i] === "T cell" ? "T cell" : "tumor cell", `in event #${C.event[i] + 1}`], [fmt(C.area[i], 0), "px area"],
+                [fmt(C.ratio[i]), "marker ratio"]];
+  const k = memOfCell[i];
+  if (k >= 0) rows.push(M.sd[k] != null ? [fmt(M.sd[k], 2), "SD above mean at the interface"] : [fmt(M.control[k], 2), "control (no interface)"]);
+  return rows;
+}
+function eventTip(e) {
+  return [[`#${e + 1}`, E.object ? `object ${E.object[e]}` : "event"], [`${E.t_cells[e]} T · ${E.tumor_cells[e]} tumor`, "cells"],
+          [fmt(iRatio[e]), "membrane ratio"]];
+}
+
+// ---------- plots (canvas with an overlay for hover/selection)
+function setupCanvas(cv) {
+  const r = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.height / (cv._r || 1);
+  cv._r = r; cv._w = w; cv._h = h; cv.width = w * r; cv.height = h * r; cv.style.height = h + "px";
+  const ctx = cv.getContext("2d"); ctx.setTransform(r, 0, 0, r, 0, 0); return ctx;
+}
+const PAD = { l: 48, r: 12, t: 10, b: 34 };
+function axes(ctx, w, h, sx, sy, xlabel, ylabel, xlog, ylog) {
+  ctx.strokeStyle = css("--grid"); ctx.fillStyle = css("--muted"); ctx.lineWidth = 1; ctx.font = "11px system-ui, sans-serif";
+  const ticks = (s, log) => log ? logTicks(s.d) : niceTicks(s.d[0], s.d[1], 5);
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const v of ticks(sx, xlog)) { const x = sx(v); ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, h - PAD.b); ctx.stroke(); ctx.fillText(tickLabel(v), x, h - PAD.b + 4); }
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const v of ticks(sy, ylog)) { const y = sy(v); ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(w - PAD.r, y); ctx.stroke(); ctx.fillText(tickLabel(v), PAD.l - 4, y); }
+  ctx.strokeStyle = css("--axis"); ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, h - PAD.b); ctx.lineTo(w - PAD.r, h - PAD.b); ctx.stroke();
+  ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(xlabel, (PAD.l + w - PAD.r) / 2, h - 2);
+  ctx.save(); ctx.translate(11, (PAD.t + h - PAD.b) / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "middle"; ctx.fillText(ylabel, 0, 0); ctx.restore();
+}
+function tickLabel(v) { return Math.abs(v) >= 10000 ? (v / 1000) + "k" : Number(v.toPrecision(4)).toString(); }
+function niceTicks(a, b, n) {
+  const step0 = (b - a) / n, mag = 10 ** Math.floor(Math.log10(step0)), step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0) || step0;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9; v += step) out.push(+v.toFixed(10)); return out;
+}
+function logTicks([a, b]) { const out = []; for (let p = Math.floor(Math.log10(a)); p <= Math.ceil(Math.log10(b)); p++) { const v = 10 ** p; if (v >= a && v <= b) out.push(v); } return out; }
+function scale(d, r, log) {
+  const f = log ? Math.log10 : x => x, d0 = f(d[0]), d1 = f(d[1]);
+  const s = v => r[0] + (f(v) - d0) / (d1 - d0 || 1) * (r[1] - r[0]); s.d = d; return s;
+}
+function extent(vals, log) { const v = vals.filter(x => x != null && isFinite(x) && (!log || x > 0)); if (!v.length) return [log ? 1 : 0, log ? 10 : 1];
+  let a = Math.min(...v), b = Math.max(...v); if (log) { a /= 1.3; b *= 1.3; } else { const m = (b - a) * 0.05 || 1; a -= m; b += m; } return [a, b]; }
+
+const plots = {};  // name -> {points: [{x, y, id}], kind, canvas, ctx}
+function scatter(name, canvasId, pts, opts) {
+  const cv = document.getElementById(canvasId), ctx = setupCanvas(cv), w = cv._w, h = cv._h;
+  ctx.clearRect(0, 0, w, h);
+  const sx = scale(opts.xd || extent(pts.map(p => p.x), opts.xlog), [PAD.l, w - PAD.r], opts.xlog);
+  const sy = scale(opts.yd || extent(pts.map(p => p.y), opts.ylog), [h - PAD.b, PAD.t], opts.ylog);
+  axes(ctx, w, h, sx, sy, opts.xlabel, opts.ylabel, opts.xlog, opts.ylog);
+  if (opts.identity) { const lo = Math.max(sx.d[0], sy.d[0]), hi = Math.min(sx.d[1], sy.d[1]);
+    ctx.strokeStyle = css("--axis"); ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(sx(lo), sy(lo)); ctx.lineTo(sx(hi), sy(hi)); ctx.stroke(); ctx.setLineDash([]); }
+  const surface = css("--surface");
+  for (const p of pts) { p.px = sx(p.x); p.py = sy(p.y);
+    ctx.beginPath(); ctx.arc(p.px, p.py, 3.2, 0, 2 * Math.PI); ctx.fillStyle = p.color; ctx.globalAlpha = 0.75; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = surface; ctx.lineWidth = 0.75; ctx.stroke(); }
+  const base = ctx.getImageData(0, 0, cv.width, cv.height);
+  plots[name] = { pts, cv, ctx, base, kind: opts.kind };
+  if (!cv._wired) {
+    cv._wired = true;
+    cv.addEventListener("pointermove", ev => { const P = plots[name]; const r = cv.getBoundingClientRect(); const x = ev.clientX - r.left, y = ev.clientY - r.top;
+      let best = null, bd = 144; for (const p of P.pts) { const d = (p.px - x) ** 2 + (p.py - y) ** 2; if (d < bd) { bd = d; best = p; } }
+      if (!best) { hideTip(); if (P.kind === "cell") setHover(-1); return; }
+      if (P.kind === "cell") { setHover(best.id); showTip(ev, cellTip(best.id)); } else showTip(ev, eventTip(best.id)); });
+    cv.addEventListener("pointerleave", () => { hideTip(); if (plots[name].kind === "cell") setHover(-1); });
+    cv.addEventListener("click", ev => { const P = plots[name]; const r = cv.getBoundingClientRect(); const x = ev.clientX - r.left, y = ev.clientY - r.top;
+      let best = null, bd = 144; for (const p of P.pts) { const d = (p.px - x) ** 2 + (p.py - y) ** 2; if (d < bd) { bd = d; best = p; } }
+      if (best) { if (P.kind === "cell") select(best.id); else selectEvent(best.id); } });
+  }
+}
+function drawOverlay() {
+  for (const P of Object.values(plots)) {
+    if (!P.base) continue;
+    P.ctx.save(); P.ctx.setTransform(1, 0, 0, 1, 0, 0); P.ctx.putImageData(P.base, 0, 0); P.ctx.restore();
+    const mark = (id, w, dash) => { const p = P.pts.find(q => q.id === id); if (!p) return;
+      P.ctx.beginPath(); P.ctx.arc(p.px, p.py, 6, 0, 2 * Math.PI); P.ctx.strokeStyle = css("--ink"); P.ctx.lineWidth = w; P.ctx.setLineDash(dash); P.ctx.stroke(); P.ctx.setLineDash([]); };
+    if (P.kind === "cell") { mark(state.selected, 2, []); if (state.hover !== state.selected) mark(state.hover, 1.5, [2, 2]); }
+    else mark(state.event, 2, []);
+  }
+  drawHeatOverlay();
+}
+function drawPlots() {
+  const cellPts = [];
+  for (let i = 0; i < NC; i++) if (shownSet.has(C.event[i]) && C.area[i] > 0 && C.ratio[i] > 0)
+    cellPts.push({ x: C.area[i], y: C.ratio[i], id: i, color: typeColor(C.type[i]) });
+  scatter("classes", "classes", cellPts, { kind: "cell", xlog: true, ylog: true, xlabel: "area (px)", ylabel: "marker ratio" });
+  const nT = cellPts.filter(p => C.type[p.id] === "T cell").length;
+  legend("classes-legend", [["--t-cell", `T cells (${nT.toLocaleString()})`], ["--tumor", `tumor cells (${(cellPts.length - nT).toLocaleString()})`]]);
+  const evPts = shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--tumor" : "--t-cell") }));
+  const who = OF_INTEREST === "Tumor" ? "tumor cell" : "T cell";
+  document.getElementById("iface-sub").textContent = `Per event: mean of the marker of interest in the ${who} membrane at the interface against the rest of its membrane (${evPts.length.toLocaleString()} events; dashed: equal)`;
+  const all = evPts.flatMap(p => [p.x, p.y]); const d = extent(all, false); d[0] = Math.min(0, d[0]);
+  scatter("iface", "iface", evPts, { kind: "event", xd: d, yd: d, identity: true, xlabel: "rest of the membrane", ylabel: "at the interface" });
+  drawOverlay();
+  if (M) drawMembranes();
+}
+function legend(id, items) {
+  document.getElementById(id).replaceChildren(...items.map(([v, t]) => { const s = document.createElement("span");
+    const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = `var(${v})`; s.append(dot, t); return s; }));
+}
+
+// ---------- membranes
+let profiles = null, heatRows = [];
+function decodeProfiles() {
+  const bin = atob(M.profiles), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  profiles = new Float32Array(buf);
+}
+function svgEl(tag, attrs) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+function svgAxes(svg, sx, sy, W, H, xlabel, ylabel, xt, yt) {
+  for (const v of yt) { svg.append(svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: sy(v), y2: sy(v), class: "grid" }));
+    const t = svgEl("text", { x: PAD.l - 4, y: sy(v) + 4, "text-anchor": "end" }); t.textContent = tickLabel(v); svg.append(t); }
+  for (const v of xt) { const t = svgEl("text", { x: sx(v), y: H - PAD.b + 14, "text-anchor": "middle" }); t.textContent = tickLabel(v); svg.append(t); }
+  svg.append(svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: H - PAD.b, y2: H - PAD.b, class: "axis" }));
+  const xl = svgEl("text", { x: (PAD.l + W - PAD.r) / 2, y: H - 4, "text-anchor": "middle" }); xl.textContent = xlabel; svg.append(xl);
+  const yl = svgEl("text", { x: 0, y: 0, "text-anchor": "middle", transform: `translate(11 ${(PAD.t + H - PAD.b) / 2}) rotate(-90)` }); yl.textContent = ylabel; svg.append(yl);
+}
+function drawMembranes() {
+  document.getElementById("membrane-card").hidden = false;
+  if (!profiles) decodeProfiles();
+  const shownMem = M.cell.map((c, k) => k).filter(k => M.cell[k] >= 0 && shownSet.has(C.event[M.cell[k]]));
+  const withIf = shownMem.filter(k => M.sd[k] != null);
+  document.getElementById("membrane-sub").textContent = `${shownMem.length.toLocaleString()} ${OF_INTEREST === "Tumor" ? "tumor cells" : "T cells"}, ${withIf.length.toLocaleString()} with an interface; ` +
+    `control: ${M.control_windows.toLocaleString()} random windows of ${M.window} px on the cells without an interface (all events)`;
+  // histogram: fractions (the control has many more values than the interface)
+  const svg = document.getElementById("hist"); svg.replaceChildren(); const W = 420, H = 240;
+  const bw = M.bin_width, starts = M.hist_bin_start, sumI = M.hist_interface.reduce((a, b) => a + b, 0) || 1, sumC = M.hist_control.reduce((a, b) => a + b, 0) || 1;
+  const fi = M.hist_interface.map(v => v / sumI), fc = M.hist_control.map(v => v / sumC);
+  const sx = scale([starts[0], starts[starts.length - 1] + bw], [PAD.l, W - PAD.r]), ymax = Math.max(...fi, ...fc) * 1.1 || 1, sy = scale([0, ymax], [H - PAD.b, PAD.t]);
+  svgAxes(svg, sx, sy, W, H, "SD above mean", "fraction", niceTicks(sx.d[0], sx.d[1], 6), niceTicks(0, ymax, 4));
+  const step = f => f.map((v, i) => `${i ? "L" : "M"}${sx(starts[i])},${sy(v)}H${sx(starts[i] + bw)}`).join("");
+  svg.append(svgEl("path", { d: step(fc), fill: "none", stroke: "var(--muted)", "stroke-width": 2, "stroke-dasharray": "5 3" }));
+  svg.append(svgEl("path", { d: step(fi), fill: "none", stroke: "var(--interface)", "stroke-width": 2 }));
+  svg.append(svgEl("line", { x1: sx(0), x2: sx(0), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "2 3" }));
+  // average profile
+  const ps = document.getElementById("profile"); ps.replaceChildren();
+  const avg = M.average, px = D.pixel_size, n = avg.length;
+  const vals = avg.filter(v => v != null), lo = Math.min(0, ...vals), hi = Math.max(1, ...vals) * 1.1;
+  const psx = scale([0, Math.max(1, (n - 1) * px)], [PAD.l, W - PAD.r]), psy = scale([lo, hi], [H - PAD.b, PAD.t]);
+  svgAxes(ps, psx, psy, W, H, "position along the membrane (µm)", "SD above mean", niceTicks(psx.d[0], psx.d[1], 6), niceTicks(lo, hi, 4));
+  ps.append(svgEl("line", { x1: psx(20 * px), x2: psx(20 * px), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "4 3" }));
+  const d = avg.map((v, i) => v == null ? "" : `${i && avg[i - 1] != null ? "L" : "M"}${psx(i * px)},${psy(v)}`).join("");
+  ps.append(svgEl("path", { d, fill: "none", stroke: "var(--interface)", "stroke-width": 2 }));
+  const hair = svgEl("line", { y1: PAD.t, y2: H - PAD.b, stroke: "var(--ink-2)", visibility: "hidden" }); ps.append(hair);
+  ps.onpointermove = ev => { const r = ps.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(n - 1, Math.round(((x - PAD.l) / (W - PAD.l - PAD.r)) * (n - 1)))); hair.setAttribute("x1", psx(i * px)); hair.setAttribute("x2", psx(i * px)); hair.setAttribute("visibility", "visible");
+    showTip(ev, [[fmt(avg[i], 2), "SD above mean"], [fmt(i * px, 1) + " µm", i === 20 ? "(interface centre)" : ""]]); };
+  ps.onpointerleave = () => { hair.setAttribute("visibility", "hidden"); hideTip(); };
+  drawHeat(withIf);
+}
+const HEAT_RANGE = 6;
+function divergingColor(v) {
+  const t = Math.max(-1, Math.min(1, v / HEAT_RANGE));
+  const mix = (a, b, f) => a.map((x, i) => Math.round(x + (b[i] - x) * f));
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mid = hex(css("--div-mid")), c = mix(mid, hex(css(t < 0 ? "--div-neg" : "--div-pos")), Math.abs(t));
+  return c;
+}
+let heatBase = null;
+function drawHeat(rows) {
+  heatRows = [...rows].sort((a, b) => M.sd[b] - M.sd[a]);
+  const cv = document.getElementById("heat"), ctx = setupCanvas(cv), w = cv._w, h = cv._h;
+  const cols = Math.min(M.width, M.average.length || M.width);
+  ctx.clearRect(0, 0, w, h);
+  if (!heatRows.length || !cols) { heatBase = null; return; }
+  const img = ctx.createImageData(cols, heatRows.length);
+  heatRows.forEach((k, r) => { for (let c = 0; c < cols; c++) { const v = profiles[k * M.width + c]; const o = (r * cols + c) * 4;
+    if (isNaN(v)) { img.data[o + 3] = 0; continue; } const col = divergingColor(v); img.data.set([...col, 255], o); } });
+  const tmp = document.createElement("canvas"); tmp.width = cols; tmp.height = heatRows.length; tmp.getContext("2d").putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(tmp, 0, 0, w, h);
+  heatBase = ctx.getImageData(0, 0, cv.width, cv.height);
+  const lg = document.getElementById("heat-legend"); lg.replaceChildren();
+  const bar = document.createElement("span"); bar.style.cssText = `display:inline-block;width:120px;height:8px;border-radius:2px;vertical-align:middle;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))`;
+  const a = document.createElement("span"); a.className = "note"; a.textContent = `−${HEAT_RANGE} `; const b = document.createElement("span"); b.className = "note"; b.textContent = ` +${HEAT_RANGE} SD (position 0 – ${fmt((cols - 1) * D.pixel_size, 0)} µm, interface at ${fmt(20 * D.pixel_size, 0)} µm)`;
+  lg.append(a, bar, b);
+  if (!cv._wired) { cv._wired = true;
+    const rowAt = ev => { const r = cv.getBoundingClientRect(); return heatRows[Math.floor((ev.clientY - r.top) / r.height * heatRows.length)]; };
+    cv.addEventListener("pointermove", ev => { const k = rowAt(ev); if (k == null) return; const i = M.cell[k]; setHover(i); showTip(ev, cellTip(i)); });
+    cv.addEventListener("pointerleave", () => { setHover(-1); hideTip(); });
+    cv.addEventListener("click", ev => { const k = rowAt(ev); if (k != null) select(M.cell[k]); }); }
+}
+function drawHeatOverlay() {
+  const cv = document.getElementById("heat"); if (!heatBase || !M) return;
+  const ctx = cv.getContext("2d"); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.putImageData(heatBase, 0, 0); ctx.restore();
+  const rowH = cv._h / heatRows.length;
+  for (const [i, wd] of [[state.selected, 2], [state.hover, 1]]) { const k = memOfCell[i] ?? -1; const r = heatRows.indexOf(k); if (i < 0 || r < 0) continue;
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = wd; ctx.strokeRect(0.5, r * rowH - 1, cv._w - 1, Math.max(rowH, 1) + 2); }
+}
+
+// ---------- cell card
+function renderCard() {
+  const card = document.getElementById("cellcard"), i = state.selected;
+  if (i < 0) { card.innerHTML = '<h2>Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p>'; return; }
+  const e = C.event[i], k = memOfCell[i];
+  const h2 = document.createElement("h2"); h2.textContent = (C.type[i] === "T cell" ? "T cell" : "Tumor cell") + ` in event #${e + 1}`;
+  const cv = document.createElement("canvas"); const z = 1.5; cv.width = TW * z; cv.height = TH * z; cv.style.cssText = "background:#000;border-radius:4px";
+  drawEvent(cv, e, z);
+  const dl = document.createElement("dl");
+  const rows = [["object", E.object ? E.object[e] : "–"], ["area", fmt(C.area[i], 0) + " px"], ["T-cell marker", fmt(C.t_int[i])], ["tumor marker", fmt(C.tu_int[i])],
+                ["marker ratio", fmt(C.ratio[i])], [`cells in the event`, `${E.t_cells[e]} T, ${E.tumor_cells[e]} tumor`]];
+  if (k >= 0) rows.push(["membrane length", fmt(M.length[k], 0) + " px"], ["interface", M.interface_length[k] ? fmt(M.interface_length[k], 0) + " px" : "none"],
+                        M.sd[k] != null ? ["SD above mean", fmt(M.sd[k], 2)] : ["control (mean of windows)", fmt(M.control[k], 2)],
+                        ["ratio interface / rest", fmt(M.ratio[k])]);
+  for (const [a, b] of rows) { const dt = document.createElement("dt"); dt.textContent = a; const dd = document.createElement("dd"); dd.textContent = b; dl.append(dt, dd); }
+  const row = document.createElement("div"); row.className = "cardrow"; row.append(cv, dl);
+  card.replaceChildren(h2, row);
+  if (k >= 0 && profiles) {
+    const W = 360, H = 120, svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, style: "width:100%;max-width:420px;display:block;margin-top:8px" });
+    const len = M.length[k], vals = Array.from(profiles.subarray(k * M.width, k * M.width + len));
+    const fin = vals.filter(v => !isNaN(v)), lo = Math.min(-2, ...fin), hi = Math.max(2, ...fin);
+    const sx = scale([0, Math.max(1, (len - 1) * D.pixel_size)], [PAD.l, W - PAD.r]), sy = scale([lo, hi], [H - PAD.b, PAD.t]);
+    svgAxes(svg, sx, sy, W, H, M.sd[k] != null ? "µm (interface centred at " + fmt(20 * D.pixel_size, 0) + ")" : "µm", "SD", niceTicks(sx.d[0], sx.d[1], 5), niceTicks(lo, hi, 3));
+    svg.append(svgEl("path", { d: vals.map((v, j) => `${j ? "L" : "M"}${sx(j * D.pixel_size)},${sy(isNaN(v) ? 0 : v)}`).join(""), fill: "none",
+                               stroke: typeColor(C.type[i]), "stroke-width": 2 }));
+    card.append(svg);
+  }
+}
+
+// ---------- tables
+const CELL_COLS = [["event", "event", i => C.event[i] + 1], ["object", "object", i => E.object ? E.object[C.event[i]] : null], ["type", "type", i => C.type[i]],
+  ["area", "area (px)", i => C.area[i]], ["t", "T-cell marker", i => C.t_int[i]], ["tu", "tumor marker", i => C.tu_int[i]], ["ratio", "marker ratio", i => C.ratio[i]]];
+if (M) CELL_COLS.push(["sd", "SD above mean", i => memOfCell[i] >= 0 ? M.sd[memOfCell[i]] : null], ["mratio", "membrane ratio", i => memOfCell[i] >= 0 ? M.ratio[memOfCell[i]] : null]);
+const EVENT_COLS = [["event", "event", e => e + 1], ["object", "object", e => E.object ? E.object[e] : null], ["t", "T cells", e => E.t_cells[e]], ["tu", "tumor cells", e => E.tumor_cells[e]],
+  ["ti", "T interface", e => E.t_interface[e]], ["tr", "T rest", e => E.t_rest[e]], ["ui", "tumor interface", e => E.tu_interface[e]], ["ur", "tumor rest", e => E.tu_rest[e]],
+  ["tratio", "T ratio", e => E.t_ratio[e]], ["uratio", "tumor ratio", e => E.tu_ratio[e]]];
+const LIMIT = 2000;
+let tableIds = [];
+function renderTable() {
+  const cells = state.tab === "cells", cols = cells ? CELL_COLS : EVENT_COLS;
+  let ids = cells ? [...Array(NC).keys()].filter(i => shownSet.has(C.event[i])) : [...shown];
+  if (state.tableSort) { const col = cols.find(c => c[0] === state.tableSort); if (col) { const f = col[2];
+    ids.sort((a, b) => { const x = f(a), y = f(b); if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (state.tableDesc ? -1 : 1); }); } }
+  document.getElementById("table-note").textContent = ids.length > LIMIT ? `the first ${LIMIT.toLocaleString()} of ${ids.length.toLocaleString()} rows (sort to see others)` : `${ids.length.toLocaleString()} rows`;
+  ids = ids.slice(0, LIMIT); tableIds = ids;
+  const table = document.getElementById("table");
+  const head = document.createElement("thead"), hr = document.createElement("tr");
+  for (const [key, label] of cols) { const th = document.createElement("th"); th.textContent = label + (state.tableSort === key ? (state.tableDesc ? " ↓" : " ↑") : "");
+    th.onclick = () => { state.tableDesc = state.tableSort === key ? !state.tableDesc : false; state.tableSort = key; renderTable(); }; hr.append(th); }
+  head.append(hr);
+  const body = document.createElement("tbody");
+  for (const id of ids) { const tr = document.createElement("tr"); tr.dataset.id = id;
+    for (const [, , f] of cols) { const td = document.createElement("td"); const v = f(id); td.textContent = typeof v === "number" ? fmt(v) : (v ?? "–"); tr.append(td); }
+    body.append(tr); }
+  body.onpointerover = ev => { const tr = ev.target.closest("tr"); if (!tr) return; const id = +tr.dataset.id; if (cells) setHover(id); };
+  body.onpointerleave = () => { if (cells) setHover(-1); };
+  body.onclick = ev => { const tr = ev.target.closest("tr"); if (!tr) return; const id = +tr.dataset.id; if (cells) select(id); else selectEvent(id); };
+  table.replaceChildren(head, body); markRows();
+}
+function markRows() {
+  const cells = state.tab === "cells";
+  for (const tr of document.querySelectorAll("#table tbody tr")) { const id = +tr.dataset.id;
+    tr.classList.toggle("hover", cells && id === state.hover); tr.classList.toggle("selected", cells ? id === state.selected : id === state.event); }
+}
+document.getElementById("tab-cells").onclick = () => { state.tab = "cells"; state.tableSort = null; tabs(); renderTable(); };
+document.getElementById("tab-events").onclick = () => { state.tab = "events"; state.tableSort = null; tabs(); renderTable(); };
+function tabs() { document.getElementById("tab-cells").classList.toggle("on", state.tab === "cells"); document.getElementById("tab-events").classList.toggle("on", state.tab === "events"); }
+
+// ---------- header and filters
+function chip(label, value) { const s = document.createElement("span"); s.className = "chip"; const b = document.createElement("b"); b.textContent = value; s.append(b, " " + label); return s; }
+function renderHeader() {
+  document.getElementById("title").textContent = D.name; document.title = D.name + " – ImageStream Dashboard";
+  const nT = C.type.filter(t => t === "T cell").length, nD = [...Array(NE).keys()].filter(isDoublet).length;
+  const chips = [chip("events", NE.toLocaleString()), chip("cells", NC.toLocaleString()), chip("T cells", nT.toLocaleString()),
+                 chip("tumor cells", (NC - nT).toLocaleString()), chip("one tumor + one T cell", nD.toLocaleString())];
+  if (M) chips.push(chip("with an interface", M.sd.filter(v => v != null).length.toLocaleString()));
+  document.getElementById("chips").replaceChildren(...chips);
+  const sort = document.getElementById("f-sort");
+  sort.replaceChildren(...SORTS.map(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; return o; }));
+  const box = document.getElementById("channels"); box.replaceChildren();
+  for (const ch of D.channels) {
+    const wrap = document.createElement("span"); wrap.className = "chan"; wrap.title = `Ch${ch.number}${ch.role ? " (" + ch.role.replace(/_/g, " ") + ")" : ""}`;
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = ch.on;
+    const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = LUT[ch.lut];
+    const name = document.createElement("span"); name.textContent = ch.name;
+    const gain = document.createElement("input"); gain.type = "range"; gain.min = "0.3"; gain.max = "3"; gain.step = "0.1"; gain.value = String(ch.gain ?? 1); gain.title = "brightness";
+    cb.onchange = () => { ch.on = cb.checked; redrawAll(); };
+    gain.oninput = () => { ch.gain = +gain.value; redrawAll(); };
+    wrap.append(cb, sw, name, gain); box.append(wrap);
+  }
+}
+function redrawAll() { for (const e of tiles.keys()) redrawEvent(e); if (state.selected >= 0) renderCard(); }
+function update() { applyFilter(); relayout(); drawPlots(); renderTable(); }
+document.getElementById("f-events").onchange = e => { state.filter = e.target.value; update(); };
+document.getElementById("f-sort").onchange = e => { state.sort = e.target.value; gallery.scrollTop = 0; applyFilter(); relayout(); };
+document.getElementById("f-zoom").oninput = e => { state.zoom = +e.target.value; relayout(); };
+document.getElementById("f-outlines").onchange = e => { state.outlines = e.target.checked; redrawAll(); };
+document.getElementById("f-interfaces").onchange = e => { state.interfaces = e.target.checked; redrawAll(); };
+document.getElementById("theme").onclick = () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("isa-theme", root.dataset.theme); } catch (e) {}
+  redrawAll(); drawPlots(); };
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") { select(-1); selectEvent(-1); } });
+try { const t = localStorage.getItem("isa-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+new ResizeObserver(() => document.documentElement.style.setProperty("--header-h", document.getElementById("header").offsetHeight + "px")).observe(document.getElementById("header"));
+
+renderHeader();
+update();
+// #cell=N (1-based row of the cell table) or #event=N (1-based) selects on opening, e.g. in a link
+function fromHash() {
+  const m = /^#(cell|event)=(\d+)$/.exec(location.hash);
+  if (!m) return;
+  const n = +m[2] - 1;
+  if (m[1] === "cell" && n >= 0 && n < NC) select(n); else if (m[1] === "event" && n >= 0 && n < NE) selectEvent(n);
+}
+window.addEventListener("hashchange", fromHash);
+requestAnimationFrame(fromHash);
+</script>
+</body>
+</html>

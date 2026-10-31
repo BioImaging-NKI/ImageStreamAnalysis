@@ -1,0 +1,15 @@
+# Confidential and local (see CLAUDE.md): never commit
+CLAUDE.local.md
+data/
+output/
+poster/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+build/
+dist/

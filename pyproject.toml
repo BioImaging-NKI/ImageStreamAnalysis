@@ -1,0 +1,104 @@
+[project]
+name = "imagestream-analysis"
+version = "0.1.0"
+description = "Tumor-immune cell interactions in imaging flow cytometry (ImageStream) data (Python port of the Fiji macro v1.8)"
+readme = "README.md"
+authors = [
+    { name = "Bram van den Broek", email = "b.vd.broek@nki.nl" },
+    { name = "Rolf Harkes", email = "r.harkes@nki.nl" },
+]
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "scikit-image>=0.24",
+    "scikit-learn>=1.5",
+    "tifffile>=2024.8",
+    "pandas>=2.2",
+    "pillow>=10",
+]
+
+[project.scripts]
+imagestream-cli = "imagestream_analysis.cli:main"  # command line
+
+[project.gui-scripts]
+imagestream = "imagestream_analysis.gui:main_gui"  # the import and run page in the browser, without a console
+
+[project.optional-dependencies]
+# Cellpose in this environment (optional). Both versions can also run from another environment via
+# segmentation.cellpose_python, without installing them here.
+cellpose3 = ["cellpose>=3.1,<4"]
+cellpose4 = ["cellpose>=4"]
+
+[dependency-groups]
+dev = [
+    "bumpver>=2024.1130",
+    "mypy>=1.13",
+    "pandas-stubs>=2.2",
+    "pytest>=8",
+    "ruff>=0.6",
+    "scipy-stubs>=1.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/imagestream_analysis"]
+
+[tool.uv]
+conflicts = [[{ extra = "cellpose3" }, { extra = "cellpose4" }]]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
+markers = ["reference: compares with the reference output of the Fiji macro (needs the test data)"]
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+packages = "imagestream_analysis"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "cellpose.*", "torch.*"]
+ignore_missing_imports = true
+
+[tool.bumpver]
+current_version = "0.1.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump version {old_version} -> {new_version}"
+commit = true
+tag = true
+push = false  # no remote yet; set to true once the repository is on GitHub
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+    'version = "{version}"',
+]
+"src/imagestream_analysis/version.py" = [
+    "{version}"
+]
