@@ -167,7 +167,8 @@ class MembraneSettings:
     # cells without interface: this many random control windows each (as long as the median interface)
     control_repeats: int = 10
     # straighten only inside the measured cell: at an interface, half the band (macro) lies in the partner cell,
-    # whose membrane then counts as this cell's if it carries the marker too
+    # whose membrane then counts as this cell's if it carries the marker too. A sensitivity test, not a separation:
+    # touching membranes are far closer than the resolution, so every pixel there mixes both
     inside_only: bool = False
 
 

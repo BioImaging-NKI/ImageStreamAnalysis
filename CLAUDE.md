@@ -144,7 +144,8 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **Where the marker of interest is expressed matters** (the user, 2026-11-01): a partner that carries it too makes
   an evenly stained interface look enriched. Check it on the data and let users change it: `expression_check`
   warns, `channels.cell_of_interest` / `membrane.cells` / `membrane.partners` set the pair, `membrane.inside_only`
-  keeps the partner's pixels out.
+  keeps the partner's pixels out (a sensitivity test only: touching membranes are nm apart, below the resolution,
+  so the blur mixes both whatever is sampled).
 
 ### Git
 

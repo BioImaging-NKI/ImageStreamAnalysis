@@ -204,6 +204,10 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   `membrane.inside_only` (default off, as the macro) takes the maximum across the band only over the samples inside
   the measured cell. On the test data the check says CAUTION, and inside_only lowers the median `stdDevs above
   mean` and the median interface/non-interface ratio clearly, while enrichment remains (numbers in the local notes).
+  **Caveat (the user, 2026-11-01):** touching membranes are nanometres apart, far below the resolution of the
+  ImageStream, so the blur mixes both membranes in every pixel near the interface; inside_only changes which pixels
+  are sampled, not what they contain, and cannot separate the two. The expression check is the safeguard; the
+  option is kept as a sensitivity test.
 - Per cell: interface mean, non-interface mean and sd (sample sd), ratio, `stdDevs above mean`, and the new
   `interface length` column.
 - **Control (I10)**: for cells without interface, `membrane.control_repeats` (10) windows at random positions,
