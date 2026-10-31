@@ -324,7 +324,7 @@ function copySetup(src) {
 const FIELDS = [
   ["Cells", [
     ["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"],
-    ["channels.cell_of_interest", "Marker of interest in", "choice", "cells_of_interest"],
+    ["channels.cell_of_interest", "Marker of interest expressed in", "choice", "cells_of_interest"],
     ["input.max_events", "Only the first N events (empty = all)", "int", null, "all"]]],
   ["Segmentation (Cellpose)", [
     ["segmentation.cellpose_python", "Python with Cellpose", "text", null, "this environment"],
@@ -343,6 +343,9 @@ const FIELDS = [
   ["Membranes", [
     ["membrane.thickness", "Membrane / interface width (px)", "int"],
     ["membrane.analysis", "Membrane profiles and enrichment", "bool"],
+    ["membrane.cells", "Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed)", "list", null, "where the marker is expressed"],
+    ["membrane.partners", "Interface with (empty = the other cell type)", "list", null, "the other cell type"],
+    ["membrane.inside_only", "Straighten inside the measured cell only", "bool"],
     ["membrane.straightening_width", "Straightening width (px)", "int"],
     ["membrane.control_repeats", "Control windows per cell", "int"],
     ["membrane.max_histogram_value", "Histogram maximum (SD)", "float"],
@@ -359,11 +362,13 @@ function renderSettings() {
       if (kind === "choice") input = el("select", { onchange: e => setS(path, e.target.value) },
         (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
       else if (kind === "bool") input = el("input", { type: "checkbox", checked: !!v, onchange: e => setS(path, e.target.checked) });
+      else if (kind === "list") input = el("input", { type: "text", value: (v || []).join(", "), placeholder: placeholder || "",
+        onchange: e => setS(path, e.target.value.split(",").map(t => t.trim()).filter(t => t)) });
       else if (kind === "text") input = el("input", { type: "text", value: v ?? "", placeholder: placeholder || "",
         onchange: e => setS(path, e.target.value.trim() || null) });
       else input = el("input", { type: "number", step: kind === "int" ? "1" : "any", value: v ?? "", placeholder: placeholder || "",
         onchange: e => { const t = e.target.value.trim(); setS(path, t === "" ? null : (kind === "int" ? parseInt(t) : parseFloat(t))); } });
-      grid.append(el("label", { class: kind === "text" && path.endsWith("python") ? "wide" : "" }, label, input));
+      grid.append(el("label", { class: (kind === "text" && path.endsWith("python")) || kind === "list" ? "wide" : "" }, label, input));
     }
     box.append(el("fieldset", {}, el("legend", {}, title), grid));
   }

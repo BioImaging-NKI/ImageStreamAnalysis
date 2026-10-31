@@ -152,15 +152,23 @@ class ClassificationSettings:
 
 @dataclass
 class MembraneSettings:
-    # straightened membrane profiles of the cells of interest and the enrichment at the interface (optional: not
-    # every ImageStream analysis needs it); the per-event interface table is always made
+    # straightened membrane profiles and the enrichment at the interface (optional: not every ImageStream analysis
+    # needs it); the per-event interface table is always made
     analysis: bool = False
+    # the pair: the cells whose membrane is measured, and the partners whose contact is the interface. Each a list
+    # of: a cell type ("Tumor", "Immune"), an immune subtype as in the tables ("Immune A+ B+") or a marker ("A+":
+    # immune cells positive for A). Empty: channels.cell_of_interest against the other cell type
+    cells: list[str] = field(default_factory=list)
+    partners: list[str] = field(default_factory=list)
     thickness: int = 3  # pixels: width of the membrane band, and reach of the interface
     straightening_width: int = 5  # pixels: line width for straightening the membranes
     max_histogram_value: float = 20.0  # standard deviations above background; the minimum is -5
     histogram_bin_width: float = 0.25
     # cells without interface: this many random control windows each (as long as the median interface)
     control_repeats: int = 10
+    # straighten only inside the measured cell: at an interface, half the band (macro) lies in the partner cell,
+    # whose membrane then counts as this cell's if it carries the marker too
+    inside_only: bool = False
 
 
 @dataclass

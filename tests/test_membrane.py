@@ -1,9 +1,19 @@
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import ndimage as ndi
 
 from imagestream_analysis.config import CellOfInterest, MembraneSettings
-from imagestream_analysis.membrane import INTERFACE_OFFSET, _runs, analyze_membranes, outline, straighten
+from imagestream_analysis.membrane import (
+    INTERFACE_OFFSET,
+    _runs,
+    analyze_membranes,
+    expression_check,
+    membrane_profiles,
+    outline,
+    select,
+    straighten,
+)
 
 
 def disk(shape, cy, cx, r):
@@ -34,30 +44,49 @@ def test_runs_wrap_around():
     assert _runs(np.ones(5, bool)) == [(0, 5)]
 
 
-def make_cells():
-    """Event 1: a tumor cell with an interface of bright MOI on its right side; event 2: a lone tumor cell."""
+def make_cells(bright_partner=False):
+    """Event 1: a tumor cell (label 1) touched on its right by an immune cell (3); the marker of interest is bright
+    along the tumor cell's interface (or, bright_partner: evenly on the tumor cell, and bright on the immune cell);
+    event 2: a lone tumor cell (2)."""
     shape = (2, 80, 80)
     labels = np.zeros(shape, np.int32)
     labels[0][disk(shape[1:], 40, 35, 15)] = 1
+    labels[0][disk(shape[1:], 40, 58, 8) & (labels[0] == 0)] = 3
     labels[1][disk(shape[1:], 40, 40, 15)] = 2
-    interface = np.zeros(shape, bool)
-    interface[0, 30:51, 46:51] = True
-    interface &= labels > 0
     rng = np.random.default_rng(3)
     moi = 100 + rng.normal(0, 5, shape)
-    moi[0][interface[0]] += 40  # about 8 sd of the noise
-    cells = pd.DataFrame({"frame": [0, 1], "label": [1, 2], "Cell type": ["Tumor", "Tumor"]})
-    return labels, cells, interface, moi
+    near = (labels[0] == 1) & ndi.binary_dilation(labels[0] == 3, iterations=3)
+    if bright_partner:
+        moi[0][labels[0] == 3] += 200
+    else:
+        moi[0][near] += 40  # about 8 sd of the noise
+    cells = pd.DataFrame({"frame": [0, 1, 0], "label": [1, 2, 3], "Cell type": ["Tumor", "Tumor", "Immune"],
+                          "Subtype": ["", "", "negative"]})
+    return labels, cells, moi
+
+
+def profiles(labels, cells, moi, background=50.0, inside_only=False):
+    return membrane_profiles(labels, cells, moi, background, 5, 3, inside_only)
+
+
+def test_neighbour_tracks():
+    labels, cells, moi = make_cells()
+    p = profiles(labels, cells, moi)
+    assert p.labels.tolist() == [1, 2, 3]
+    track = dict(zip(p.labels.tolist(), p.tracks, strict=True))
+    assert set(np.unique(track[1])) == {0, 3} and set(np.unique(track[3])) == {0, 1}
+    assert (track[2] == 0).all()  # alone in its event
+    assert 5 < (track[1] == 3).sum() < 30
 
 
 def test_enrichment_alignment_and_control():
-    labels, cells, interface, moi = make_cells()
+    labels, cells, moi = make_cells()
     settings = MembraneSettings(control_repeats=10)
     # background 50: the membrane is at 50 above it, the interface at 90
-    res = analyze_membranes(labels, cells, interface, moi, 50.0, CellOfInterest.TUMOR_CELL, settings)
+    res = analyze_membranes(cells, profiles(labels, cells, moi), CellOfInterest.TUMOR_CELL, settings)
     t = res.table
     assert len(t) == 2 and res.has_interface.tolist() == [True, False]
-    assert 4 < t.loc[0, "stdDevs above mean"] < 20 and t.loc[0, "Ratio interface/non-interface"] > 1.4
+    assert 4 < t.loc[0, "stdDevs above mean"] < 30 and t.loc[0, "Ratio interface/non-interface"] > 1.4
     assert np.isnan(t.loc[1, "stdDevs above mean"])
     # the lone cell gets control windows as long as the median interface; its control is about 0
     assert res.window == t.loc[0, "interface length"]
@@ -69,9 +98,38 @@ def test_enrichment_alignment_and_control():
     assert res.histogram_interface["counts"].sum() == 1 and res.histogram_control["counts"].sum() == 10
 
 
+def test_any_pair_of_cell_types():
+    labels, cells, moi = make_cells()
+    p = profiles(labels, cells, moi)
+    other_way = analyze_membranes(cells, p, CellOfInterest.IMMUNE_CELL, MembraneSettings())  # immune vs tumor
+    assert other_way.table["Label"].tolist() == [3] and other_way.has_interface.tolist() == [True]
+    by_subtype = MembraneSettings(cells=["Tumor"], partners=["Immune negative"])
+    assert analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, by_subtype).has_interface.tolist() == [True, False]
+    nobody = MembraneSettings(cells=["Tumor"], partners=["Artefact"])
+    assert not analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, nobody).has_interface.any()
+    with pytest.raises(ValueError, match="Unknown cell selection"):
+        select(cells, ["Macrophage"])
+
+
 def test_control_is_not_seeded():
-    labels, cells, interface, moi = make_cells()
-    s = MembraneSettings()
-    a = analyze_membranes(labels, cells, interface, moi, 100.0, CellOfInterest.TUMOR_CELL, s).control_scores
-    b = analyze_membranes(labels, cells, interface, moi, 100.0, CellOfInterest.TUMOR_CELL, s).control_scores
+    labels, cells, moi = make_cells()
+    p = profiles(labels, cells, moi, 100.0)
+    a = analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, MembraneSettings()).control_scores
+    b = analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, MembraneSettings()).control_scores
     assert not np.array_equal(a, b)
+
+
+def test_a_bright_partner_looks_like_enrichment_and_is_caught():
+    """The marker on the immune cell, the tumor cell evenly stained: half the straightened band lies in the
+    partner, so the tumor cell's interface looks enriched. The check warns; inside_only removes it."""
+    labels, cells, moi = make_cells(bright_partner=True)
+    cells["Mean ch2 (MOI)"] = [50.0, 50.0, 250.0]
+    s = MembraneSettings(cells=["Tumor"], partners=["Immune"])
+    p = profiles(labels, cells, moi)
+    fooled = analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, s).table.loc[0, "stdDevs above mean"]
+    inside = profiles(labels, cells, moi, inside_only=True)
+    honest = analyze_membranes(cells, inside, CellOfInterest.TUMOR_CELL, s).table.loc[0, "stdDevs above mean"]
+    assert fooled > 5 and abs(honest) < 2
+    check = expression_check(cells, p, "Mean ch2 (MOI)", ["Tumor"], ["Immune"])
+    assert check["check"].startswith("WARNING") and check["partners / measured"] > 1
+    assert expression_check(cells, None, "Mean ch2 (MOI)", ["Immune"], ["Tumor"])["check"].startswith("ok")

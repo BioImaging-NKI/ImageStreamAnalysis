@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,13 +18,21 @@ import pandas as pd
 
 from . import __version__, ideas
 from .classification import class_map, classification_output, classify
-from .config import CellOfInterest, Settings
+from .config import Settings
 from .dashboard import write_dashboard
 from .interactions import add_neighbours, contact_table, interactions_per_event, multiplets, touching_pairs
 from .interfaces import InterfaceMasks, doublets, event_table, interface_masks
 from .io import EventStack, read_stack, save_stack, save_table
 from .measure import edge_labels, measure_cells
-from .membrane import INTERFACE_OFFSET, MembraneResult, analyze_membranes
+from .membrane import (
+    INTERFACE_OFFSET,
+    MembraneResult,
+    Profiles,
+    analyze_membranes,
+    expression_check,
+    membrane_profiles,
+    pair_of,
+)
 from .segmentation import clean_labels, markers, remove_labels, segment
 
 log = logging.getLogger(__name__)
@@ -65,6 +73,8 @@ class Result:
     masks: InterfaceMasks
     out_dir: Path
     membranes: MembraneResult | None = None
+    profiles: Profiles | None = None  # the membrane of every cell, for any pair of cell types (dashboard)
+    expression: dict[str, Any] = field(default_factory=dict)  # where the marker of interest is (membrane.py)
 
 
 def measure(stack: EventStack, settings: Settings, out_dir: Path) -> Measured:
@@ -109,10 +119,17 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
                     multiplets(cells, pairs, stack.n_events), events, doublets(events), masks, out_dir)
     ch = settings.channels
     if settings.membrane.analysis:
-        immune = ch.cell_of_interest == CellOfInterest.IMMUNE_CELL
-        interface = masks.immune_interface if immune else masks.tumor_interface
-        result.membranes = analyze_membranes(labels, cells, interface, moi, stack.median(ch.marker_of_interest),
-                                             ch.cell_of_interest, settings.membrane)
+        m = settings.membrane
+        result.profiles = membrane_profiles(labels, cells, moi, stack.median(ch.marker_of_interest),
+                                            m.straightening_width, m.thickness, m.inside_only)
+        result.membranes = analyze_membranes(cells, result.profiles, ch.cell_of_interest, m)
+    wanted, partners = pair_of(settings.membrane, ch.cell_of_interest)
+    moi_column = next(c for c in cells.columns if c.startswith(f"Mean ch{stack.number(ch.marker_of_interest)} ("))
+    result.expression = expression_check(cells, result.profiles, moi_column, wanted, partners)
+    level = logging.WARNING if result.expression["check"].startswith(("WARNING", "CAUTION")) else logging.INFO
+    log.log(level, "Marker of interest, %s against %s: medians %.4g and %.4g (%s); %s", wanted, partners,
+            result.expression["median (measured cells)"], result.expression["median (partners)"],
+            result.expression["measured on"], result.expression["check"])
     result.cells.attrs["cellpose"] = measured.cellpose
     return result
 
@@ -211,7 +228,7 @@ def write_run_info(result: Result, settings: Settings, seconds: float, pooled_wi
                 "tumor cells": int(types.get("Tumor", 0)), "artefacts": int(types.get("Artefact", 0)),
                 "subtypes": {k: int(v) for k, v in cells.loc[cells["Subtype"] != "", "Subtype"].value_counts().items()},
                 "classified with": f"{pooled_with} other dataset(s)" if pooled_with else "this dataset only",
-                "doublets": len(result.doublets),
+                "doublets": len(result.doublets), "marker of interest": result.expression,
                 "membranes": None if result.membranes is None else {
                     "cells": len(result.membranes.table), "with_interface": int(result.membranes.has_interface.sum()),
                     "control_window_px": result.membranes.window},

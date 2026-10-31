@@ -204,6 +204,8 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
         "artefacts": int((cells["Cell type"] == "Artefact").sum()),
         "single tumor + single immune cell": int(len(d)),
         "interactions": int(len(result.pairs)),
+        "MOI partners / measured": (round(float(result.expression["partners / measured"]), 3)
+                                    if result.expression else None),
         "tumor–immune contacts": int(result.contacts.loc[(result.contacts["cell type"] == "Tumor")
                                                          & result.contacts["neighbour type"].str.startswith("Immune"),
                                                          "contacts"].sum()),

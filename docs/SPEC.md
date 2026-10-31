@@ -179,11 +179,31 @@ For the cell of interest (`CellOfInterest`; both `markerLoc` branches are identi
 
 Optional (`membrane.analysis`, default off: not every ImageStream analysis needs it).
 
-- **One membrane per cell of interest (I8)**: the outline of the cell (marching squares at 0.5 on its own mask, i.e.
+- **One membrane per cell (I8)**: the outline of the cell (marching squares at 0.5 on its own mask, i.e.
   along the pixel edges; smoothed along the line with a Gaussian, σ = 2 samples, in place of Fiji's spline fit;
   resampled at 1 px), straightened with `membrane.straightening_width` samples across it (bilinear), maximum
-  across → profile. The cell's interface (the interface mask of its class, within this cell) is straightened along
-  the same line; > 0 = interface. Background: the MOI median of the stack. The profile lengths are kept (I9).
+  across → profile. Background: the MOI median of the stack. The profile lengths are kept (I9).
+- **Any pair of cell types (2026-11-01).** Every cell but the artefacts gets its profile and a *neighbour track*:
+  for each position, the label of the nearest other cell within `membrane.thickness` (4-connected steps, the reach
+  of the interfaces) of the cell's own pixels there, straightened along the same line (nearest sample, maximum
+  across), 0 = none. `membrane.cells` and `membrane.partners` choose the pair (a cell type, an immune subtype
+  "Immune A+ B+", or a marker "A+"; empty: `channels.cell_of_interest` against the other type). Interface = the
+  positions whose neighbour is a partner. **Non-interface = the membrane that touches no cell** (v1.8: all of the
+  membrane outside the interface, so also contacts with cells of the same type); the control windows are taken on
+  that free membrane too, read as one closed line. Reason: a contact with another cell that carries the marker
+  (e.g. two tumor cells) is brighter (two membranes side by side) and would raise the baseline, and controls
+  that fall on it looked enriched. On the test data this raises the median `stdDevs above mean` by about 0.2 SD;
+  the control quartiles stay within 0.15 SD of Fiji's. (With the v1.8 baseline the neighbour tracks reproduce the
+  previous port to a few hundredths.)
+- **Where the marker of interest is expressed (the user, 2026-11-01).** If the partners carry the marker too,
+  their membrane lies against the measured one at the interface (half the straightened band lies in the partner)
+  and looks like enrichment even when the staining is even. `expression_check` compares the median free-membrane
+  intensity of the partners with that of the measured cells (without profiles: the whole-cell means): ≥ 1 is a
+  WARNING (expressed in the partners? check `channels.cell_of_interest` / `membrane.cells`), ≥ 0.25 a CAUTION.
+  In the log, `run.json` ("marker of interest") and the overview (`MOI partners / measured`).
+  `membrane.inside_only` (default off, as the macro) takes the maximum across the band only over the samples inside
+  the measured cell. On the test data the check says CAUTION, and inside_only lowers the median `stdDevs above
+  mean` and the median interface/non-interface ratio clearly, while enrichment remains (numbers in the local notes).
 - Per cell: interface mean, non-interface mean and sd (sample sd), ratio, `stdDevs above mean`, and the new
   `interface length` column.
 - **Control (I10)**: for cells without interface, `membrane.control_repeats` (10) windows at random positions,
@@ -341,6 +361,8 @@ Settings file ↔ macro parameters:
 | (new) | `segmentation.exclude_edge_cells` |
 | `CellposeFlowThreshold` (constant) | `segmentation.flow_threshold` |
 | `membraneThickness`, `membraneThicknessForStraightening` | `membrane.thickness`, `membrane.straightening_width` |
+| `CellOfInterest` (the interface with the other class) | `channels.cell_of_interest`, or the pair `membrane.cells`, `membrane.partners` |
+| (new) | `membrane.inside_only` |
 | `maxHistValue`, `binWidth` | `membrane.max_histogram_value`, `membrane.histogram_bin_width` |
 
 ---

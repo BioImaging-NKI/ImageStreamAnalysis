@@ -140,6 +140,11 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - The poster is left as it is for now.
 - A user manual (MkDocs, as FAST-HIPPOS) will be started once the new settings have settled.
 - **Classification stays in two steps** (lineage, then immune subtypes), as in 2.8; see SPEC.md.
+- **Artefacts by default: positive in all subtype markers** (2026-11-01; only with two or more of them).
+- **Where the marker of interest is expressed matters** (the user, 2026-11-01): a partner that carries it too makes
+  an evenly stained interface look enriched. Check it on the data and let users change it: `expression_check`
+  warns, `channels.cell_of_interest` / `membrane.cells` / `membrane.partners` set the pair, `membrane.inside_only`
+  keeps the partner's pixels out.
 
 ### Git
 
