@@ -39,17 +39,30 @@ class EventStack:
     def n_events(self) -> int:
         return int(self.data.shape[0])
 
-    def index(self, c: int) -> int:
-        numbers = self.channel_numbers or list(range(1, self.data.shape[1] + 1))
-        if c not in numbers:
-            raise ValueError(f"Channel {c} is not in {self.name} (channels {numbers})")
-        return numbers.index(c)
+    @property
+    def numbers(self) -> list[int]:
+        return self.channel_numbers or list(range(1, self.data.shape[1] + 1))
 
-    def channel(self, c: int) -> np.ndarray:
+    def index(self, c: int | str) -> int:
+        """Position in data of channel c: a channel number, or a channel name."""
+        if isinstance(c, str):
+            hits = [i for i, name in enumerate(self.channel_names) if name == c]
+            if len(hits) != 1:
+                raise ValueError(f"Channel '{c}': {'no' if not hits else 'more than one'} channel with this name in "
+                                 f"{self.name} (channels {self.channel_names})")
+            return hits[0]
+        if c not in self.numbers:
+            raise ValueError(f"Channel {c} is not in {self.name} (channels {self.numbers})")
+        return self.numbers.index(c)
+
+    def number(self, c: int | str) -> int:
+        return self.numbers[self.index(c)]
+
+    def channel(self, c: int | str) -> np.ndarray:
         """Channel c of all events, as float32 (the macro converts the stack to 32-bit)."""
         return self.data[:, self.index(c)].astype(np.float32)
 
-    def median(self, c: int) -> float:
+    def median(self, c: int | str) -> float:
         return self.medians[self.index(c)] if self.medians else 0.0
 
     def image_extents(self) -> np.ndarray:

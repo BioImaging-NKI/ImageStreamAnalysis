@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__, ideas
-from .config import CellOfInterest, MarkerLocation, Settings
-from .project import ROLES, Project, overview
+from .config import CellOfInterest, ChannelSettings, MarkerLocation, Settings
+from .project import Project, overview
 
 log = logging.getLogger(__name__)
 STATE_DIR = Path.home() / ".imagestream_analysis"
@@ -70,6 +70,11 @@ def project_from_json(data: dict[str, Any]) -> Project:
         raise ValueError("Choose an output folder for the project")
     settings = {k: {kk: vv for kk, vv in v.items() if vv is not None and vv != ""}
                 for k, v in (data.get("settings") or {}).items()}
+    # a role without a channel stays empty (not the default channel number of a settings file)
+    channels = (data.get("settings") or {}).get("channels") or {}
+    for role in ("brightfield", "marker_of_interest", "tumor"):
+        if role in channels and channels[role] in (None, ""):
+            settings.setdefault("channels", {})[role] = ""
     zips = [z | {"dataset": z.get("datasets", [])} for z in data.get("zips", [])]
     return Project.from_dict(settings | {"zip": zips}, folder)
 
@@ -200,7 +205,7 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
             except Exception as e:  # noqa: BLE001 - a broken file must not stop the page
                 log.warning("Could not open the last project %s: %s", last, e)
         return {"version": __version__, "theme": prefs.get("theme", ""), "project": project,
-                "defaults": Settings().to_dict(), "roles": list(ROLES),
+                "defaults": Settings().to_dict(), "roles": list(ChannelSettings().roles()),
                 "marker_locations": [str(m) for m in MarkerLocation],
                 "cells_of_interest": [str(c) for c in CellOfInterest]}
     if api == "prefs":

@@ -10,6 +10,13 @@ Validation data: a confidential test data set with the output of a v1.8 run (not
 
 Status per step: ✅ ported and validated against the reference · 🟡 ported, not validated · ⬜ not yet ported.
 
+**Names (2026-10-31).** The port says *immune cell* where the macro v1.8 says *T cell* (as ClassifyCellTypes 2.8
+does), because the immune side may be defined by several markers (`channels.immune`, summed after normalization).
+Renamed outputs: `T-cell intensity` → `Immune intensity`; `Cell type` T cell → `Immune`; `T cells` → `Immune cells`;
+`mean Tcell interface` / `mean Tcell NOT in interface` → `mean immune interface` / `mean immune NOT in interface`;
+`T cell membrane ratio` → `Immune membrane ratio`; the table `Single Tumor Single T cell` → `Single Tumor Single
+Immune cell`; `cell_of_interest` "T cell" → "Immune cell". Old settings files (`channels.t_cell`, "T cell") still load.
+
 ---
 
 ## 1. Input (lines 132-150) ✅
@@ -36,7 +43,8 @@ Status per step: ✅ ported and validated against the reference · 🟡 ported, 
 
 ## 2. Marker normalization (`normalizeImage`, lines 1145-1160) ✅
 
-For the tumor and T-cell marker channels (and in membrane mode also the brightfield variance):
+For the tumor and T-cell marker channels (and in membrane mode also the brightfield variance). The port normalizes
+every immune marker of `channels.immune` this way and sums them (2.8; with one marker this is v1.8):
 
 1. Per event: `setAutoThreshold("Otsu dark")` on the 32-bit frame, `getThreshold(lower, upper)`.
    ImageJ does this on an 8-bit version: display range reset to min-max, byte = `round((v-min)·255/(max-min))`,
@@ -101,15 +109,16 @@ per-cell measurements (`measure.measure_cells`) first, the classification and ev
 table. New measurements, as in ClassifyCellTypes 2.8: `Area (µm²)`, `Edge`, and `Mean ch<N> (<name>)` for every
 loaded channel: the mean of the stored values minus the channel's background (median), not normalized.
 
-- `Area` = pixel count; `T-cell intensity`, `Tumor intensity` = mean of the **normalized** marker channels.
-- `Marker ratio` = T-cell / tumor intensity; `Marker ratio over Area` = ratio / area.
+- `Area` = pixel count; `T-cell intensity` (port: `Immune intensity`, the summed immune markers), `Tumor intensity`
+  = mean of the **normalized** marker channels.
+- `Marker ratio` = T-cell (immune) / tumor intensity; `Marker ratio over Area` = ratio / area.
 - k-means (ImageJ "k-means Clustering", 2 clusters, tolerance 1e-4, seed 48) on three features per cell:
   log(T-cell intensity), log(tumor intensity), area, each z-scored (mean 0, sample sd).
   Port: scikit-learn `KMeans(n_init=10, random_state=48)` (issue I14).
 - Tumor cells = the cluster with the lower **sum** of `Marker ratio over Area` (issue I4).
 - Class map: T cells → 1, tumor cells → 2 (`changeValues`). A third class (`class2`, green) cannot occur with 2
   clusters.
-- `Class` column: in the macro the arbitrary cluster number; in the port **1 = T cell, 0 = tumor cell**
+- `Class` column: in the macro the arbitrary cluster number; in the port **1 = immune cell, 0 = tumor cell**
   (on the test data this equals the reference). The port adds `Frame`, `Label` and `Cell type` columns.
 - Plot `cell Classes.png`: area vs marker ratio, log-log, T cells blue, tumor cells orange. ⬜ (dashboard)
 
@@ -130,7 +139,8 @@ The overlays on the montage (lines 555-631) are display only. ⬜ (dashboard)
 **raw** marker-of-interest channel (32-bit, no background subtraction) within each of the four masks of that event
 (NaN when empty), plus `T cell membrane ratio` = interface / not-in-interface and `Tumor membrane ratio`.
 
-`Single Tumor Single T cell`: the rows with 1 T cell, 1 tumor cell and a non-NaN T-cell interface.
+`Single Tumor Single T cell` (port: `Single Tumor Single Immune cell`): the rows with 1 T cell, 1 tumor cell and a
+non-NaN T-cell interface.
 
 Plots of interface vs non-interface MOI for the cell of interest (all events, doublets). ⬜ (dashboard)
 
@@ -195,8 +205,13 @@ of the rings with an interface. (These are the checks of `tests/test_reference.p
 ## Projects and the import page (new) ✅
 
 - `project.py`: a project = several IDEAS zips (of one or more experiments) with shared analysis settings, saved as
-  `project.toml` in the project folder. Per zip: path, pixel size, channels to load and their names, the roles
-  (brightfield, marker of interest, tumor, T cell), and per dataset an experiment label and whether to include it.
+  `project.toml` in the project folder. The roles (brightfield, marker of interest, tumor, immune and functional
+  markers) form a **panel by marker name** in the project's `[channels]` (2026-10-31); per zip: path, pixel size, the
+  channels to load and their names, and per dataset an experiment label and whether to include it. Each zip's names
+  give its channel numbers, so exports with differently numbered channels share one panel. Projects written before
+  had roles by number per zip (`t_cell` among them); on loading they become the panel by name when all zips agree,
+  and otherwise stay as per-zip overrides. On the page a role is a tick box per named channel, and holds for every zip
+  with a channel of that name.
   `imagestream-cli run-project` analyses every included dataset into `<project>/<experiment>/<dataset>/`; a failing
   dataset is logged (and recorded in its `summary.json`) without stopping the others. `overview.tsv` holds one row
   per dataset (counts, doublets, median membrane ratio of the doublets, and the membrane results if computed).
@@ -220,7 +235,7 @@ from the import page (served from the project folder, token-protected). No exter
 - Membrane analysis (if computed): histograms of interface and control as fractions, the average aligned profile,
   and a heatmap of all profiles (diverging, ±6 SD).
 - Cell card, cell and event tables (sortable). Hover and selection are linked in all views; one filter row (events:
-  all / both cell types / one tumor + one T cell / with an interface; sort) scopes everything. `#cell=N` or
+  all / both cell types / one tumor + one immune cell / with an interface; sort) scopes everything. `#cell=N` or
   `#event=N` in the address selects on opening.
 - Colours: the validated reference palette (dataviz skill): T cells slot 1 blue, tumor cells slot 2 orange,
   interface slot 3 aqua, in light and dark mode; aqua is below 3:1 on the light surface, so it is always named in
@@ -250,7 +265,8 @@ flagged on thresholds over all cells, before the k-means, which then runs withou
 The macro saves part of its parameters in `settings.txt` (lines 85-113): `CellposeModel`,
 `membraneThicknessForStraightening`, `bool_loadLabelmap` and the Cellpose environment are missing (issue I13).
 The port saves the complete `settings.toml`, a `run.json` (version, counts, Cellpose version and device, timing) and
-`log.txt`, plus `labelmap_final.tif` (cleaned labels) and `labelmap_classes.tif` (1 = T cell, 2 = tumor cell).
+`log.txt`, plus `labelmap_final.tif` (cleaned labels) and `labelmap_classes.tif` (1 = immune cell, 2 = tumor
+cell). In the saved `settings.toml` the channels given by name are replaced by their numbers.
 
 Settings file ↔ macro parameters:
 
@@ -258,7 +274,8 @@ Settings file ↔ macro parameters:
 |---|---|
 | `inputImageStack`, `output` | `input.image`, `input.output` (results in `<output>/<image stem>/`) |
 | `bool_limitNrCells`, `limitNrCells` | `input.max_events` |
-| `ch_BF`, `ch_MOI`, `ch_tumor`, `ch_Tcell` | `channels.brightfield`, `.marker_of_interest`, `.tumor`, `.t_cell` |
+| `ch_BF`, `ch_MOI`, `ch_tumor`, `ch_Tcell` | `channels.brightfield`, `.marker_of_interest`, `.tumor`, `.immune` (a list; number or name) |
+| (2.8: phenotypic, functional immune channels) | `channels.immune`, `channels.functional` (classification not built yet) |
 | `markerLoc`, `CellOfInterest` | `channels.marker_location`, `channels.cell_of_interest` |
 | `CellposeModel`, `cellDiameter` | `segmentation.model`, `segmentation.diameter` |
 | `bool_loadLabelmap`, `labelmapFile` | `segmentation.method = "labelmap"`, `segmentation.labelmap_file` |

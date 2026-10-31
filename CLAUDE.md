@@ -31,13 +31,13 @@ A local guard backs this up:
 ### Layout
 
 - `src/imagestream_analysis/` (uv, hatchling, Python 3.12+; `.python-version` is 3.13). Modules:
-  - `config.py`: Settings dataclasses ↔ TOML. Relative paths resolve against the settings file, and unknown keys are an error.
+  - `config.py`: Settings dataclasses ↔ TOML. Relative paths resolve against the settings file, and unknown keys are an error. Channels are numbers or names; `channels.immune` and `channels.functional` are lists; `ChannelSettings.migrate` reads the old `t_cell`.
   - `io.py`: `read_stack` reads only the first N events; also the labelmap montage↔stack and the TSV writer (3 decimals, `NaN`).
   - `imagej.py`: exact re-implementations of the ImageJ/CLIJ2 operations (Otsu on float, RankFilters variance, cross erode/dilate, close index gaps).
   - `segmentation.py`: marker normalization, Cellpose input montage, Cellpose subprocess, label clean-up.
   - `_cellpose_runner.py`: a standalone script that must **not** import the package; it handles Cellpose 3 and 4.
   - `measure.py`: the first stage: the per-cell measurements (normalized markers, every loaded channel minus its background, area in µm²) and cells cut by the edge of their event image.
-  - `classification.py`: k-means on the measured cells, tumor/T-cell assignment, class map.
+  - `classification.py`: k-means on the measured cells, tumor/immune-cell assignment, class map.
   - `interfaces.py`: membrane and interface masks, the per-event table, doublets.
   - `membrane.py`: the optional membrane analysis (`membrane.analysis`): outline, straighten, profiles, unseeded bootstrap control, aligned average, histograms.
   - `pipeline.py`: `load(settings)` reads an IDEAS zip or a Combiner `.tif`; `run(settings)` writes the output folder.
@@ -46,7 +46,7 @@ A local guard backs this up:
     - Only the needed channels are loaded.
     - It also makes the channel thumbnails.
     - The OME metadata (operator, source path) is never read or shown.
-  - `project.py`: `project.toml` (zips, channel names and roles per zip, datasets with experiment labels, shared settings).
+  - `project.py`: `project.toml` (the panel: roles by marker name; zips with their channel names; datasets with experiment labels; shared settings). Old projects with roles by number per zip are converted on loading.
     - `run_project` analyses every dataset into `<project>/<experiment>/<dataset>/` and writes `summary.json` and `overview.tsv`.
   - `dashboard.py` + `templates/dashboard.html`: the results page of each dataset (`dashboard.html` + `dashboard_files/*.webp`).
     - Written by `pipeline.save`.

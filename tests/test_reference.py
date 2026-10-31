@@ -46,21 +46,32 @@ def result(tmp_path_factory):
     return run(settings)
 
 
+# the port says immune cell where the macro v1.8 says T cell
+RENAMED = {"T-cell intensity": "Immune intensity", "T cells": "Immune cells", "mean Tcell interface":
+           "mean immune interface", "mean Tcell NOT in interface": "mean immune NOT in interface",
+           "T cell membrane ratio": "Immune membrane ratio"}
+MACRO_NAMES = {DOUBLETS_TABLE: "Single Tumor Single T cell"}
+
+
 def _read(folder, name):
     return pd.read_csv(Path(folder) / f"{name}.tsv", sep="\t")
 
 
+def _read_reference(folder, name):
+    return _read(folder, MACRO_NAMES.get(name, name)).rename(columns=RENAMED)
+
+
 def test_cells_match_reference(result, reference):
-    ref = _read(reference, CELL_TABLE)
+    ref = _read_reference(reference, CELL_TABLE)
     own = _read(result.out_dir, CELL_TABLE)
     assert len(own) == len(ref)
     # The order of the cells within an event is not deterministic in Fiji, so the cells are matched on event and
     # area. The reference has no event column: it follows from the event table.
-    events = _read(reference, EVENT_TABLE)
-    ref["Frame"] = np.repeat(events["Frame"], events["T cells"] + events["Tumor cells"]).to_numpy()
+    events = _read_reference(reference, EVENT_TABLE)
+    ref["Frame"] = np.repeat(events["Frame"], events["Immune cells"] + events["Tumor cells"]).to_numpy()
     m = ref.merge(own, on=["Frame", "Area"], suffixes=("_ref", "_own"), validate="one_to_one")
     assert len(m) == len(ref)
-    for col in ("T-cell intensity", "Tumor intensity", "Marker ratio", "Marker ratio over Area"):
+    for col in ("Immune intensity", "Tumor intensity", "Marker ratio", "Marker ratio over Area"):
         assert np.allclose(m[f"{col}_own"], m[f"{col}_ref"], atol=0.0015, rtol=0), col
     # Class here: 1 = T cell; in the macro an arbitrary cluster number, so compare the partition
     agree = (m["Class_own"] == m["Class_ref"]).mean()
@@ -69,7 +80,7 @@ def test_cells_match_reference(result, reference):
 
 @pytest.mark.parametrize("name", [EVENT_TABLE, DOUBLETS_TABLE])
 def test_event_tables_match_reference(result, reference, name):
-    ref = _read(reference, name)
+    ref = _read_reference(reference, name)
     own = _read(result.out_dir, name)
     assert list(own.columns) == list(ref.columns)
     assert len(own) == len(ref)
@@ -83,7 +94,7 @@ def test_membrane_distributions_match_reference(result, reference):
     ref = _read(reference, MEMBRANE_TABLE)
     own = _read(result.out_dir, MEMBRANE_TABLE)
     of_interest = _config()[0].channels.cell_of_interest
-    wanted = "T cell" if of_interest == CellOfInterest.T_CELL else "Tumor"
+    wanted = "Immune" if of_interest == CellOfInterest.IMMUNE_CELL else "Tumor"
     assert len(own) == (result.cells["Cell type"] == wanted).sum()  # one row per cell of interest
     ref_if, own_if = ref["interface Mean"].notna(), own["interface Mean"].notna()
     assert abs(own_if.sum() - ref_if.sum()) / ref_if.sum() < 0.1

@@ -31,21 +31,31 @@ def normalize_marker(channel: np.ndarray) -> tuple[np.ndarray, float]:
 
 @dataclass
 class Markers:
-    """The normalized tumor and T-cell marker channels, (T, Y, X) float32, used for segmentation and
-    classification."""
+    """The normalized tumor marker and the sum of the normalized immune-cell markers, (T, Y, X) float32, used for
+    segmentation and classification."""
 
     tumor: np.ndarray
-    t_cell: np.ndarray
+    immune: np.ndarray
     tumor_factor: float
-    t_cell_factor: float
+    immune_factors: list[float]
 
 
 def markers(stack: EventStack, settings: Settings) -> Markers:
+    """Each marker divided by its normalization factor; the immune-cell markers are then summed (as
+    ClassifyCellTypes 2.8; with one marker this is the macro v1.8)."""
     ch = settings.channels
+    if not ch.immune:
+        raise ValueError("channels.immune: give at least one immune-cell marker")
     tumor, f_tumor = normalize_marker(stack.channel(ch.tumor))
-    t_cell, f_t = normalize_marker(stack.channel(ch.t_cell))
-    log.info("Marker normalization factors (median Otsu threshold): tumor %.4g, T cell %.4g", f_tumor, f_t)
-    return Markers(tumor, t_cell, f_tumor, f_t)
+    immune = np.zeros_like(tumor)
+    factors = []
+    for c in ch.immune:
+        normalized, f = normalize_marker(stack.channel(c))
+        immune += normalized
+        factors.append(f)
+    log.info("Marker normalization factors (median Otsu threshold): tumor %.4g, immune %s", f_tumor,
+             ", ".join(f"{f:.4g}" for f in factors))
+    return Markers(tumor, immune, f_tumor, factors)
 
 
 def montage_columns(stack: EventStack, settings: Settings) -> int:
@@ -58,12 +68,12 @@ def cellpose_input(stack: EventStack, m: Markers, settings: Settings) -> tuple[n
     """The image for Cellpose: a montage of all events (a grid, row by row; the macro uses one row: SPEC I2), and
     the Cellpose 3 channels. Empty tiles at the end of the grid are 0.
 
-    nuclear markers: channel 1 = variance (r=2) of the brightfield, channel 2 = tumor + T-cell marker (normalized);
-    Cellpose with ch1=1, ch2=2. membrane markers: one channel, tumor + T-cell marker + brightfield variance, each
+    nuclear markers: channel 1 = variance (r=2) of the brightfield, channel 2 = tumor + immune markers (normalized);
+    Cellpose with ch1=1, ch2=2. membrane markers: one channel, tumor + immune markers + brightfield variance, each
     normalized; Cellpose with ch1=1, ch2=0 (grayscale)."""
     columns = montage_columns(stack, settings)
     bf_var = imagej.variance_filter(stack.channel(settings.channels.brightfield), 2)
-    nuclei = m.tumor + m.t_cell
+    nuclei = m.tumor + m.immune
     if settings.channels.marker_location == MarkerLocation.NUCLEAR:
         image = stack_to_montage(np.stack([bf_var, nuclei], axis=-1), columns)
         return image.astype(np.float32), [1, 2]

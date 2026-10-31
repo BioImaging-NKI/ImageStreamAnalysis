@@ -8,26 +8,26 @@ import numpy as np
 import pandas as pd
 
 from . import imagej
-from .classification import T_CELL, TUMOR
+from .classification import IMMUNE, TUMOR
 
 
 @dataclass
 class InterfaceMasks:
     """Binary (T, Y, X) masks."""
 
-    t_cell_membrane: np.ndarray
+    immune_membrane: np.ndarray
     tumor_membrane: np.ndarray
-    t_cell_interface: np.ndarray
+    immune_interface: np.ndarray
     tumor_interface: np.ndarray
-    t_cell_not_in_interface: np.ndarray
+    immune_not_in_interface: np.ndarray
     tumor_not_in_interface: np.ndarray
 
 
 def interface_masks(classes: np.ndarray, thickness: int) -> InterfaceMasks:
-    """Membrane = the outer `thickness` pixels of each class mask; interface of a T cell = its pixels within
+    """Membrane = the outer `thickness` pixels of each class mask; interface of an immune cell = its pixels within
     `thickness` pixels of a tumor cell (and vice versa); 'not in interface' = interface XOR membrane, as the macro;
     since the interface lies inside the membrane band this is membrane AND NOT interface (SPEC, I6)."""
-    t_mask = classes == T_CELL
+    t_mask = classes == IMMUNE
     tu_mask = classes == TUMOR
     t_membrane = t_mask & ~imagej.erode(t_mask, thickness)
     tu_membrane = tu_mask & ~imagej.erode(tu_mask, thickness)
@@ -56,20 +56,20 @@ def event_table(cells: pd.DataFrame, n_events: int, masks: InterfaceMasks, moi: 
     counts = pd.crosstab(cells["frame"], cells["Cell type"]).reindex(range(n_events), fill_value=0)
     df = pd.DataFrame({
         "Frame": np.arange(1, n_events + 1),
-        "T cells": counts.get("T cell", pd.Series(0, index=counts.index)).to_numpy(),
+        "Immune cells": counts.get("Immune", pd.Series(0, index=counts.index)).to_numpy(),
         "Tumor cells": counts.get("Tumor", pd.Series(0, index=counts.index)).to_numpy(),
-        "mean Tcell interface": _masked_means(moi, masks.t_cell_interface),
-        "mean Tcell NOT in interface": _masked_means(moi, masks.t_cell_not_in_interface),
+        "mean immune interface": _masked_means(moi, masks.immune_interface),
+        "mean immune NOT in interface": _masked_means(moi, masks.immune_not_in_interface),
         "mean tumor interface": _masked_means(moi, masks.tumor_interface),
         "mean tumor NOT in interface": _masked_means(moi, masks.tumor_not_in_interface),
     })
     with np.errstate(divide="ignore", invalid="ignore"):
-        df["T cell membrane ratio"] = df["mean Tcell interface"] / df["mean Tcell NOT in interface"]
+        df["Immune membrane ratio"] = df["mean immune interface"] / df["mean immune NOT in interface"]
         df["Tumor membrane ratio"] = df["mean tumor interface"] / df["mean tumor NOT in interface"]
     return df
 
 
 def doublets(events: pd.DataFrame) -> pd.DataFrame:
-    """Events with exactly one T cell and one tumor cell that touch ('Single Tumor Single T cell')."""
-    keep = (events["T cells"] == 1) & (events["Tumor cells"] == 1) & events["mean Tcell interface"].notna()
+    """Events with exactly one immune cell and one tumor cell that touch ('Single Tumor Single Immune cell')."""
+    keep = (events["Immune cells"] == 1) & (events["Tumor cells"] == 1) & events["mean immune interface"].notna()
     return events[keep].reset_index(drop=True)

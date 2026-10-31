@@ -1,6 +1,6 @@
 """Per-cell measurements: the first stage of the analysis, before the classification.
 
-The normalized tumor and T-cell marker intensities of the macro v1.8 (lines 325-370), plus (new, as
+The normalized tumor and immune-cell marker intensities of the macro v1.8 (lines 325-370), plus (new, as
 ClassifyCellTypes 2.8) the area in µm² and the background-subtracted mean of every loaded channel, and whether a cell
 is cut by the edge of its event image."""
 
@@ -55,24 +55,24 @@ def channel_column(number: int, name: str) -> str:
     return f"Mean ch{number} ({name})"
 
 
-def measure_cells(labels: np.ndarray, stack: EventStack, tumor: np.ndarray, t_cell: np.ndarray,
+def measure_cells(labels: np.ndarray, stack: EventStack, tumor: np.ndarray, immune: np.ndarray,
                   edge: np.ndarray) -> pd.DataFrame:
     """One row per cell, ordered by event and then label (the order of the macro's ROI Manager).
 
-    labels: (T, Y, X) cleaned labels 1..N; tumor, t_cell: the normalized marker channels (T, Y, X); edge: per
-    label 1..N, whether the cell is cut by the edge of its event image.
+    labels: (T, Y, X) cleaned labels 1..N; tumor, immune: the normalized tumor marker and the sum of the normalized
+    immune markers (T, Y, X); edge: per label 1..N, whether the cell is cut by the edge of its event image.
 
-    Columns: label, frame (0-based), T-cell and tumor intensity (mean of the normalized markers), Area (pixels),
+    Columns: label, frame (0-based), Immune and Tumor intensity (mean of the normalized markers), Area (pixels),
     Marker ratio, Marker ratio over Area, Area (µm²), Edge, and 'Mean ch<N> (<name>)' for every loaded channel: the
     mean of the stored values minus the channel's background (median)."""
     n = int(labels.max(initial=0))
     index = np.arange(1, n + 1)
     area = ndi.sum_labels(np.ones_like(labels, dtype=np.int64), labels, index).astype(np.int64)
     df = pd.DataFrame({"label": index, "frame": frames_of(labels),
-                       "T-cell intensity": ndi.mean(t_cell, labels, index),
+                       "Immune intensity": ndi.mean(immune, labels, index),
                        "Tumor intensity": ndi.mean(tumor, labels, index), "Area": area})
     with np.errstate(divide="ignore", invalid="ignore"):
-        df["Marker ratio"] = df["T-cell intensity"] / df["Tumor intensity"]
+        df["Marker ratio"] = df["Immune intensity"] / df["Tumor intensity"]
         df["Marker ratio over Area"] = df["Marker ratio"] / df["Area"]
     df["Area (µm²)"] = area * stack.pixel_size**2
     df["Edge"] = edge.astype(bool)

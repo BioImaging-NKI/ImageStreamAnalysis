@@ -2,18 +2,27 @@
 their results. Stored as `project.toml` in the project's output folder; the results of a dataset go to
 `<project folder>/<experiment>/<dataset>/`.
 
-    [channels] / [segmentation] / [membrane] / [input]   the shared analysis settings (as a settings file)
+    [channels]                                           the panel: the role channels by name
+    brightfield = 'BF'
+    marker_of_interest = 'marker'
+    tumor = 'tumor'
+    immune = ['immune A', 'immune B']
+    functional = ['subtype X']
+    [segmentation] / [membrane] / [input]                the shared analysis settings (as a settings file)
 
     [[zip]]                                              one per IDEAS export
     path = 'D:/data/export.zip'
     pixel_size = 0.5
-    channels = [1, 3, 6, 9]                               the IDEAS channels to load
-    channel_names = ['BF', 'marker', 'T cells', 'tumor']
-    roles = { brightfield = 1, marker_of_interest = 3, t_cell = 6, tumor = 9 }
+    channels = [1, 3, 6, 9, 11, 12]                       the IDEAS channels to load
+    channel_names = ['BF', 'marker', 'immune A', 'tumor', 'immune B', 'subtype X']
     [[zip.dataset]]
     name = 'folder in the zip'
     experiment = 'label for the overview'
     include = true
+
+The roles go by name, so a zip whose channels are numbered differently needs only its own names. A zip may still
+have `roles = { tumor = 9, ... }` (channel numbers) that override the panel: projects written before 2026-10-31
+gave every zip its roles by number; they are turned into a panel by name when all zips agree.
 """
 
 from __future__ import annotations
@@ -31,13 +40,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .config import CellOfInterest, Settings, _from_dict, _toml_value
+from .config import CellOfInterest, ChannelSettings, Settings, _from_dict, _toml_value
 from .io import save_table
 
 log = logging.getLogger(__name__)
 PROJECT_FILE = "project.toml"
 OVERVIEW_FILE = "overview.tsv"
-ROLES = ("brightfield", "marker_of_interest", "tumor", "t_cell")
 
 
 @dataclass
@@ -53,7 +61,7 @@ class ZipEntry:
     pixel_size: float | None = None
     channels: list[int] = field(default_factory=list)
     channel_names: list[str] = field(default_factory=list)
-    roles: dict[str, int] = field(default_factory=dict)
+    roles: dict[str, Any] = field(default_factory=dict)  # overrides of the panel, by channel number (old projects)
     datasets: list[DatasetEntry] = field(default_factory=list)
 
 
@@ -77,24 +85,33 @@ class Project:
                 s.input.channels = list(z.channels)
                 s.input.channel_names = list(z.channel_names)
                 s.input.output = self.folder / safe_name(d.experiment or Path(z.path).stem)
-                for role in ROLES:
-                    if role in z.roles:
-                        setattr(s.channels, role, int(z.roles[role]))
+                s.channels = self.channels_of(z)
                 out.append((z, d, s))
         return out
+
+    def channels_of(self, z: ZipEntry) -> ChannelSettings:
+        """The channel settings of a zip, by IDEAS channel number: the panel with the zip's overrides, the names
+        looked up in the zip's channel names (ValueError if one is missing)."""
+        ch = copy.deepcopy(self.settings.channels)
+        for role, value in z.roles.items():
+            setattr(ch, role, [int(v) for v in value] if isinstance(value, list) else int(value))
+        return ch.resolved(z.channels, z.channel_names)
 
     def problems(self) -> list[str]:
         """What prevents a run (empty: ready)."""
         msgs = []
         if not any(d.include for z in self.zips for d in z.datasets):
             msgs.append("No datasets selected")
+        if not self.settings.channels.immune:
+            msgs.append("No immune-cell marker")
         for z in self.zips:
             name = Path(z.path).name
             if not z.pixel_size:
                 msgs.append(f"{name}: pixel size not set")
-            missing = [r for r in ROLES if r not in z.roles]
-            if missing:
-                msgs.append(f"{name}: no channel for {', '.join(r.replace('_', ' ') for r in missing)}")
+            try:
+                self.channels_of(z)
+            except ValueError as e:
+                msgs.append(f"{name}: {e}")
             if not Path(z.path).exists():
                 msgs.append(f"{name}: file not found")
         return msgs
@@ -105,8 +122,10 @@ class Project:
             lines += ["[[zip]]", f"path = {_toml_value(str(z.path))}"]
             if z.pixel_size:
                 lines.append(f"pixel_size = {z.pixel_size!r}")
-            lines += [f"channels = {_toml_value(z.channels)}", f"channel_names = {_toml_value(z.channel_names)}",
-                      "roles = { " + ", ".join(f"{k} = {v}" for k, v in z.roles.items()) + " }", ""]
+            lines += [f"channels = {_toml_value(z.channels)}", f"channel_names = {_toml_value(z.channel_names)}"]
+            if z.roles:
+                lines.append("roles = { " + ", ".join(f"{k} = {_toml_value(v)}" for k, v in z.roles.items()) + " }")
+            lines.append("")
             for d in z.datasets:
                 lines += ["[[zip.dataset]]", f"name = {_toml_value(d.name)}",
                           f"experiment = {_toml_value(d.experiment)}", f"include = {_toml_value(d.include)}", ""]
@@ -131,13 +150,37 @@ class Project:
     def from_dict(cls, data: dict[str, Any], folder: Path) -> Project:
         zips = [ZipEntry(Path(z["path"]), z.get("pixel_size"), [int(c) for c in z.get("channels", [])],
                          [str(n) for n in z.get("channel_names", [])],
-                         {k: int(v) for k, v in z.get("roles", {}).items()},
+                         ChannelSettings.migrate(dict(z.get("roles", {}))),
                          [DatasetEntry(d["name"], d.get("experiment", ""), bool(d.get("include", True)))
                           for d in z.get("dataset", [])])
                  for z in data.get("zip", [])]
         sections = {k: v for k, v in data.items() if k != "zip"}
         settings: Settings = _from_dict(Settings, sections)
-        return cls(folder, settings, zips)
+        project = cls(folder, settings, zips)
+        project.roles_to_panel()
+        return project
+
+    def roles_to_panel(self) -> None:
+        """Turn per-zip roles by number (projects before 2026-10-31) into the panel by name, when every zip has the
+        same named channel for each role; otherwise they stay as overrides."""
+        if not self.zips or not all(z.roles for z in self.zips):
+            return
+        panels = []
+        for z in self.zips:
+            name_of = dict(zip(z.channels, z.channel_names, strict=False))
+            panel: dict[str, Any] = {}
+            for role, value in z.roles.items():
+                names = [name_of.get(int(v), "") for v in (value if isinstance(value, list) else [value])]
+                if not all(names):
+                    return  # an unnamed role channel: keep the numbers
+                panel[role] = names if role in ("immune", "functional") else names[0]
+            panels.append(panel)
+        if any(p != panels[0] for p in panels):
+            return
+        for role, value in panels[0].items():
+            setattr(self.settings.channels, role, value)
+        for z in self.zips:
+            z.roles = {}
 
 
 def safe_name(name: str) -> str:
@@ -150,14 +193,14 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
     cells = result.cells
     events = result.events
     d = result.doublets
-    of_interest = "Tumor" if settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL else "T cell"
-    side = "Tumor membrane ratio" if of_interest == "Tumor" else "T cell membrane ratio"
+    of_interest = "Tumor" if settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL else "Immune"
+    side = "Tumor membrane ratio" if of_interest == "Tumor" else "Immune membrane ratio"
     row: dict[str, Any] = {
         "events": int(len(events)),
         "cells": int(len(cells)),
-        "T cells": int((cells["Cell type"] == "T cell").sum()),
+        "immune cells": int((cells["Cell type"] == "Immune").sum()),
         "tumor cells": int((cells["Cell type"] == "Tumor").sum()),
-        "single tumor + single T cell": int(len(d)),
+        "single tumor + single immune cell": int(len(d)),
         "doublet fraction": round(len(d) / len(events), 4) if len(events) else None,
         f"median {side} (doublets)": _median(d[side]) if len(d) else None,
     }

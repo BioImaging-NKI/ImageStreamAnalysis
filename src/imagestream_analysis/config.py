@@ -1,13 +1,16 @@
 """Run settings, loaded from a TOML file (replaces the Fiji script-parameter dialog).
 
 Conventions:
-- Channels are 1-based, as in Fiji.
+- Channels are 1-based, as in Fiji. A channel can also be given by its name (`tumor = 'Tumor'`): the channel names
+  of the stack, or `input.channel_names` of an IDEAS zip. A panel by name fits zips whose channels are numbered
+  differently.
 - Frames (events) are 0-based indices in the code; the output tables show them 1-based, as the macro does.
 - Sizes are in pixels unless the name says otherwise.
 """
 
 from __future__ import annotations
 
+import copy
 import tomllib
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from enum import StrEnum
@@ -21,8 +24,15 @@ class MarkerLocation(StrEnum):
 
 
 class CellOfInterest(StrEnum):
-    T_CELL = "T cell"
+    IMMUNE_CELL = "Immune cell"
     TUMOR_CELL = "Tumor cell"
+
+    @classmethod
+    def _missing_(cls, value: object) -> CellOfInterest | None:
+        return cls.IMMUNE_CELL if value == "T cell" else None  # the name in settings before 2026-10-31
+
+
+Channel = int | str  # a channel number (1-based), or a channel name
 
 
 @dataclass
@@ -42,13 +52,55 @@ class InputSettings:
 
 @dataclass
 class ChannelSettings:
-    # channel numbers: the IDEAS channel (Ch<N>) for a zip, the position in the stack for a Combiner .tif
-    brightfield: int = 1
-    marker_of_interest: int = 2
-    tumor: int = 3
-    t_cell: int = 4
-    marker_location: MarkerLocation = MarkerLocation.NUCLEAR  # of the tumor and T-cell markers
-    cell_of_interest: CellOfInterest = CellOfInterest.T_CELL  # the cell type that expresses the marker of interest
+    # channel numbers (the IDEAS channel Ch<N> for a zip, the position in the stack for a Combiner .tif) or names
+    brightfield: Channel = 1
+    marker_of_interest: Channel = 2
+    tumor: Channel = 3
+    # markers of the immune cells (ClassifyCellTypes 2.8: phenotypic markers); each is normalized, and their sum is
+    # the immune-cell marker of the segmentation and the tumor / immune classification (macro v1.8: one T-cell marker)
+    immune: list[Channel] = field(default_factory=lambda: [4])
+    # markers of immune subtypes (2.8: functional markers), each with a positive / negative threshold
+    functional: list[Channel] = field(default_factory=list)
+    marker_location: MarkerLocation = MarkerLocation.NUCLEAR  # of the tumor and immune-cell markers
+    cell_of_interest: CellOfInterest = CellOfInterest.IMMUNE_CELL  # the cell type that expresses the marker of interest
+
+    @staticmethod
+    def migrate(data: dict[str, Any]) -> dict[str, Any]:
+        """Settings written before 2026-10-31 have one T-cell marker: t_cell = N."""
+        if "t_cell" in data:
+            data = dict(data)
+            if "immune" in data:
+                raise ValueError("Give either channels.immune or (the old) channels.t_cell, not both")
+            data["immune"] = [data.pop("t_cell")]
+        return data
+
+    def roles(self) -> dict[str, list[Channel]]:
+        """Every role with its channel(s)."""
+        return {"brightfield": [self.brightfield], "marker_of_interest": [self.marker_of_interest],
+                "tumor": [self.tumor], "immune": list(self.immune), "functional": list(self.functional)}
+
+    def resolved(self, numbers: list[int], names: list[str]) -> ChannelSettings:
+        """A copy with every channel given by number: names are looked up in `names` (the channels `numbers`)."""
+        def number(ref: Channel, role: str) -> int:
+            if isinstance(ref, int):
+                return ref
+            what = role.replace("_", " ")
+            if not ref:
+                raise ValueError(f"no channel for the {what}")
+            hits = [n for n, name in zip(numbers, names, strict=True) if name == ref]
+            if len(hits) != 1:
+                known = ", ".join(f"'{n}'" for n in names if n)
+                raise ValueError(f"{what} '{ref}': {'no' if not hits else 'more than one'} channel with this name"
+                                 f" (channels: {known or 'no names'})")
+            return hits[0]
+
+        out = copy.deepcopy(self)
+        out.brightfield = number(self.brightfield, "brightfield")
+        out.marker_of_interest = number(self.marker_of_interest, "marker_of_interest")
+        out.tumor = number(self.tumor, "tumor")
+        out.immune = [number(c, "immune marker") for c in self.immune]
+        out.functional = [number(c, "functional marker") for c in self.functional]
+        return out
 
 
 @dataclass
@@ -162,6 +214,8 @@ def _convert(tp: Any, value: Any) -> Any:
 
 def _from_dict(cls: Any, data: dict[str, Any]) -> Any:
     hints = get_type_hints(cls)
+    if hasattr(cls, "migrate"):
+        data = cls.migrate(data)
     known = {f.name for f in fields(cls)}
     unknown = set(data) - known
     if unknown:

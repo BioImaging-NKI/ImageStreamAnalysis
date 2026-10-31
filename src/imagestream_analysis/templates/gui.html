@@ -55,6 +55,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .zip h3 .title { flex: 1; min-width: 0; }
 .zip h3 .path { display: block; color: var(--muted); font-weight: 400; font-size: 12px; overflow-wrap: anywhere; }
 .zip h4 { margin: 12px 0 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
+td.role, th.role { text-align: center; }
 .thumb { height: 40px; image-rendering: auto; background: var(--thumb-bg); border-radius: 3px; display: block; }
 .scroll { overflow-x: auto; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -97,9 +98,9 @@ progress { width: 260px; }
 
   <section>
     <h2><span class="step">2</span>IDEAS exports</h2>
-    <p class="hint">Add the zip files exported from IDEAS (one folder per dataset). For each zip, give the channels
-      that are needed a name and a role, and set the pixel size. Datasets with the same experiment label are grouped
-      in the overview.</p>
+    <p class="hint">Add the zip files exported from IDEAS (one folder per dataset). For each zip, set the pixel size
+      and give the channels that are needed a name. Roles go with the marker name and hold for every zip that has a
+      channel of that name. Datasets with the same experiment label are grouped in the overview.</p>
     <div class="row">
       <button id="add-zip" class="primary">Add zip files…</button>
       <input type="text" id="zip-path" class="wide" placeholder="…or paste the path of a zip">
@@ -140,8 +141,13 @@ progress { width: 260px; }
 <script>
 "use strict";
 const TOKEN = "__ISA_TOKEN__";
-const ROLE_LABELS = {"": "—", brightfield: "Brightfield", marker_of_interest: "Marker of interest",
-                     tumor: "Tumor marker", t_cell: "T-cell marker"};
+// the roles of the panel: [key, column, description]; immune and functional take several markers
+const ROLES = [["brightfield", "BF", "Brightfield"], ["tumor", "Tumor", "Tumor marker"],
+               ["immune", "Immune", "Immune-cell marker (several are summed)"],
+               ["functional", "Subtype", "Immune subtype marker (positive / negative per marker)"],
+               ["marker_of_interest", "MOI", "Marker of interest (membrane enrichment)"]];
+const MULTI = new Set(["immune", "functional"]);
+const REQUIRED = ["brightfield", "tumor", "immune", "marker_of_interest"];
 const MAGNIFICATIONS = [["1", "20× (1 µm)"], ["0.5", "40× (0.5 µm)"], ["0.33", "60× (0.33 µm)"]];
 let state = { folder: "", settings: null, zips: [] };  // zips: {path, name, pixel_size, channels, channel_names, roles, datasets, info}
 let defaults = null, choices = {}, logSince = 0, polling = null;
@@ -178,20 +184,42 @@ function toProject() {
 }
 function loadProject(p) {
   document.getElementById("folder").value = p.folder || "";
-  state.settings = p.settings || structuredClone(defaults);
+  state.settings = p.settings || newSettings();
   state.zips = (p.zips || []).map(z => ({ ...z, name: baseName(z.path), info: null }));
   renderAll();
   state.zips.forEach(z => scanInto(z, false));
+}
+
+function newSettings() {  // a new project: no roles yet (the defaults are channel numbers for settings files)
+  const s = structuredClone(defaults);
+  for (const [r] of ROLES) s.channels[r] = MULTI.has(r) ? [] : null;
+  return s;
+}
+
+// ---------- roles of the panel, by marker name
+const panel = () => state.settings.channels;
+function hasRole(role, name) {
+  const v = panel()[role];
+  return MULTI.has(role) ? (v || []).includes(name) : v === name;
+}
+function setRole(role, name, on) {
+  const ch = panel();
+  if (MULTI.has(role)) { const list = (ch[role] || []).filter(n => n !== name); if (on) list.push(name); ch[role] = list; }
+  else ch[role] = on ? name : (ch[role] === name ? null : ch[role]);
+}
+function renameRoles(from, to) {  // a renamed channel keeps its roles, unless another zip still uses the old name
+  if (!from || state.zips.some(z => z.channel_names.includes(from))) return;
+  for (const [r] of ROLES) if (hasRole(r, from)) { setRole(r, from, false); if (to) setRole(r, to, true); }
 }
 
 // ---------- zips
 async function addZip(path) {
   if (state.zips.some(z => z.path.toLowerCase() === path.toLowerCase())) { toast("Already added: " + baseName(path)); return; }
   const z = { path, name: baseName(path), pixel_size: null, channels: [], channel_names: [], roles: {}, datasets: [], info: null };
-  // a new zip starts with the channel setup of the previous one (often the same panel)
+  // a new zip starts with the channel names of the previous one (often the same panel)
   const prev = state.zips[state.zips.length - 1];
   if (prev) Object.assign(z, { pixel_size: prev.pixel_size, channels: [...prev.channels],
-                               channel_names: [...prev.channel_names], roles: { ...prev.roles } });
+                               channel_names: [...prev.channel_names] });
   state.zips.push(z);
   renderZips();
   await scanInto(z, true);
@@ -211,24 +239,17 @@ async function scanInto(z, fresh) {
 function keepChannels(z, keep) {
   const pairs = z.channels.map((c, i) => [c, z.channel_names[i] || ""]).filter(([c]) => keep(c));
   z.channels = pairs.map(p => p[0]); z.channel_names = pairs.map(p => p[1]);
-  for (const [role, c] of Object.entries(z.roles)) if (!keep(c)) delete z.roles[role];
 }
-function setChannel(z, c, name, role) {
+function setChannel(z, c, name) {
   const i = z.channels.indexOf(c);
-  if (name !== undefined) {
-    if (i >= 0) z.channel_names[i] = name; else if (name) { z.channels.push(c); z.channel_names.push(name); }
-  }
-  if (role !== undefined) {
-    for (const [r, cc] of Object.entries(z.roles)) if (cc === c || r === role) delete z.roles[r];
-    if (role) { z.roles[role] = c; if (z.channels.indexOf(c) < 0) { z.channels.push(c); z.channel_names.push(""); } }
-  }
-  // a channel without a name and without a role is not loaded
-  const used = new Set(Object.values(z.roles));
-  keepChannels(z, cc => used.has(cc) || !!z.channel_names[z.channels.indexOf(cc)]);
+  const old = i >= 0 ? z.channel_names[i] : "";
+  if (i >= 0) z.channel_names[i] = name; else if (name) { z.channels.push(c); z.channel_names.push(name); }
+  // a channel without a name is not loaded (and cannot have a role)
+  keepChannels(z, cc => !!z.channel_names[z.channels.indexOf(cc)]);
   const order = z.channels.map((cc, k) => [cc, z.channel_names[k]]).sort((a, b) => a[0] - b[0]);
   z.channels = order.map(o => o[0]); z.channel_names = order.map(o => o[1]);
+  if (old !== name) renameRoles(old, name);
 }
-function roleOf(z, c) { return Object.entries(z.roles).find(([, cc]) => cc === c)?.[0] || ""; }
 
 function renderZips() {
   const box = document.getElementById("zips"); box.replaceChildren();
@@ -271,19 +292,24 @@ function renderZip(z) {
   // channels
   card.append(el("h4", {}, "Channels (examples from the first dataset)"));
   const channels = [...new Set(info.datasets.flatMap(d => d.channels))].sort((a, b) => a - b);
-  const ct = el("table", {}, el("tr", {}, el("th", {}, "Channel"), el("th", {}, "Examples"), el("th", {}, "Name"), el("th", {}, "Role")));
+  const ct = el("table", {}, el("tr", {}, el("th", {}, "Channel"), el("th", {}, "Examples"), el("th", {}, "Name"),
+    ROLES.map(([, col, desc]) => el("th", { class: "role", title: desc }, col))));
   for (const c of channels) {
     const i = z.channels.indexOf(c);
-    const roleSel = el("select", { onchange: e => { setChannel(z, c, undefined, e.target.value); renderZips(); renderProblems(); } },
-      Object.entries(ROLE_LABELS).map(([r, t]) => el("option", { value: r, selected: roleOf(z, c) === r }, t)));
+    const name = i >= 0 ? z.channel_names[i] : "";
     ct.append(el("tr", {},
       el("td", {}, "Ch" + c),
       el("td", {}, info.thumbnails[c] ? el("img", { class: "thumb", src: info.thumbnails[c], alt: "Ch" + c }) : ""),
-      el("td", {}, el("input", { type: "text", value: i >= 0 ? z.channel_names[i] : "", placeholder: "not used",
-        onchange: e => { setChannel(z, c, e.target.value.trim(), undefined); renderZips(); } })),
-      el("td", {}, roleSel)));
+      el("td", {}, el("input", { type: "text", value: name, placeholder: "not used",
+        onchange: e => { setChannel(z, c, e.target.value.trim()); renderZips(); renderProblems(); } })),
+      ROLES.map(([r, col, desc]) => el("td", { class: "role" }, el("input", { type: "checkbox", disabled: !name,
+        title: name ? `${desc}: ${name}` : "Give the channel a name first", checked: !!name && hasRole(r, name),
+        onchange: e => { setRole(r, name, e.target.checked); renderZips(); renderProblems(); } })))));
   }
   card.append(el("div", { class: "scroll" }, ct));
+  if (Object.keys(z.roles || {}).length) card.append(el("p", { class: "hint" },
+    "This zip has its own roles by channel number (from an older project), which override the ticks above: " +
+    Object.entries(z.roles).map(([r, v]) => `${r.replace(/_/g, " ")} = Ch${[].concat(v).join(", Ch")}`).join("; ")));
   return card;
 }
 function copySetup(src) {
@@ -297,7 +323,7 @@ function copySetup(src) {
 // ---------- settings
 const FIELDS = [
   ["Cells", [
-    ["channels.marker_location", "Tumor / T-cell markers", "choice", "marker_locations"],
+    ["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"],
     ["channels.cell_of_interest", "Marker of interest in", "choice", "cells_of_interest"],
     ["input.max_events", "Only the first N events (empty = all)", "int", null, "all"]]],
   ["Segmentation (Cellpose)", [
@@ -346,8 +372,15 @@ function problems() {
   for (const z of state.zips) {
     if (z.info?.error) p.push(`${z.name}: ${z.info.error}`);
     if (!z.pixel_size) p.push(`${z.name}: choose the pixel size`);
-    const missing = Object.keys(ROLE_LABELS).filter(r => r && !(r in z.roles));
-    if (missing.length) p.push(`${z.name}: give a channel the role ${missing.map(r => ROLE_LABELS[r]).join(", ")}`);
+    if (Object.keys(z.roles || {}).length) continue;  // an old project: roles by number
+    const has = n => z.channel_names.includes(n);
+    for (const [r, , desc] of ROLES) {
+      const v = panel()[r];
+      const names = MULTI.has(r) ? (v || []) : (v == null || v === "" ? [] : [v]);
+      if (!names.length && REQUIRED.includes(r)) { p.push(`Tick a channel as ${desc.split(" (")[0].toLowerCase()} (step 2)`); continue; }
+      const missing = names.filter(n => typeof n === "string" && !has(n));
+      if (missing.length) p.push(`${z.name}: no channel named ${missing.map(n => `'${n}'`).join(", ")} (${desc.split(" (")[0].toLowerCase()})`);
+    }
   }
   if (state.zips.length && !state.zips.some(z => z.datasets.some(d => d.include))) p.push("Select at least one dataset");
   return p;
@@ -453,7 +486,7 @@ document.getElementById("theme").onclick = () => {
   defaults = s.defaults; choices = { marker_locations: s.marker_locations, cells_of_interest: s.cells_of_interest };
   if (s.theme) document.documentElement.dataset.theme = s.theme;
   if (s.project) loadProject(s.project);
-  else { state.settings = structuredClone(defaults); state.settings.membrane.analysis = false; renderAll(); }
+  else { state.settings = newSettings(); state.settings.membrane.analysis = false; renderAll(); }
 })();
 </script>
 </body>

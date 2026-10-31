@@ -105,7 +105,7 @@ def analyze_membranes(labels: np.ndarray, cells: pd.DataFrame, interface: np.nda
     """labels (T, Y, X); cells: the classification table; interface: (T, Y, X) interface mask of the class of
     interest; moi: (T, Y, X) raw marker of interest, `background` is subtracted."""
     rng = rng or np.random.default_rng()
-    wanted = "T cell" if cell_of_interest == CellOfInterest.T_CELL else "Tumor"
+    wanted = "Immune" if cell_of_interest == CellOfInterest.IMMUNE_CELL else "Tumor"
     roi = cells[cells["Cell type"] == wanted]
     width = settings.straightening_width
     objects = {t: ndi.find_objects(labels[t]) for t in np.unique(roi["frame"])}

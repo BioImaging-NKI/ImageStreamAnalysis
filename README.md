@@ -1,7 +1,7 @@
 # ImageStream Analysis (Python)
 
 Analysis of tumor–immune cell interactions in imaging flow cytometry (ImageStream) data: segmentation of the cells
-in every event image, classification into tumor cells and T cells, and quantification of the enrichment of a marker
+in every event image, classification into tumor cells and immune cells, and quantification of the enrichment of a marker
 of interest at the interface between the cells.
 
 This is the Python version of the Fiji macro

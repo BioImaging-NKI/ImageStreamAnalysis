@@ -27,7 +27,7 @@ def test_dashboard_is_written_with_data_and_image_sheets(synthetic):
     data = embedded_data(page.read_text(encoding="utf-8"))
     assert data["n_events"] == 10 and len(data["cells"]["type"]) == 20
     assert data["tile"] == [60, 60]
-    assert {c["role"] for c in data["channels"]} == {"brightfield", "marker_of_interest", "tumor", "t_cell"}
+    assert {c["role"] for c in data["channels"]} == {"brightfield", "marker_of_interest", "tumor", "immune"}
     for ch in data["channels"]:
         assert (result.out_dir / FILES / f"c{ch['number']}_0.webp").exists()
     outline = np.array(data["cells"]["outline"][0]).reshape(-1, 2) / 2

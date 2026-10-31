@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 SHEET_COLUMNS, SHEET_ROWS = 10, 10
 FILES = "dashboard_files"
-ROLE_LUTS = {"brightfield": "gray", "t_cell": "azure", "tumor": "green", "marker_of_interest": "magenta"}
+ROLE_LUTS = {"brightfield": "gray", "immune": "azure", "tumor": "green", "marker_of_interest": "magenta"}
 OTHER_LUTS = ["yellow", "red", "cyan", "orange"]
 
 
@@ -125,8 +125,12 @@ def _display_range(channel: np.ndarray, background: float, brightfield: bool) ->
 def write_sheets(result: Result, settings: Settings, folder: Path) -> list[dict[str, Any]]:
     """The image sheets of all loaded channels; returns their description for the page."""
     stack = result.stack
-    roles = {getattr(settings.channels, r): r for r in ROLE_LUTS}
-    numbers = stack.channel_numbers or list(range(1, stack.data.shape[1] + 1))
+    roles: dict[int, str] = {}  # a channel with two roles shows the first (marker of interest before functional)
+    for role, refs in settings.channels.roles().items():
+        for ref in refs:
+            roles.setdefault(stack.number(ref), role)
+    numbers = stack.numbers
+    luts_used: set[str] = set()
     t, _, h, w = stack.data.shape
     per_sheet = SHEET_COLUMNS * SHEET_ROWS
     channels = []
@@ -145,8 +149,12 @@ def write_sheets(result: Result, settings: Settings, folder: Path) -> list[dict[
                 sheet[r * h : (r + 1) * h, c * w : (c + 1) * w] = im
             rows_used = math.ceil(len(part) / SHEET_COLUMNS)
             jobs.append((sheet[: rows_used * h], folder / f"c{number}_{s}.webp"))
+        lut = ROLE_LUTS.get(role, "")
+        if not lut or lut in luts_used:  # a second immune marker gets a colour of its own
+            lut = next(others)
+        luts_used.add(lut)
         channels.append({"number": number, "name": name, "role": role,
-                         "lut": ROLE_LUTS.get(role) or next(others), "on": role != "",
+                         "lut": lut, "on": role in ROLE_LUTS,
                          "gain": 0.5 if role == "brightfield" else 1.0,  # brightfield under the fluorescence
                          "range": [round(lo, 2), round(hi, 2)]})
     with ThreadPoolExecutor(min(8, os.cpu_count() or 4)) as pool:  # Pillow encodes outside the GIL
@@ -160,10 +168,10 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
     cells = result.cells
     labels = result.labels
     ids = stack.object_ids
-    of_interest = "Tumor" if settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL else "T cell"
+    of_interest = "Tumor" if settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL else "Immune"
 
     outlines = cell_outlines(labels, cells["frame"].to_numpy(), cells["label"].to_numpy())
-    interface = result.masks.t_cell_interface | result.masks.tumor_interface
+    interface = result.masks.immune_interface | result.masks.tumor_interface
     interfaces = [_outlines_of_masks(interface[e]) if interface[e].any() else [] for e in range(t)]
 
     ev = result.events
@@ -180,16 +188,16 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "cell_of_interest": of_interest,
         "events": {
             "object": _column(ids) if ids is not None else None,
-            "t_cells": _column(ev["T cells"]), "tumor_cells": _column(ev["Tumor cells"]),
-            "t_interface": _column(ev["mean Tcell interface"]), "t_rest": _column(ev["mean Tcell NOT in interface"]),
+            "t_cells": _column(ev["Immune cells"]), "tumor_cells": _column(ev["Tumor cells"]),
+            "t_interface": _column(ev["mean immune interface"]), "t_rest": _column(ev["mean immune NOT in interface"]),
             "tu_interface": _column(ev["mean tumor interface"]), "tu_rest": _column(ev["mean tumor NOT in interface"]),
-            "t_ratio": _column(ev["T cell membrane ratio"]), "tu_ratio": _column(ev["Tumor membrane ratio"]),
+            "t_ratio": _column(ev["Immune membrane ratio"]), "tu_ratio": _column(ev["Tumor membrane ratio"]),
             "interfaces": interfaces,
         },
         "cells": {
             "event": _column(cells["frame"]), "label": _column(cells["label"]),
             "type": _column(cells["Cell type"]), "area": _column(cells["Area"]),
-            "t_int": _column(cells["T-cell intensity"]), "tu_int": _column(cells["Tumor intensity"]),
+            "t_int": _column(cells["Immune intensity"]), "tu_int": _column(cells["Tumor intensity"]),
             "ratio": _column(cells["Marker ratio"]), "outline": outlines,
         },
         "membranes": None,

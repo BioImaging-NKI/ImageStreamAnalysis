@@ -12,7 +12,7 @@ def settings_for(synthetic):
     s = Settings()
     s.input.image = synthetic["image"]
     s.input.output = synthetic["tmp"] / "out"
-    s.channels.marker_of_interest, s.channels.tumor, s.channels.t_cell = 2, 3, 4
+    s.channels.marker_of_interest, s.channels.tumor, s.channels.immune = 2, 3, [4]
     s.channels.cell_of_interest = CellOfInterest.TUMOR_CELL
     s.segmentation.method = "labelmap"
     s.segmentation.labelmap_file = synthetic["labelmap"]
@@ -119,13 +119,47 @@ def test_pipeline_on_synthetic_doublets(synthetic):
     tumor_labels = set(range(1, 21, 2))
     assert set(cells.loc[cells["Cell type"] == "Tumor", "label"]) == tumor_labels
     ev = result.events
-    assert (ev["T cells"] == 1).all() and (ev["Tumor cells"] == 1).all()
+    assert (ev["Immune cells"] == 1).all() and (ev["Tumor cells"] == 1).all()
     assert len(result.doublets) == 10
     assert (ev["Tumor membrane ratio"] > 1.5).all()  # enrichment at the interface
     out = result.out_dir
     for name in (CELL_TABLE, EVENT_TABLE, DOUBLETS_TABLE):
         assert (out / f"{name}.tsv").exists()
     table = pd.read_csv(out / f"{CELL_TABLE}.tsv", sep="\t")
-    assert list(table.columns[:7]) == ["index", "T-cell intensity", "Tumor intensity", "Marker ratio", "Area",
+    assert list(table.columns[:7]) == ["index", "Immune intensity", "Tumor intensity", "Marker ratio", "Area",
                                        "Marker ratio over Area", "Class"]
     assert (out / "settings.toml").exists() and (out / "run.json").exists()
+
+
+def test_old_settings_files_still_load(tmp_path):
+    path = tmp_path / "s.toml"
+    path.write_text("[channels]\nt_cell = 6\ncell_of_interest = 'T cell'\n", encoding="utf-8")
+    ch = Settings.load(path).channels
+    assert ch.immune == [6] and ch.cell_of_interest == CellOfInterest.IMMUNE_CELL
+    path.write_text("[channels]\nt_cell = 6\nimmune = [6]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not both"):
+        Settings.load(path)
+
+
+def test_channels_by_name_give_the_same_result(synthetic):
+    by_number = run(settings_for(synthetic)).cells
+    s = settings_for(synthetic)
+    s.channels.brightfield, s.channels.marker_of_interest, s.channels.tumor, s.channels.immune = (
+        "BF", "MOI", "Tumor", ["T cell"])
+    by_name = run(s)
+    assert by_name.cells.equals(by_number)
+    saved = Settings.load(by_name.out_dir / "settings.toml").channels  # saved with the numbers
+    assert (saved.brightfield, saved.tumor, saved.immune) == (1, 3, [4])
+    s.channels.tumor = "Tumour"
+    with pytest.raises(ValueError, match="'Tumour': no channel with this name"):
+        run(s)
+
+
+def test_several_immune_markers_are_summed(synthetic):
+    """With the tumor marker also counted as an immune marker, every cell has immune signal: the tumor cells now
+    have the larger immune intensity (their own tumor marker), as the sum of the normalized markers."""
+    s = settings_for(synthetic)
+    one = run(s).cells
+    s.channels.immune = [4, 3]
+    two = run(s).cells
+    assert np.allclose(two["Immune intensity"], one["Immune intensity"] + one["Tumor intensity"], rtol=1e-5)

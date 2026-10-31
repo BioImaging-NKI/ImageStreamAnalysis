@@ -1,5 +1,6 @@
 import json
 import threading
+import tomllib
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -9,11 +10,12 @@ import pytest
 
 from conftest import IDEAS_IDS
 from imagestream_analysis import gui
-from imagestream_analysis.config import CellOfInterest
+from imagestream_analysis.config import CellOfInterest, ChannelSettings
 from imagestream_analysis.pipeline import CELL_TABLE, EVENT_TABLE
 from imagestream_analysis.project import OVERVIEW_FILE, DatasetEntry, Project, ZipEntry, run_project
 
-ROLES = {"brightfield": 1, "marker_of_interest": 3, "t_cell": 6, "tumor": 9}
+OLD_ROLES = {"brightfield": 1, "marker_of_interest": 3, "t_cell": 6, "tumor": 9}  # projects before 2026-10-31
+NAMES = ["BF", "MOI's name", "T cells", "Tumor"]
 
 
 def make_project(ideas_zip, folder) -> Project:
@@ -23,9 +25,39 @@ def make_project(ideas_zip, folder) -> Project:
     p.settings.channels.cell_of_interest = CellOfInterest.TUMOR_CELL
     p.settings.membrane.thickness = 2
     p.settings.membrane.analysis = True
-    p.zips.append(ZipEntry(ideas_zip["zip"], 0.5, [1, 3, 6, 9], ["BF", "MOI's name", "T cells", "Tumor"], dict(ROLES),
+    ch = p.settings.channels  # the panel, by name
+    ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor = "BF", "MOI's name", ["T cells"], "Tumor"
+    p.zips.append(ZipEntry(ideas_zip["zip"], 0.5, [1, 3, 6, 9], list(NAMES), {},
                            [DatasetEntry("Sample A", "Experiment 1")]))
     return p
+
+
+def test_panel_by_name_gives_the_numbers_of_each_zip(ideas_zip):
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    # a second export of the same panel, with its channels numbered differently
+    p.zips.append(ZipEntry(ideas_zip["zip"], 0.5, [2, 4, 5, 8], ["Tumor", "BF", "MOI's name", "T cells"], {},
+                           [DatasetEntry("Sample A", "Experiment 2")]))
+    first, second = (p.channels_of(z) for z in p.zips)
+    assert (first.brightfield, first.marker_of_interest, first.immune, first.tumor) == (1, 3, [6], 9)
+    assert (second.brightfield, second.marker_of_interest, second.immune, second.tumor) == (4, 5, [8], 2)
+
+
+def test_old_projects_with_roles_per_zip(ideas_zip):
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    p.settings.channels = ChannelSettings()
+    p.zips[0].roles = dict(OLD_ROLES)
+    text = p.to_toml()
+    assert "t_cell = 6" in text
+    loaded = Project.from_dict(tomllib.loads(text), p.folder)  # all zips agree: a panel by name
+    ch = loaded.settings.channels
+    assert (ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor) == ("BF", "MOI's name", ["T cells"], "Tumor")
+    assert loaded.zips[0].roles == {} and loaded.problems() == []
+    # an unnamed role channel: the roles stay as numbers, and still work
+    data = tomllib.loads(text)
+    data["zip"][0]["channel_names"][0] = ""
+    loaded = Project.from_dict(data, p.folder)
+    assert loaded.zips[0].roles == {"brightfield": 1, "marker_of_interest": 3, "immune": [6], "tumor": 9}
+    assert loaded.channels_of(loaded.zips[0]).immune == [6]
 
 
 def test_project_round_trip(ideas_zip):
@@ -40,9 +72,14 @@ def test_problems(ideas_zip):
     p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
     assert p.problems() == []
     p.zips[0].pixel_size = None
-    del p.zips[0].roles["tumor"]
+    p.settings.channels.tumor = ""
+    p.settings.channels.functional = ["CD-missing"]
     msgs = p.problems()
-    assert any("pixel size" in m for m in msgs) and any("tumor" in m for m in msgs)
+    assert any("pixel size" in m for m in msgs) and any("no channel for the tumor" in m for m in msgs)
+    p.settings.channels.tumor = "Tumor"
+    assert any("'CD-missing'" in m for m in p.problems())
+    p.settings.channels.immune = []
+    assert "No immune-cell marker" in p.problems()
     p.zips[0].datasets[0].include = False
     assert "No datasets selected" in p.problems()
 
@@ -54,7 +91,7 @@ def test_run_project_writes_results_and_overview(ideas_zip):
     assert len(table) == 1
     row = table.iloc[0]
     assert row["experiment"] == "Experiment 1" and row["dataset"] == "Sample A"
-    assert row["cells"] == 20 and row["T cells"] == 10 and row["single tumor + single T cell"] == 10
+    assert row["cells"] == 20 and row["immune cells"] == 10 and row["single tumor + single immune cell"] == 10
     assert row["with interface"] == 10
     out = folder / "Experiment 1" / "Sample A"
     cells = pd.read_csv(out / f"{CELL_TABLE}.tsv", sep="\t")
@@ -117,7 +154,7 @@ def test_api_scan_save_and_overview(server, ideas_zip):
     project = gui.project_to_json(make_project(ideas_zip, folder))
     saved = call(server, "save", {"project": project})["result"]
     assert saved["problems"] == [] and (folder / "project.toml").exists()
-    assert Project.load(folder).zips[0].roles == ROLES
+    assert Project.load(folder).settings.channels.immune == ["T cells"]
     run_project(folder)
     o = call(server, "overview", {"folder": str(folder)})["result"]
     assert o["rows"][0]["cells"] == 20 and "experiment" in o["columns"]
