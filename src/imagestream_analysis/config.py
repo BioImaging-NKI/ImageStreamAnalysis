@@ -68,6 +68,8 @@ class SegmentationSettings:
     erosion: int = 1  # shrink the cells from the background with this many pixels
     min_cell_size: int = 100  # pixels (after erosion)
     max_cell_size: int = 10000
+    # cells cut by the edge of their event image are always flagged (column Edge); true = leave them out
+    exclude_edge_cells: bool = False
 
 
 @dataclass

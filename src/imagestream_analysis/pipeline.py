@@ -1,4 +1,7 @@
-"""The analysis of one sample, from the input stack to the output folder."""
+"""The analysis of one sample, from the input stack to the output folder, in two stages:
+
+1. measure: segmentation, clean-up and the per-cell measurements (`Measured`; the slow part);
+2. the rest: classification, interfaces, membranes and the output files (`Result`)."""
 
 from __future__ import annotations
 
@@ -7,6 +10,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -17,8 +21,9 @@ from .config import Settings
 from .dashboard import write_dashboard
 from .interfaces import InterfaceMasks, doublets, event_table, interface_masks
 from .io import EventStack, read_stack, save_stack, save_table
+from .measure import edge_labels, measure_cells
 from .membrane import INTERFACE_OFFSET, MembraneResult, analyze_membranes
-from .segmentation import clean_labels, markers, segment
+from .segmentation import clean_labels, markers, remove_labels, segment
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +33,16 @@ EVENT_TABLE = "All cell combinations"
 DOUBLETS_TABLE = "Single Tumor Single T cell"
 MEMBRANE_TABLE = "Membrane intensity analysis"
 AVERAGE_PROFILE = f"Average normalized membrane profile values - interfaces centered at {INTERFACE_OFFSET}"
+
+
+@dataclass
+class Measured:
+    """The first stage: the cleaned labels and the measured cells, before any classification."""
+
+    stack: EventStack
+    labels: np.ndarray  # (T, Y, X) cleaned labels 1..N
+    cells: pd.DataFrame  # measure.measure_cells
+    cellpose: dict[str, Any]  # Cellpose version, device and timing ({} when the labels were loaded)
 
 
 @dataclass
@@ -43,14 +58,28 @@ class Result:
     membranes: MembraneResult | None = None
 
 
-def analyze(stack: EventStack, settings: Settings, out_dir: Path) -> Result:
+def measure(stack: EventStack, settings: Settings, out_dir: Path) -> Measured:
     m = markers(stack, settings)
     raw, montage, info = segment(stack, m, settings)
     if montage is not None:  # as the macro: the Cellpose output, to reload later (segmentation.labelmap_file)
         save_stack(montage[None], out_dir / "labelmap_cells.tif", stack.pixel_size)
     seg = settings.segmentation
     labels = clean_labels(raw, seg.erosion, seg.min_cell_size, seg.max_cell_size)
-    cells = classify(labels, m.tumor, m.t_cell)
+    extents = stack.image_extents()
+    edge = edge_labels(labels, extents, seg.erosion)
+    if seg.exclude_edge_cells and edge.any():
+        log.info("%d of %d cells are cut by the edge of their event image: left out", edge.sum(), len(edge))
+        labels = remove_labels(labels, edge)
+        edge = edge_labels(labels, extents, seg.erosion)
+    else:
+        log.info("%d of %d cells are cut by the edge of their event image (column Edge)", edge.sum(), len(edge))
+    return Measured(stack, labels, measure_cells(labels, stack, m.tumor, m.t_cell, edge), info)
+
+
+def analyze(stack: EventStack, settings: Settings, out_dir: Path) -> Result:
+    measured = measure(stack, settings, out_dir)
+    labels = measured.labels
+    cells = classify(measured.cells)
     classes = class_map(labels, cells)
     masks = interface_masks(classes, settings.membrane.thickness)
     moi = stack.channel(settings.channels.marker_of_interest)
@@ -61,7 +90,7 @@ def analyze(stack: EventStack, settings: Settings, out_dir: Path) -> Result:
         interface = masks.t_cell_interface if ch.cell_of_interest == "T cell" else masks.tumor_interface
         result.membranes = analyze_membranes(labels, cells, interface, moi, stack.median(ch.marker_of_interest),
                                              ch.cell_of_interest, settings.membrane)
-    result.cells.attrs["cellpose"] = info
+    result.cells.attrs["cellpose"] = measured.cellpose
     return result
 
 

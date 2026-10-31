@@ -33,6 +33,7 @@ class EventStack:
     n_events_in_file: int
     channel_numbers: list[int] | None = None  # number of each channel in data; None = 1..C
     object_ids: np.ndarray | None = None  # IDEAS object number of each event; None = unknown (Combiner stacks)
+    extents: np.ndarray | None = None  # (T, 4) y0, x0, y1, x1 of each event's own image; None = see image_extents
 
     @property
     def n_events(self) -> int:
@@ -50,6 +51,29 @@ class EventStack:
 
     def median(self, c: int) -> float:
         return self.medians[self.index(c)] if self.medians else 0.0
+
+    def image_extents(self) -> np.ndarray:
+        """(T, 4): y0, x0, y1, x1 of each event's own image in the frame; the rest is padding with the background
+        (ImageStreamCombiner and the IDEAS reader centre every image in the size of the largest one).
+
+        Known when read from an IDEAS zip. For a stack, the padding is found as the outer rows and columns that hold
+        exactly the background value in every channel; without medians the whole frame is taken."""
+        if self.extents is not None:
+            return self.extents
+        t, n_c, h, w = self.data.shape
+        out = np.tile(np.array([0, 0, h, w], dtype=np.int64), (t, 1))
+        if not self.medians:
+            return out
+        real = np.zeros((t, h, w), dtype=bool)
+        for i, m in enumerate(self.medians):
+            fill = np.round(m) if self.data.dtype.kind in "ui" else m
+            real |= self.data[:, i] != np.asarray(fill).astype(self.data.dtype)
+        rows, cols = real.any(axis=2), real.any(axis=1)
+        for k in range(t):
+            ys, xs = np.flatnonzero(rows[k]), np.flatnonzero(cols[k])
+            if len(ys) and len(xs):
+                out[k] = ys[0], xs[0], ys[-1] + 1, xs[-1] + 1
+        return out
 
 
 def parse_medians(properties: dict[str, Any] | None, n_channels: int) -> list[float] | None:

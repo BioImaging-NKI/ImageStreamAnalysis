@@ -85,7 +85,21 @@ difference.
 
 Cell order: by event, then label. In Fiji the order within an event is **not deterministic** (issue I1).
 
+**Cells cut by the edge of their event image (new, 2026-10-31)** ✅
+
+Each event's own image is smaller than the frame when it was padded (by ImageStreamCombiner or the IDEAS reader) to
+the size of the largest event. Its extent (`EventStack.image_extents`) is known when read from an IDEAS zip; in a
+Combiner stack it is found as the outer rows and columns that hold exactly the background value in every channel
+(on the test data the same sizes as the zip gives). A cell within `erosion` pixels of the edge of its event's image
+(it touched the edge before the cells were shrunk) gets `Edge` = 1. `segmentation.exclude_edge_cells` (default off)
+leaves them out, before the classification, with the gaps in the label numbers closed.
+
 ## 5. Per-cell measurements and classification (lines 329-507) ✅
+
+The port runs in two stages (`pipeline.measure`, then the rest of `pipeline.analyze`): segmentation, clean-up and
+per-cell measurements (`measure.measure_cells`) first, the classification and everything after it on the measured
+table. New measurements, as in ClassifyCellTypes 2.8: `Area (µm²)`, `Edge`, and `Mean ch<N> (<name>)` for every
+loaded channel: the mean of the stored values minus the channel's background (median), not normalized.
 
 - `Area` = pixel count; `T-cell intensity`, `Tumor intensity` = mean of the **normalized** marker channels.
 - `Marker ratio` = T-cell / tumor intensity; `Marker ratio over Area` = ratio / area.
@@ -213,6 +227,24 @@ from the import page (served from the project folder, token-protected). No exter
   a legend and the values are in the tables.
 - Cost on the full test dataset: about 6 s; outlines are traced on each cell's bounding box.
 
+## Merging ClassifyCellTypes 2.8 (planned, decided 2026-10-31)
+
+The later macro `ClassifyCellTypes_2_8.ijm` (same upstream repository) classifies several immune subtypes and
+records which cells touch; it has no membrane analysis. It is merged into this port so that v1.8 is the special case
+"one immune marker, no functional markers". Neither macro is mimicked exactly where they differ.
+
+**Classification in two steps, as 2.8 (decision 2026-10-31).** First the lineage: tumor against immune cells
+(k-means, 2 clusters, as now); then the immune subtypes, by a threshold per functional marker, computed on the immune
+cells only (2.8 thresholds on all cells). Not one clustering of all cells into k types, because:
+- k-means favours clusters of similar size and spread, so small subtypes are absorbed by large ones;
+- k would have to be chosen, and the clusters named afterwards (the "lowest marker ratio" rule does not generalize);
+- a threshold per marker can be read, checked on a histogram and changed in the dashboard, and the combinations of
+  positive markers name the subtypes directly;
+- a functional marker may also be expressed by tumor cells; thresholding it within the immune cells keeps those out.
+
+Detections that are positive in too many marker channels are not cells ("Artefact"; 2.8's unfinished "crap" class):
+flagged on thresholds over all cells, before the k-means, which then runs without them.
+
 ## 11. Settings and outputs
 
 The macro saves part of its parameters in `settings.txt` (lines 85-113): `CellposeModel`,
@@ -231,6 +263,7 @@ Settings file ↔ macro parameters:
 | `CellposeModel`, `cellDiameter` | `segmentation.model`, `segmentation.diameter` |
 | `bool_loadLabelmap`, `labelmapFile` | `segmentation.method = "labelmap"`, `segmentation.labelmap_file` |
 | `erosionSteps`, `minCellSize`, `maxCellSize` | `segmentation.erosion`, `.min_cell_size`, `.max_cell_size` |
+| (new) | `segmentation.exclude_edge_cells` |
 | `CellposeFlowThreshold` (constant) | `segmentation.flow_threshold` |
 | `membraneThickness`, `membraneThicknessForStraightening` | `membrane.thickness`, `membrane.straightening_width` |
 | `maxHistValue`, `binWidth` | `membrane.max_histogram_value`, `membrane.histogram_bin_width` |

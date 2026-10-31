@@ -1,4 +1,4 @@
-"""Per-cell measurements and the tumor / T-cell classification (macro lines 325-507)."""
+"""The tumor / T-cell classification of the measured cells (macro lines 371-507)."""
 
 from __future__ import annotations
 
@@ -6,37 +6,12 @@ import logging
 
 import numpy as np
 import pandas as pd
-from scipy import ndimage as ndi
 from sklearn.cluster import KMeans
 
 log = logging.getLogger(__name__)
 T_CELL, TUMOR = 1, 2  # values in the class map (macro: changeValues(..., 1) for T cells, 2 for tumor cells)
 N_CLUSTERS = 2
 KMEANS_SEED = 48  # the macro's randomization_seed (the clustering itself is not bit-identical, see SPEC)
-
-
-def cell_table(labels: np.ndarray, tumor: np.ndarray, t_cell: np.ndarray) -> pd.DataFrame:
-    """One row per cell, ordered by event and then label (the order of the macro's ROI Manager).
-
-    labels: (T, Y, X) cleaned labels 1..N; tumor, t_cell: normalized marker channels (T, Y, X)."""
-    n = int(labels.max(initial=0))
-    index = np.arange(1, n + 1)
-    area = ndi.sum_labels(np.ones_like(labels, dtype=np.int64), labels, index)
-    t_int = ndi.mean(t_cell, labels, index)
-    tu_int = ndi.mean(tumor, labels, index)
-    frame_of = np.full(n + 1, -1, dtype=np.int64)
-    present = labels.reshape(labels.shape[0], -1)
-    for t in range(labels.shape[0]):  # first event in which each label occurs
-        vals = np.unique(present[t])
-        vals = vals[(vals > 0) & (frame_of[vals] < 0)]
-        frame_of[vals] = t
-    df = pd.DataFrame({"label": index, "frame": frame_of[1:], "T-cell intensity": t_int,
-                       "Tumor intensity": tu_int, "Area": area.astype(np.int64)})
-    df = df.sort_values(["frame", "label"], kind="stable").reset_index(drop=True)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        df["Marker ratio"] = df["T-cell intensity"] / df["Tumor intensity"]
-        df["Marker ratio over Area"] = df["Marker ratio"] / df["Area"]
-    return df
 
 
 def kmeans_classes(df: pd.DataFrame, seed: int = KMEANS_SEED) -> np.ndarray:
@@ -58,10 +33,10 @@ def assign_cell_types(df: pd.DataFrame, clusters: np.ndarray) -> pd.Series:
     return pd.Series(np.where(clusters == tumor_cluster, "Tumor", "T cell"), index=df.index)
 
 
-def classify(labels: np.ndarray, tumor: np.ndarray, t_cell: np.ndarray) -> pd.DataFrame:
-    """The 'Cell classification' table. Class: 1 = T cell, 0 = tumor cell (in the macro the numbers are the
-    arbitrary k-means cluster numbers)."""
-    df = cell_table(labels, tumor, t_cell)
+def classify(measured: pd.DataFrame) -> pd.DataFrame:
+    """The measured cells (measure.measure_cells) with 'Cell type' and 'Class': 1 = T cell, 0 = tumor cell (in the
+    macro the numbers are the arbitrary k-means cluster numbers)."""
+    df = measured.copy()
     if len(df) < N_CLUSTERS:
         raise ValueError(f"Only {len(df)} cells: too few to classify")
     df["Cell type"] = assign_cell_types(df, kmeans_classes(df))
@@ -79,8 +54,10 @@ def class_map(labels: np.ndarray, cells: pd.DataFrame) -> np.ndarray:
 
 
 def classification_output(cells: pd.DataFrame) -> pd.DataFrame:
-    """The table as the macro writes it, plus the event, label and cell type."""
+    """The table as the macro writes it, plus the event, label and cell type, and the measurements that are new
+    in the port (area in µm², edge, the mean of every loaded channel)."""
     out = cells[["T-cell intensity", "Tumor intensity", "Marker ratio", "Area", "Marker ratio over Area", "Class"]]
     out.insert(0, "index", np.arange(len(cells)))
     out = out.assign(Frame=cells["frame"] + 1, Label=cells["label"], **{"Cell type": cells["Cell type"]})
-    return out
+    extra = ["Area (µm²)", "Edge"] + [c for c in cells.columns if c.startswith("Mean ch")]
+    return pd.concat([out, cells[extra].assign(Edge=cells["Edge"].astype(int))], axis=1)

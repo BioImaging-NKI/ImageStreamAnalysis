@@ -100,12 +100,16 @@ def read_dataset(path: str | Path, dataset: str, channels: list[int], names: lis
     shape = (max(im[0].shape[0] for im in images), max(im[0].shape[1] for im in images))
     dtype = images[0][0].dtype
     data = np.empty((len(objects), len(channels), *shape), dtype=dtype)
+    extents = np.empty((len(objects), 4), dtype=np.int64)
     for t, cell in enumerate(images):
+        h, w = cell[0].shape
+        y, x = (shape[0] - h) // 2, (shape[1] - w) // 2  # as _pad
+        extents[t] = y, x, y + h, x + w
         for i, im in enumerate(cell):
             data[t, i] = _pad(im, shape, round(medians[i]) if dtype.kind in "ui" else medians[i])
     names = names or [f"Ch{c}" for c in channels]
     return EventStack(data, list(names), medians, pixel_size, dataset, n_total, list(channels),
-                      np.array(objects, dtype=np.int64))
+                      np.array(objects, dtype=np.int64), extents)
 
 
 def _png_url(image: np.ndarray) -> str:

@@ -36,7 +36,8 @@ A local guard backs this up:
   - `imagej.py`: exact re-implementations of the ImageJ/CLIJ2 operations (Otsu on float, RankFilters variance, cross erode/dilate, close index gaps).
   - `segmentation.py`: marker normalization, Cellpose input montage, Cellpose subprocess, label clean-up.
   - `_cellpose_runner.py`: a standalone script that must **not** import the package; it handles Cellpose 3 and 4.
-  - `classification.py`: cell table, k-means, tumor/T-cell assignment, class map.
+  - `measure.py`: the first stage: the per-cell measurements (normalized markers, every loaded channel minus its background, area in µm²) and cells cut by the edge of their event image.
+  - `classification.py`: k-means on the measured cells, tumor/T-cell assignment, class map.
   - `interfaces.py`: membrane and interface masks, the per-event table, doublets.
   - `membrane.py`: the optional membrane analysis (`membrane.analysis`): outline, straighten, profiles, unseeded bootstrap control, aligned average, histograms.
   - `pipeline.py`: `load(settings)` reads an IDEAS zip or a Combiner `.tif`; `run(settings)` writes the output folder.
@@ -131,6 +132,20 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **Pooling** of the classification across datasets: left to Claude's judgement.
 - **Cellpose montage: a grid** (as already decided for 1.8).
 - Storing and reusing settings, and several inputs per run, are part of the design.
+- The IDEAS exports are compensated (as far as the user knows), and dead cells are already removed in IDEAS. A
+  viability-marker role may come later: keep room for it.
+- Flag (and optionally exclude) cells cut by the edge of the event image.
+- At most 8 cell types (the 8 categorical palette slots); artefacts in grey.
+- The poster is left as it is for now.
+- A user manual (MkDocs, as FAST-HIPPOS) will be started once the new settings have settled.
+- **Classification stays in two steps** (lineage, then immune subtypes), as in 2.8; see SPEC.md.
+
+### Git
+
+The history of the first machine is not here (2026-10-31): the repository was started again with a snapshot commit
+of the same files. To join the two later: fetch the old repository as a remote and
+`git rebase --onto <old main> <snapshot commit> main` (the snapshot's tree equals the old tip, plus `.gitignore` and
+`.python-version`).
 
 ## General environment
 

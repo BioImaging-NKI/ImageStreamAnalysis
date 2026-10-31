@@ -140,3 +140,9 @@ def clean_labels(labels: np.ndarray, erosion: int, min_size: int, max_size: int)
     keep[0] = False
     eroded = np.where(keep[eroded], eroded, 0)
     return imagej.close_index_gaps(eroded)
+
+
+def remove_labels(labels: np.ndarray, remove: np.ndarray) -> np.ndarray:
+    """Remove the labels for which remove[label - 1] is True and close the index gaps."""
+    drop = np.concatenate([[False], remove.astype(bool)])
+    return imagej.close_index_gaps(np.where(drop[labels], 0, labels))
