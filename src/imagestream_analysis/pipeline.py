@@ -1,7 +1,8 @@
-"""The analysis of one sample, from the input stack to the output folder, in two stages:
+"""The analysis of one sample, from the input stack to the output folder, in three stages:
 
 1. measure: segmentation, clean-up and the per-cell measurements (`Measured`; the slow part);
-2. the rest: classification, interfaces, membranes and the output files (`Result`)."""
+2. classify: on its own (`run`), or together with the other datasets of a pool (project.run_project);
+3. finish: interfaces, membranes and the output files (`Result`)."""
 
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ CELL_TABLE = "Cell classification"
 EVENT_TABLE = "All cell combinations"
 DOUBLETS_TABLE = "Single Tumor Single Immune cell"  # macro v1.8: ... Single T cell
 MEMBRANE_TABLE = "Membrane intensity analysis"
+THRESHOLDS_TABLE = "Marker thresholds"
 AVERAGE_PROFILE = f"Average normalized membrane profile values - interfaces centered at {INTERFACE_OFFSET}"
 
 
@@ -49,8 +51,9 @@ class Measured:
 class Result:
     stack: EventStack
     labels: np.ndarray  # (T, Y, X) cleaned labels
-    classes: np.ndarray  # (T, Y, X) 1 = immune cell, 2 = tumor cell
+    classes: np.ndarray  # (T, Y, X) 1 = immune cell, 2 = tumor cell, 3 = artefact
     cells: pd.DataFrame
+    thresholds: pd.DataFrame  # the marker thresholds (of the pool)
     events: pd.DataFrame
     doublets: pd.DataFrame
     masks: InterfaceMasks
@@ -77,14 +80,21 @@ def measure(stack: EventStack, settings: Settings, out_dir: Path) -> Measured:
 
 
 def analyze(stack: EventStack, settings: Settings, out_dir: Path) -> Result:
+    """All stages for one dataset on its own."""
     measured = measure(stack, settings, out_dir)
-    labels = measured.labels
-    cells = classify(measured.cells)
+    cells, thresholds = classify(measured.cells, settings.channels, settings.classification)
+    return finish(measured, cells, thresholds, settings, out_dir)
+
+
+def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, settings: Settings,
+           out_dir: Path) -> Result:
+    """The interfaces and membranes of the classified cells."""
+    stack, labels = measured.stack, measured.labels
     classes = class_map(labels, cells)
     masks = interface_masks(classes, settings.membrane.thickness)
     moi = stack.channel(settings.channels.marker_of_interest)
     events = event_table(cells, stack.n_events, masks, moi)
-    result = Result(stack, labels, classes, cells, events, doublets(events), masks, out_dir)
+    result = Result(stack, labels, classes, cells, thresholds, events, doublets(events), masks, out_dir)
     ch = settings.channels
     if settings.membrane.analysis:
         immune = ch.cell_of_interest == CellOfInterest.IMMUNE_CELL
@@ -106,6 +116,7 @@ def save(result: Result, settings: Settings) -> None:
     out = result.out_dir
     ids = result.stack.object_ids
     save_table(_with_object_ids(classification_output(result.cells), ids), out / f"{CELL_TABLE}.tsv")
+    save_table(result.thresholds, out / f"{THRESHOLDS_TABLE}.tsv")
     save_table(_with_object_ids(result.events, ids), out / f"{EVENT_TABLE}.tsv")
     d = _with_object_ids(result.doublets, ids)
     d.insert(0, " ", np.arange(len(d)))  # the macro shows the row numbers in this table
@@ -155,7 +166,8 @@ def load(settings: Settings) -> EventStack:
     return ideas.read_dataset(path, dataset, channels, names, inp.pixel_size, inp.max_events)
 
 
-def run(settings: Settings) -> Result:
+def start(settings: Settings) -> tuple[EventStack, Path]:
+    """Load the input, make the output folder, start its log and save the settings."""
     stack = load(settings)
     out = Path(settings.input.output) / stack.name
     out.mkdir(parents=True, exist_ok=True)
@@ -164,28 +176,44 @@ def run(settings: Settings) -> Result:
              stack.name, stack.n_events, stack.n_events_in_file, len(stack.channel_names), stack.channel_names,
              stack.pixel_size)
     (out / "settings.toml").write_text(settings.to_toml(), encoding="utf-8")
+    return stack, out
+
+
+def run(settings: Settings) -> Result:
+    """One dataset, classified on its own."""
+    stack, out = start(settings)
     t0 = time.perf_counter()
     result = analyze(stack, settings, out)
     save(result, settings)
-    run_info = {"version": __version__, "input": str(settings.input.image), "events": stack.n_events,
-                "cells": len(result.cells), "doublets": len(result.doublets),
-                "membranes": None if result.membranes is None else {
-                    "cells": len(result.membranes.table), "with_interface": int(result.membranes.has_interface.sum()),
-                    "control_window_px": result.membranes.window},
-                "cellpose": result.cells.attrs.get("cellpose", {}), "seconds": round(time.perf_counter() - t0, 1)}
-    (out / "run.json").write_text(json.dumps(run_info, indent=2), encoding="utf-8")
-    log.info("Done in %.1f s: %d cells, %d single tumor + single immune cell events", run_info["seconds"],
-             len(result.cells), len(result.doublets))
+    write_run_info(result, settings, time.perf_counter() - t0)
     return result
 
 
-def _setup_logging(path: Path) -> None:
+def write_run_info(result: Result, settings: Settings, seconds: float, pooled_with: int = 0) -> None:
+    cells = result.cells
+    types = cells["Cell type"].value_counts()
+    run_info = {"version": __version__, "input": str(settings.input.image), "events": result.stack.n_events,
+                "cells": len(cells), "immune cells": int(types.get("Immune", 0)),
+                "tumor cells": int(types.get("Tumor", 0)), "artefacts": int(types.get("Artefact", 0)),
+                "subtypes": {k: int(v) for k, v in cells.loc[cells["Subtype"] != "", "Subtype"].value_counts().items()},
+                "classified with": f"{pooled_with} other dataset(s)" if pooled_with else "this dataset only",
+                "doublets": len(result.doublets),
+                "membranes": None if result.membranes is None else {
+                    "cells": len(result.membranes.table), "with_interface": int(result.membranes.has_interface.sum()),
+                    "control_window_px": result.membranes.window},
+                "cellpose": cells.attrs.get("cellpose", {}), "seconds": round(seconds, 1)}
+    (result.out_dir / "run.json").write_text(json.dumps(run_info, indent=2), encoding="utf-8")
+    log.info("Done in %.1f s: %d cells, %d single tumor + single immune cell events", run_info["seconds"],
+             len(cells), len(result.doublets))
+
+
+def _setup_logging(path: Path, append: bool = False) -> None:
     root = logging.getLogger()
     for h in list(root.handlers):
         if isinstance(h, logging.FileHandler):
             root.removeHandler(h)
             h.close()
-    handler = logging.FileHandler(path, mode="w", encoding="utf-8")
+    handler = logging.FileHandler(path, mode="a" if append else "w", encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root.addHandler(handler)
     root.setLevel(logging.INFO)

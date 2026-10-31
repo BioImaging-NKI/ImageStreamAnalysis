@@ -242,7 +242,7 @@ from the import page (served from the project folder, token-protected). No exter
   a legend and the values are in the tables.
 - Cost on the full test dataset: about 6 s; outlines are traced on each cell's bounding box.
 
-## Merging ClassifyCellTypes 2.8 (planned, decided 2026-10-31)
+## Merging ClassifyCellTypes 2.8 (decided 2026-10-31; classification built, interactions not yet)
 
 The later macro `ClassifyCellTypes_2_8.ijm` (same upstream repository) classifies several immune subtypes and
 records which cells touch; it has no membrane analysis. It is merged into this port so that v1.8 is the special case
@@ -260,6 +260,36 @@ cells only (2.8 thresholds on all cells). Not one clustering of all cells into k
 Detections that are positive in too many marker channels are not cells ("Artefact"; 2.8's unfinished "crap" class):
 flagged on thresholds over all cells, before the k-means, which then runs without them.
 
+**As built (`classification.py`, 2026-10-31) ✅ (synthetic tests; thresholds equal Fiji)**
+
+1. *Thresholds* (2.8, lines 929-1000): per functional marker, on log(v − min + 1) of the background-subtracted
+   cell means (`Mean ch<N>`), with ImageJ's auto-threshold on the 8-bit histogram, as for the Otsu normalization:
+   `classification.threshold_method` "MaxEntropy" (2.8's choice) or "Otsu"; back-transformed, exp(t) − 1 + min.
+   Positive: v > threshold. MaxEntropy is transcribed from ImageJ's AutoThresholder (Kapur, Sahoo and Wong);
+   verified against Fiji: equal to 1e-11 on 12 log-normal mixtures, and a fixed case is in the tests. A threshold
+   can be set by hand per marker name (`classification.thresholds`). MaxEntropy cuts in the upper tail of the
+   negative population, so it calls a few negative cells positive.
+2. *Artefacts*: a detection positive in at least `classification.artefact_min_positive` functional markers, with
+   the thresholds over **all** detections (0 = no artefacts, the default). Cell type `Artefact`, Class 2, class map 3;
+   not counted as tumor or immune cells, not part of the interfaces. Only the functional markers count: on the test
+   data an automatic threshold of the tumor or immune marker over all detections calls far more cells positive than
+   the k-means finds (so the lineage markers are not thresholded at all). 2.8 had: positive in all functional
+   markers (`removeBadDetections`, switched off, and it read the positives before they were computed).
+3. *Lineage*: the k-means of v1.8 on the other detections (features and the tumor-cluster rule unchanged). 2.8
+   clustered on the sum of the phenotypic markers, the tumor marker, optionally the functional markers (added
+   unnormalized: a mistake, line 650) and area, and picked the tumor cluster by the sum of the ratio; not taken over.
+4. *Subtypes*: the thresholds of step 1 again, now computed on the **immune cells** only; columns `<marker>+` (0/1)
+   and `Subtype` of the immune cells: the positive markers ("A+ B+"), or "negative". `Positive markers` holds the
+   count of step 2.
+5. *Pools* (`classification.pool`, projects only): "experiment" (default) classifies the cells of all datasets with
+   the same experiment label together: one set of thresholds and one clustering, so subtypes compare between
+   datasets. The markers are matched by role and position, so the datasets may number their channels differently.
+   `run_project` then measures every dataset first, classifies each experiment, and finishes every dataset (the
+   images are read again; the log continues). "dataset": each on its own, as `run`.
+6. Outputs: `Marker thresholds.tsv` (marker, role, cells it was computed on, method, threshold, positive, of);
+   `run.json` and the overview count artefacts and subtypes and say what a dataset was classified with. The
+   dashboard draws artefacts in grey and shows the subtype (the colours per subtype come with the dashboard work).
+
 ## 11. Settings and outputs
 
 The macro saves part of its parameters in `settings.txt` (lines 85-113): `CellposeModel`,
@@ -275,7 +305,10 @@ Settings file ↔ macro parameters:
 | `inputImageStack`, `output` | `input.image`, `input.output` (results in `<output>/<image stem>/`) |
 | `bool_limitNrCells`, `limitNrCells` | `input.max_events` |
 | `ch_BF`, `ch_MOI`, `ch_tumor`, `ch_Tcell` | `channels.brightfield`, `.marker_of_interest`, `.tumor`, `.immune` (a list; number or name) |
-| (2.8: phenotypic, functional immune channels) | `channels.immune`, `channels.functional` (classification not built yet) |
+| (2.8: phenotypic, functional immune channels) | `channels.immune`, `channels.functional` |
+| (2.8: `thresholdingMethod` automatic / manual) | `classification.threshold_method`, `classification.thresholds` |
+| (2.8: `removeBadDetections`, constant) | `classification.artefact_min_positive` |
+| (2.8: several input stacks, concatenated) | a project with `classification.pool = "experiment"` |
 | `markerLoc`, `CellOfInterest` | `channels.marker_location`, `channels.cell_of_interest` |
 | `CellposeModel`, `cellDiameter` | `segmentation.model`, `segmentation.diameter` |
 | `bool_loadLabelmap`, `labelmapFile` | `segmentation.method = "labelmap"`, `segmentation.labelmap_file` |

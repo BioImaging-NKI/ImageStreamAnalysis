@@ -196,7 +196,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         },
         "cells": {
             "event": _column(cells["frame"]), "label": _column(cells["label"]),
-            "type": _column(cells["Cell type"]), "area": _column(cells["Area"]),
+            "type": _column(cells["Cell type"]), "subtype": _column(cells["Subtype"]), "area": _column(cells["Area"]),
             "t_int": _column(cells["Immune intensity"]), "tu_int": _column(cells["Tumor intensity"]),
             "ratio": _column(cells["Marker ratio"]), "outline": outlines,
         },

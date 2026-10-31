@@ -124,6 +124,26 @@ class SegmentationSettings:
     exclude_edge_cells: bool = False
 
 
+class Pool(StrEnum):
+    EXPERIMENT = "experiment"  # the datasets of one experiment (project) are classified together
+    DATASET = "dataset"
+
+
+@dataclass
+class ClassificationSettings:
+    # Thresholds of the functional markers: on log(intensity - min + 1) of the background-subtracted cell means (as
+    # ClassifyCellTypes 2.8), with an ImageJ auto-threshold method: "MaxEntropy" (2.8) or "Otsu"
+    threshold_method: str = "MaxEntropy"
+    # a threshold set by hand: marker name -> background-subtracted intensity; overrides the automatic one
+    thresholds: dict[str, float] = field(default_factory=dict)
+    # a detection positive in at least this many functional markers (thresholded on all detections) is not a cell
+    # but an artefact; it is left out of the tumor / immune clustering. 0 = no artefacts
+    artefact_min_positive: int = 0
+    # in a project: classify the datasets of each experiment together (one set of thresholds, comparable
+    # subtypes), or each dataset on its own
+    pool: Pool = Pool.EXPERIMENT
+
+
 @dataclass
 class MembraneSettings:
     # straightened membrane profiles of the cells of interest and the enrichment at the interface (optional: not
@@ -142,6 +162,7 @@ class Settings:
     input: InputSettings = field(default_factory=InputSettings)
     channels: ChannelSettings = field(default_factory=ChannelSettings)
     segmentation: SegmentationSettings = field(default_factory=SegmentationSettings)
+    classification: ClassificationSettings = field(default_factory=ClassificationSettings)
     membrane: MembraneSettings = field(default_factory=MembraneSettings)
 
     @classmethod
@@ -191,6 +212,8 @@ def _toml_value(v: Any) -> str:
         return repr(v)
     if isinstance(v, list):
         return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    if isinstance(v, dict):  # an inline table with quoted keys
+        return "{ " + ", ".join(f"{_toml_value(str(k))} = {_toml_value(x)}" for k, x in v.items()) + " }"
     text = str(v)
     if "'" in text or "\n" in text:  # a literal string cannot hold these: basic string with escapes
         return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'

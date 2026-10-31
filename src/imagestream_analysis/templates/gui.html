@@ -334,7 +334,12 @@ const FIELDS = [
     ["segmentation.erosion", "Shrink cells (px)", "int"],
     ["segmentation.min_cell_size", "Min. cell size (px)", "int"],
     ["segmentation.max_cell_size", "Max. cell size (px)", "int"],
-    ["segmentation.use_gpu", "Use the GPU", "bool"]]],
+    ["segmentation.use_gpu", "Use the GPU", "bool"],
+    ["segmentation.exclude_edge_cells", "Leave out cells cut by the image edge", "bool"]]],
+  ["Classification", [
+    ["classification.pool", "Classify together (one set of thresholds)", "choice", "pools"],
+    ["classification.threshold_method", "Threshold of the subtype markers", "choice", "threshold_methods"],
+    ["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int"]]],
   ["Membranes", [
     ["membrane.thickness", "Membrane / interface width (px)", "int"],
     ["membrane.analysis", "Membrane profiles and enrichment", "bool"],

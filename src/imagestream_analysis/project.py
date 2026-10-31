@@ -40,7 +40,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .config import CellOfInterest, ChannelSettings, Settings, _from_dict, _toml_value
+from .config import CellOfInterest, ChannelSettings, Pool, Settings, _from_dict, _toml_value
 from .io import save_table
 
 log = logging.getLogger(__name__)
@@ -200,10 +200,13 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
         "cells": int(len(cells)),
         "immune cells": int((cells["Cell type"] == "Immune").sum()),
         "tumor cells": int((cells["Cell type"] == "Tumor").sum()),
+        "artefacts": int((cells["Cell type"] == "Artefact").sum()),
         "single tumor + single immune cell": int(len(d)),
         "doublet fraction": round(len(d) / len(events), 4) if len(events) else None,
         f"median {side} (doublets)": _median(d[side]) if len(d) else None,
     }
+    for subtype, count in cells.loc[cells["Subtype"] != "", "Subtype"].value_counts().items():
+        row[f"immune {subtype}"] = int(count)
     mem = result.membranes
     if mem is not None:
         t = mem.table
@@ -223,27 +226,100 @@ def _median(values: pd.Series) -> float | None:
 
 
 def run_project(path: str | Path) -> pd.DataFrame:
-    """Analyse all included datasets; a failing dataset is logged and skipped. Writes the overview."""
-    from .pipeline import run  # scikit-learn and friends: only when running
+    """Analyse all included datasets; a failing dataset is logged and skipped. Writes the overview.
 
+    classification.pool = "experiment": all datasets are measured first, then the cells of each experiment are
+    classified together (one set of thresholds, one clustering), then every dataset is finished. "dataset": each
+    dataset is analysed on its own."""
     project = Project.load(path)
     problems = project.problems()
     if problems:
         raise ValueError("The project is not ready:\n- " + "\n- ".join(problems))
     samples = project.samples()
+    if project.settings.classification.pool == Pool.DATASET:
+        _run_each(samples)
+    else:
+        _run_pooled(samples)
+    print(f"ISA_PROGRESS {len(samples)}/{len(samples)} done", flush=True)
+    return write_overview(project.folder)
+
+
+Sample = tuple["ZipEntry", "DatasetEntry", Settings]
+
+
+def _label(z: ZipEntry, d: DatasetEntry) -> str:
+    return f"{d.experiment or Path(z.path).stem} / {d.name}"
+
+
+def _failed(z: ZipEntry, d: DatasetEntry, settings: Settings, e: Exception) -> None:
+    log.exception("%s / %s failed: %s", Path(z.path).name, d.name, e)
+    _write_info(Path(settings.input.output) / d.name, {"error": str(e)}, z, d)
+
+
+def _run_each(samples: list[Sample]) -> None:
+    from .pipeline import run  # scikit-learn and friends: only when running
+
     for i, (z, d, settings) in enumerate(samples, start=1):
-        print(f"ISA_PROGRESS {i}/{len(samples)} {d.experiment or Path(z.path).stem} / {d.name}", flush=True)
+        print(f"ISA_PROGRESS {i - 1}/{len(samples)} {_label(z, d)}", flush=True)
         t0 = time.perf_counter()
         try:
             result = run(settings)
         except Exception as e:  # noqa: BLE001 - one bad dataset must not stop the others
-            log.exception("%s / %s failed: %s", Path(z.path).name, d.name, e)
-            _write_info(Path(settings.input.output) / d.name, {"error": str(e)}, z, d)
+            _failed(z, d, settings, e)
             continue
-        info = summarize(result, settings) | {"seconds": round(time.perf_counter() - t0, 1)}
-        _write_info(result.out_dir, info, z, d)
-    print(f"ISA_PROGRESS {len(samples)}/{len(samples)} done", flush=True)
-    return write_overview(project.folder)
+        _write_info(result.out_dir, summarize(result, settings) | {"seconds": round(time.perf_counter() - t0, 1)},
+                    z, d)
+
+
+def _run_pooled(samples: list[Sample]) -> None:
+    from .classification import classify_pool
+    from .pipeline import Measured, _setup_logging, finish, load, measure, save, start, write_run_info
+
+    n = len(samples)
+    measured: dict[int, tuple[Measured, Path, float]] = {}
+    for i, (z, d, settings) in enumerate(samples):  # 1. segment and measure every dataset
+        print(f"ISA_PROGRESS {i}/{n} measuring {_label(z, d)}", flush=True)
+        t0 = time.perf_counter()
+        try:
+            stack, out = start(settings)
+            m = measure(stack, settings, out)
+        except Exception as e:  # noqa: BLE001 - one bad dataset must not stop the others
+            _failed(z, d, settings, e)
+            continue
+        m.stack.data = m.stack.data[:0]  # the images are read again to finish: keep the memory free meanwhile
+        measured[i] = (m, out, time.perf_counter() - t0)
+    groups: dict[str, list[int]] = {}
+    for i in measured:
+        z, d, _ = samples[i]
+        groups.setdefault(d.experiment or Path(z.path).stem, []).append(i)
+    for experiment, members in groups.items():  # 2. classify each experiment together, 3. finish each dataset
+        t0 = time.perf_counter()
+        try:
+            pooled, thresholds = classify_pool([(measured[i][0].cells, samples[i][2].channels) for i in members],
+                                               samples[members[0]][2].classification)
+        except Exception as e:  # noqa: BLE001 - a bad experiment must not stop the others
+            for i in members:
+                _failed(samples[i][0], samples[i][1], samples[i][2], e)
+            continue
+        log.info("Experiment '%s': %d dataset(s) classified together", experiment, len(members))
+        share = (time.perf_counter() - t0) / len(members)
+        for i, cells in zip(members, pooled, strict=True):
+            z, d, settings = samples[i]
+            m, out, seconds = measured[i]
+            print(f"ISA_PROGRESS {i}/{n} finishing {_label(z, d)}", flush=True)
+            t1 = time.perf_counter()
+            try:
+                _setup_logging(out / "log.txt", append=True)
+                m.stack = load(copy.deepcopy(settings))  # the images again
+                cells.attrs["cellpose"] = m.cellpose
+                result = finish(m, cells, thresholds, settings, out)
+                save(result, settings)
+                total = seconds + share + time.perf_counter() - t1
+                write_run_info(result, settings, total, pooled_with=len(members) - 1)
+            except Exception as e:  # noqa: BLE001 - one bad dataset must not stop the others
+                _failed(z, d, settings, e)
+                continue
+            _write_info(out, summarize(result, settings) | {"seconds": round(total, 1)}, z, d)
 
 
 def _write_info(folder: Path, summary: dict[str, Any], z: ZipEntry, d: DatasetEntry) -> None:

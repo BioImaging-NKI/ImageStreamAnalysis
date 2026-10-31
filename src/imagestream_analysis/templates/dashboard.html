@@ -176,7 +176,8 @@ const LUT = { gray: "#ffffff", azure: "#3fa2ff", green: "#3cdc3c", magenta: "#ff
               red: "#ff4040", cyan: "#40ffff", orange: "#ffa040" };
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const fmt = (v, d = 3) => v == null ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : Number(v.toFixed(d)).toString());
-const typeColor = t => css(t === "Immune" ? "--t-cell" : "--tumor");
+const typeColor = t => css(t === "Immune" ? "--t-cell" : t === "Artefact" ? "--muted" : "--tumor");
+const typeName = i => C.type[i] === "Immune" ? "immune cell" + (C.subtype[i] ? " " + C.subtype[i] : "") : C.type[i] === "Artefact" ? "artefact" : "tumor cell";
 const state = { filter: "all", sort: "event", zoom: 1, outlines: true, interfaces: true, hover: -1, selected: -1, event: -1, tab: "cells",
                 tableSort: null, tableDesc: false };
 
@@ -348,7 +349,7 @@ function showTip(ev, rows) {
 }
 function hideTip() { tip.style.display = "none"; }
 function cellTip(i) {
-  const rows = [[C.type[i] === "Immune" ? "immune cell" : "tumor cell", `in event #${C.event[i] + 1}`], [fmt(C.area[i], 0), "px area"],
+  const rows = [[typeName(i), `in event #${C.event[i] + 1}`], [fmt(C.area[i], 0), "px area"],
                 [fmt(C.ratio[i]), "marker ratio"]];
   const k = memOfCell[i];
   if (k >= 0) rows.push(M.sd[k] != null ? [fmt(M.sd[k], 2), "SD above mean at the interface"] : [fmt(M.control[k], 2), "control (no interface)"]);
@@ -434,7 +435,9 @@ function drawPlots() {
     cellPts.push({ x: C.area[i], y: C.ratio[i], id: i, color: typeColor(C.type[i]) });
   scatter("classes", "classes", cellPts, { kind: "cell", xlog: true, ylog: true, xlabel: "area (px)", ylabel: "marker ratio" });
   const nT = cellPts.filter(p => C.type[p.id] === "Immune").length;
-  legend("classes-legend", [["--t-cell", `immune cells (${nT.toLocaleString()})`], ["--tumor", `tumor cells (${(cellPts.length - nT).toLocaleString()})`]]);
+  const nA = cellPts.filter(p => C.type[p.id] === "Artefact").length;
+  legend("classes-legend", [["--t-cell", `immune cells (${nT.toLocaleString()})`], ["--tumor", `tumor cells (${(cellPts.length - nT - nA).toLocaleString()})`]]
+    .concat(nA ? [["--muted", `artefacts (${nA.toLocaleString()})`]] : []));
   const evPts = shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--tumor" : "--t-cell") }));
   const who = OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell";
   document.getElementById("iface-sub").textContent = `Per event: mean of the marker of interest in the ${who} membrane at the interface against the rest of its membrane (${evPts.length.toLocaleString()} events; dashed: equal)`;
@@ -541,7 +544,7 @@ function renderCard() {
   const card = document.getElementById("cellcard"), i = state.selected;
   if (i < 0) { card.innerHTML = '<h2>Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p>'; return; }
   const e = C.event[i], k = memOfCell[i];
-  const h2 = document.createElement("h2"); h2.textContent = (C.type[i] === "Immune" ? "Immune cell" : "Tumor cell") + ` in event #${e + 1}`;
+  const h2 = document.createElement("h2"); h2.textContent = typeName(i).replace(/^./, c => c.toUpperCase()) + ` in event #${e + 1}`;
   const cv = document.createElement("canvas"); const z = 1.5; cv.width = TW * z; cv.height = TH * z; cv.style.cssText = "background:#000;border-radius:4px";
   drawEvent(cv, e, z);
   const dl = document.createElement("dl");
@@ -566,7 +569,7 @@ function renderCard() {
 }
 
 // ---------- tables
-const CELL_COLS = [["event", "event", i => C.event[i] + 1], ["object", "object", i => E.object ? E.object[C.event[i]] : null], ["type", "type", i => C.type[i]],
+const CELL_COLS = [["event", "event", i => C.event[i] + 1], ["object", "object", i => E.object ? E.object[C.event[i]] : null], ["type", "type", i => C.type[i]], ["subtype", "subtype", i => C.subtype[i]],
   ["area", "area (px)", i => C.area[i]], ["t", "immune marker", i => C.t_int[i]], ["tu", "tumor marker", i => C.tu_int[i]], ["ratio", "marker ratio", i => C.ratio[i]]];
 if (M) CELL_COLS.push(["sd", "SD above mean", i => memOfCell[i] >= 0 ? M.sd[memOfCell[i]] : null], ["mratio", "membrane ratio", i => memOfCell[i] >= 0 ? M.ratio[memOfCell[i]] : null]);
 const EVENT_COLS = [["event", "event", e => e + 1], ["object", "object", e => E.object ? E.object[e] : null], ["t", "immune cells", e => E.t_cells[e]], ["tu", "tumor cells", e => E.tumor_cells[e]],
@@ -608,9 +611,11 @@ function tabs() { document.getElementById("tab-cells").classList.toggle("on", st
 function chip(label, value) { const s = document.createElement("span"); s.className = "chip"; const b = document.createElement("b"); b.textContent = value; s.append(b, " " + label); return s; }
 function renderHeader() {
   document.getElementById("title").textContent = D.name; document.title = D.name + " – ImageStream Dashboard";
-  const nT = C.type.filter(t => t === "Immune").length, nD = [...Array(NE).keys()].filter(isDoublet).length;
+  const nT = C.type.filter(t => t === "Immune").length, nA = C.type.filter(t => t === "Artefact").length;
+  const nD = [...Array(NE).keys()].filter(isDoublet).length;
   const chips = [chip("events", NE.toLocaleString()), chip("cells", NC.toLocaleString()), chip("immune cells", nT.toLocaleString()),
-                 chip("tumor cells", (NC - nT).toLocaleString()), chip("one tumor + one immune cell", nD.toLocaleString())];
+                 chip("tumor cells", (NC - nT - nA).toLocaleString()), chip("one tumor + one immune cell", nD.toLocaleString())];
+  if (nA) chips.push(chip("artefacts", nA.toLocaleString()));
   if (M) chips.push(chip("with an interface", M.sd.filter(v => v != null).length.toLocaleString()));
   document.getElementById("chips").replaceChildren(...chips);
   const sort = document.getElementById("f-sort");

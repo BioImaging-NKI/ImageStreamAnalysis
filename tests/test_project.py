@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from conftest import IDEAS_IDS
+from conftest import IDEAS_IDS, write_ideas_zip
 from imagestream_analysis import gui
-from imagestream_analysis.config import CellOfInterest, ChannelSettings
+from imagestream_analysis.config import CellOfInterest, ChannelSettings, Pool
 from imagestream_analysis.pipeline import CELL_TABLE, EVENT_TABLE
 from imagestream_analysis.project import OVERVIEW_FILE, DatasetEntry, Project, ZipEntry, run_project
 
@@ -180,3 +180,27 @@ def test_empty_max_events_from_the_page_means_all_events(ideas_zip, value):
     p.save()
     assert Project.load(p.folder).settings.input.max_events is None
     assert all(s.input.max_events is None for _, _, s in p.samples())
+
+
+@pytest.mark.parametrize("pool", ["experiment", "dataset"])
+def test_datasets_of_an_experiment_are_classified_together(ideas_zip, pool):
+    folder = ideas_zip["tmp"] / "project"
+    p = make_project(ideas_zip, folder)
+    p.settings.classification.pool = Pool(pool)
+    p.settings.channels.functional = ["MOI's name"]
+    second = write_ideas_zip(ideas_zip["tmp"] / "second.zip", ideas_zip["data"][:, [0, 1, 2, 3]], IDEAS_IDS,
+                             [1, 3, 6, 9], dataset="Sample B")
+    p.zips.append(ZipEntry(second, 0.5, [1, 3, 6, 9], list(NAMES), {}, [DatasetEntry("Sample B", "Experiment 1")]))
+    p.save()
+    table = run_project(folder)
+    assert len(table) == 2 and (table["cells"] == 20).all()
+    a, b = (folder / "Experiment 1" / name for name in ("Sample A", "Sample B"))
+    ta, tb = (pd.read_csv(f / "Marker thresholds.tsv", sep="\t") for f in (a, b))
+    info = json.loads((a / "run.json").read_text(encoding="utf-8"))
+    if pool == "experiment":
+        assert ta.equals(tb) and ta["of"].iloc[0] == 40  # one set of thresholds for the cells of both
+        assert info["classified with"] == "1 other dataset(s)"
+    else:
+        assert ta["of"].iloc[0] == 20 and info["classified with"] == "this dataset only"
+    log_text = (a / "log.txt").read_text(encoding="utf-8")
+    assert "Marker normalization" in log_text and "Done in" in log_text  # one log over both stages

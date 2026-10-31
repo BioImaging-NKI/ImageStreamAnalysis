@@ -27,7 +27,8 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__, ideas
-from .config import CellOfInterest, ChannelSettings, MarkerLocation, Settings
+from .config import CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
+from .imagej import THRESHOLD_BINS
 from .project import Project, overview
 
 log = logging.getLogger(__name__)
@@ -207,7 +208,8 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         return {"version": __version__, "theme": prefs.get("theme", ""), "project": project,
                 "defaults": Settings().to_dict(), "roles": list(ChannelSettings().roles()),
                 "marker_locations": [str(m) for m in MarkerLocation],
-                "cells_of_interest": [str(c) for c in CellOfInterest]}
+                "cells_of_interest": [str(c) for c in CellOfInterest],
+                "threshold_methods": list(THRESHOLD_BINS), "pools": [str(p) for p in Pool]}
     if api == "prefs":
         return save_prefs({k: v for k, v in data.items() if k in ("theme",)})
     if api == "browse":

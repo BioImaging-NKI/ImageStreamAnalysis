@@ -35,18 +35,55 @@ def float_to_byte(image: np.ndarray, lo: float, hi: float) -> np.ndarray:
     return np.clip(v, 0, 255).astype(np.uint8)
 
 
-def otsu_threshold_dark(image: np.ndarray) -> float:
-    """Lower threshold of setAutoThreshold("Otsu dark") on a 32-bit image, as getThreshold() returns it.
+def max_entropy_bin(histogram: np.ndarray) -> int:
+    """ImageJ AutoThresholder 'MaxEntropy' (Kapur, Sahoo and Wong 1985) on a histogram: the last bin of the
+    background class, the split that maximizes the sum of the entropies of both classes."""
+    h = histogram.astype(np.float64)
+    total = h.sum()
+    if total == 0:
+        return 0
+    p = h / total
+    p1 = np.cumsum(p)
+    p2 = 1.0 - p1
+    eps = 2.220446049250313e-16
+    nonzero = np.flatnonzero(np.abs(p1) >= eps)
+    first = int(nonzero[0]) if len(nonzero) else 0
+    nonzero = np.flatnonzero(np.abs(p2[first:]) >= eps)
+    last = first + int(nonzero[-1]) if len(nonzero) else len(p) - 1
+    # entropy terms -p*log(p/P) = -p*log(p) + p*log(P), summed with cumulative sums
+    plogp = np.where(p > 0, p * np.log(np.where(p > 0, p, 1.0)), 0.0)
+    c_plogp, c_p = np.cumsum(plogp), p1
+    best: float = 5e-324  # ImageJ: max_ent = Double.MIN_VALUE
+    threshold = -1
+    for it in range(first, last + 1):
+        ent_back = 0.0 if p1[it] <= 0 else float(-(c_plogp[it] / p1[it]) + c_p[it] / p1[it] * np.log(p1[it]))
+        rest_plogp, rest_p = c_plogp[-1] - c_plogp[it], 1.0 - c_p[it]
+        ent_obj = 0.0 if p2[it] <= 0 else float(-(rest_plogp / p2[it]) + rest_p / p2[it] * np.log(p2[it]))
+        if ent_back + ent_obj > best:
+            best, threshold = ent_back + ent_obj, it
+    return threshold
+
+
+THRESHOLD_BINS = {"Otsu": otsu_bin, "MaxEntropy": max_entropy_bin}
+
+
+def auto_threshold_dark(image: np.ndarray, method: str = "Otsu") -> float:
+    """Lower threshold of setAutoThreshold("<method> dark") on a 32-bit image, as getThreshold() returns it.
 
     For float images ImageJ resets the display range to min-max, converts to 8-bit, thresholds the 8-bit histogram
-    (objects = bins above the Otsu bin) and maps the 8-bit level back: lower = min + (bin+1)/255 * (max-min)."""
+    (objects = bins above the threshold bin) and maps the 8-bit level back: lower = min + (bin+1)/255 * (max-min)."""
     finite = image[np.isfinite(image)]
     lo, hi = float(finite.min()), float(finite.max())
     if hi <= lo:
         return lo
     hist = np.bincount(float_to_byte(finite, lo, hi).ravel(), minlength=256)
-    level = min(otsu_bin(hist) + 1, 255)
+    level = min(THRESHOLD_BINS[method](hist) + 1, 255)
     return lo + level / 255.0 * (hi - lo)
+
+
+def otsu_threshold_dark(image: np.ndarray) -> float:
+    """setAutoThreshold("Otsu dark") on a 32-bit image (the macro's normalizeImage)."""
+    return auto_threshold_dark(image, "Otsu")
 
 
 def median_upper(values: Iterable[float] | np.ndarray) -> float:
