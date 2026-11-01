@@ -24,7 +24,9 @@ writes the project file without running. The results of a dataset go to `<projec
   for your instrument: these are the nominal values.
 - **Datasets**: every first-level folder of the zip is a dataset. *Use* includes it; *Objects* counts the objects,
   *Complete* those that have every needed channel (the others are left out). *Experiment* groups datasets (it starts
-  as the name of the zip): see [Pools](#pools) below.
+  as the name of the zip): see [Pools](#pools) below. *Condition* (control, treated, …) and *Replicate* (the donor or
+  independent experiment) are needed only to compare conditions: see
+  [Comparing conditions](../analysis/comparing-conditions.md#labelling-the-datasets).
 - **Channels**: the example images show a few objects of each channel. Give every needed channel a **name**; tick its
   **role**:
 
@@ -90,5 +92,5 @@ dataset that fails is logged and the others go on.
 
 ## 5. Overview
 
-One row per analysed dataset, with a link to its [dashboard](dashboard.md) and its folder. See
-[The project overview](overview.md).
+One row per analysed dataset, with a link to its [dashboard](dashboard.md) and its folder, the partner preference per
+experiment and, with conditions, their comparison. See [The project overview](overview.md).

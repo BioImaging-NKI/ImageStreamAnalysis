@@ -25,7 +25,8 @@ SITE = "https://bioimaging-nki.github.io/ImageStreamAnalysis/"
 PAGES = {
     "User guide": ["guide/import-page", "guide/dashboard", "guide/overview", "guide/output-folder"],
     "How the analysis works": ["analysis/input", "analysis/segmentation", "analysis/classification",
-                               "analysis/interactions", "analysis/membrane"],
+                               "analysis/interactions", "analysis/membrane",
+                               "analysis/comparing-conditions"],
     "Reference": ["reference/settings", "reference/command-line", "reference/fiji"],
     "Help": ["help/faq", "help/glossary"],
 }

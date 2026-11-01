@@ -296,6 +296,20 @@ Round 2: three of four users reached the right conclusion; counts matched the tr
 - Draft of the import page also saved on pagehide; favicon; no tracebacks for aborted connections; one subtype
   marker: no duplicate marker selection; artefacts counted on the cell card; warning above six immune subtypes.
 
+## Comparing conditions (2026-11-01) ✅
+
+`comparison.py`; per dataset `condition` and `replicate` in project.toml, `[comparison] reference`. Units =
+replicate × condition (datasets pooled). Subset preference: y = ln((O+.5)/(E+.5)), tested when E >= 5 in every unit;
+membrane enrichment: cell-weighted median SD, pairs of the cell of interest with the other type, >= 10 interfaces.
+Paired t over replicates with both conditions (>= 2), else Welch (>= 2 per side), else no test; BH q per measure and
+condition. Written to `condition comparison.tsv` (run end, Save, `imagestream-cli overview`); the overview computes it
+live from the page's labels. Decided **no test per donor** (two samples of one donor against each other with the
+event-sampling error): calibrated only without any sample-to-sample variation, 36-75 % false positives with an SD of
+0.03-0.1 on y. Calibration: `tools/stats/calibrate_comparison.py` (results in the manual): paired 4.3-5.9 %, Welch
+2.4-4.7 %, BH any-false 4.9-5.8 %; power for the user-test effect (true 1.07 -> 1.12) 11 % with 3 donors x 300
+events, 74 % with 4 x 3000. The jackknife over events matched the true SD of y (the linearized SE was 8 % low at 150
+events), but is not used, since there is no per-donor test.
+
 ## The dashboard (new; replaces the macro's plots and overlays) ✅
 
 `dashboard.py` + `templates/dashboard.html`: every analysed dataset gets `dashboard.html` (results embedded as JSON)

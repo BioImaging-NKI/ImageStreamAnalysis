@@ -1,4 +1,4 @@
-"""Command line: imagestream-cli run settings.toml | example-settings"""
+"""Command line: imagestream-cli run settings.toml | run-project | overview | gui | example-settings"""
 
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("example-settings", help="print a settings file with all defaults")
     proj_p = sub.add_parser("run-project", help="analyze all datasets of a project (project.toml or its folder)")
     proj_p.add_argument("project", help="project.toml, or the project folder")
+    over_p = sub.add_parser("overview", help="write the overview tables of a project again from its results (for "
+                                             "example after changing the conditions), without analysing")
+    over_p.add_argument("project", help="project.toml, or the project folder")
     gui_p = sub.add_parser("gui", help="open the import and run page in the browser")
     gui_p.add_argument("--port", type=int, default=0, help="port (default: a free one)")
     gui_p.add_argument("--no-browser", action="store_true", help="do not open the browser")
@@ -38,6 +41,14 @@ def main(argv: list[str] | None = None) -> int:
         from .project import run_project
 
         run_project(args.project)
+        return 0
+    if args.command == "overview":
+        from pathlib import Path
+
+        from .project import write_overview
+
+        folder = Path(args.project)
+        write_overview(folder.parent if folder.is_file() else folder)
         return 0
 
     from .pipeline import run  # imports scikit-learn: only when needed

@@ -137,14 +137,15 @@ marker, see [pools](classification.md#several-datasets-pools)), and the overview
 matrix. To compare, for example, control and treated samples stained in the same way:
 
 - give them **one** experiment label, so that "positive for A" means the same in both (or set the thresholds by hand);
-- compare the conditions **per dataset**: every dataset's own table is in `interactions.tsv` and
-  `subset preference.tsv` (and in the dataset folders), with the observed and expected contacts; look at the same
-  ratio in every donor, and at the counts behind it. A change that goes the same way in every donor is the result;
-  the overview's matrix per experiment pools the conditions and cannot show it.
+- give every dataset its **condition** and **replicate** (donor): the overview then tests the change of the subset
+  preference across the donors, with an interval and a correction for the number of pairs tested. See
+  [Comparing conditions](comparing-conditions.md). The overview's matrix per experiment pools the conditions and
+  cannot show a change;
 - expect **small numbers**: few events give the immune cells a choice, so real changes of preference come out weak.
   In a test where a subset was placed next to the tumor cell more than twice as often after treatment, the ratio
   rose by 0.05–0.25, in the data's own geometry by about as much: the tool cannot recover more than the events
-  contain.
+  contain. How many donors and events such a change needs is in
+  [Comparing conditions](comparing-conditions.md#technical-calibration-by-simulation).
 
 ## Multiplets
 

@@ -8,6 +8,7 @@ Everything the import page does can be done from a terminal, with a **project fi
 ```powershell
 uv run imagestream-cli gui                          # the import page (also: uv run imagestream)
 uv run imagestream-cli run-project D:\data\project  # all datasets of a project (project.toml or its folder)
+uv run imagestream-cli overview D:\data\project     # the overview tables again, without analysing (new conditions)
 uv run imagestream-cli run settings.toml            # one dataset with a settings file
 uv run imagestream-cli run settings.toml --max-events 50
 uv run imagestream-cli example-settings > settings.toml   # a settings file with every default
@@ -74,6 +75,16 @@ channel_names = ['BF', 'Marker', 'Tumor', 'Immune', 'Subtype A', 'Subtype B']
 name = 'Donor 1'
 experiment = 'Example'
 include = true
+condition = 'control'      # optional, to compare conditions: the condition
+replicate = 'Donor 1'      # and the independent unit (donor) it comes from
+```
+
+The condition that the others are compared with goes in a section of its own (empty or absent: the first condition
+in the file):
+
+```toml
+[comparison]
+reference = 'control'
 ```
 
 ??? note "Technical: older files"

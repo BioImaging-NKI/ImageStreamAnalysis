@@ -8,6 +8,7 @@
 | `overview.tsv` | one row per dataset (the [overview](overview.md)) |
 | `interactions.tsv` | the contact tables of all datasets, and summed per experiment |
 | `membrane pairs.tsv` | the membrane pairs of all datasets |
+| `condition comparison.tsv` | the comparison of the conditions (with a condition and a replicate per dataset): one row per measure, pair and condition, with the change, its 95 % interval, *p*, *q*, the value per replicate and notes; see [Comparing conditions](../analysis/comparing-conditions.md) |
 | `subset preference.tsv` | the subset preference of all datasets (with intervals), and summed per experiment (without) |
 | `<experiment>/<dataset>/` | the results of one dataset (below) |
 

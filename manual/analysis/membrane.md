@@ -107,7 +107,8 @@ width now removes most of it (see the technical note on the straightening width)
   effect is not.
 - Check in the dashboard that the outlines lie on the membrane (*Events*, overlay *outlines*).
 - The p-value of thousands of cells against thousands of windows says nothing about biological replicates: compare
-  datasets (donors, replicates) instead.
+  datasets (donors, replicates) instead. A change between conditions is tested across the donors in the overview:
+  see [Comparing conditions](comparing-conditions.md).
 
 ??? note "Technical: comparing pairs, and why there is no reference channel"
 

@@ -54,6 +54,7 @@ table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { color: var(--muted); font-weight: 500; font-size: 13px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.sig td { font-weight: 600; }
 .zip { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 10px 0; }
 .zip h3 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; }
 .zip h3 .title { flex: 1; min-width: 0; }
@@ -111,7 +112,9 @@ progress { width: 260px; }
     <h2 data-help="guide/import-page#2-ideas-exports"><span class="step">2</span>IDEAS exports</h2>
     <p class="hint">Add the zip files exported from IDEAS (one folder per dataset). For each zip, set the pixel size
       and give the channels that are needed a name. Roles go with the marker name and hold for every zip that has a
-      channel of that name. Datasets with the same experiment label are grouped in the overview.</p>
+      channel of that name. Datasets with the same experiment label are classified together and grouped in the
+      overview. To compare conditions, give each dataset its condition (control, treated, …) and its replicate (the
+      donor or independent experiment it comes from).</p>
     <div class="row">
       <button id="add-zip" class="primary">Add zip files…</button>
       <input type="text" id="zip-path" class="wide" placeholder="…or paste the path of a zip">
@@ -162,7 +165,7 @@ const ROLES = [["brightfield", "BF", "Brightfield"], ["tumor", "Tumor", "Tumor m
 const MULTI = new Set(["immune", "functional"]);
 const REQUIRED = ["brightfield", "tumor", "immune", "marker_of_interest"];
 const MAGNIFICATIONS = [["1", "20× (1 µm)"], ["0.5", "40× (0.5 µm)"], ["0.33", "60× (0.33 µm)"]];
-let state = { folder: "", settings: null, zips: [] };  // zips: {path, name, pixel_size, channels, channel_names, roles, datasets, info}
+let state = { folder: "", settings: null, zips: [], reference: "" };  // zips: {path, name, pixel_size, channels, channel_names, roles, datasets, info}
 let defaults = null, choices = {}, logSince = 0, polling = null;
 
 async function api(name, data = {}) {
@@ -222,12 +225,14 @@ const baseName = p => p.split(/[\\/]/).pop();
 function toProject() {
   return { folder: document.getElementById("folder").value.trim(), settings: state.settings,
            zips: state.zips.map(z => ({ path: z.path, pixel_size: z.pixel_size, channels: z.channels,
-                                        channel_names: z.channel_names, roles: z.roles, datasets: z.datasets })) };
+                                        channel_names: z.channel_names, roles: z.roles, datasets: z.datasets })),
+           reference: state.reference };
 }
 function loadProject(p) {
   document.getElementById("folder").value = p.folder || "";
   state.settings = p.settings || newSettings();
   state.zips = (p.zips || []).map(z => ({ ...z, name: baseName(z.path), info: null }));
+  state.reference = p.reference || "";
   renderAll();
   state.zips.forEach(z => scanInto(z, false));
 }
@@ -321,13 +326,17 @@ function renderZip(z) {
   // datasets
   card.append(el("h4", { "data-help": "analysis/input#ideas-exports" }, "Datasets"));
   const dt = el("table", {}, el("tr", {}, el("th", {}, "Use"), el("th", {}, "Dataset"), el("th", { class: "num" }, "Objects"),
-    el("th", { class: "num" }, "Complete"), el("th", {}, "Experiment")));
+    el("th", { class: "num" }, "Complete"), el("th", {}, "Experiment"),
+    el("th", { title: "control, treated, …: compared across the replicates in the overview (empty: not compared)" }, "Condition"),
+    el("th", { title: "the independent unit the dataset comes from: a donor, an independent experiment. Give both conditions of a donor the same replicate" }, "Replicate")));
   for (const d of z.datasets) {
     const di = info.datasets.find(x => x.name === d.name) || {};
     dt.append(el("tr", {},
       el("td", {}, el("input", { type: "checkbox", checked: d.include, onchange: e => { d.include = e.target.checked; renderProblems(); } })),
       el("td", {}, d.name), el("td", { class: "num" }, di.objects ?? ""), el("td", { class: "num", title: "objects with all channels" }, di.complete ?? ""),
-      el("td", {}, el("input", { type: "text", value: d.experiment, onchange: e => d.experiment = e.target.value.trim() }))));
+      el("td", {}, el("input", { type: "text", value: d.experiment, onchange: e => d.experiment = e.target.value.trim() })),
+      ["condition", "replicate"].map(k => el("td", {}, el("input", { type: "text", size: 10, value: d[k] || "",
+        onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } })))));
   }
   card.append(el("div", { class: "scroll" }, dt));
 
@@ -525,7 +534,7 @@ async function refreshOverview() {
   const box = document.getElementById("overview");
   if (!folder) return;
   let o;
-  try { o = await api("overview", { folder }); } catch (e) { box.replaceChildren(el("p", { class: "error" }, e.message)); return; }
+  try { o = await api("overview", { folder, project: state.settings ? toProject() : null }); } catch (e) { box.replaceChildren(el("p", { class: "error" }, e.message)); return; }
   if (!o.rows.length) { box.replaceChildren(el("p", { class: "hint" }, "No results yet.")); return; }
   const cols = o.columns.filter(c => !["zip", "folder", "seconds"].includes(c));
   const table = el("table", {}, el("tr", {}, cols.map(c => el("th", { class: typeof o.rows[0][c] === "number" ? "num" : "", title: columnHelp(c) }, c)), el("th", {}, ""), el("th", {}, "")));
@@ -541,6 +550,40 @@ async function refreshOverview() {
   }
   box.replaceChildren(table);
   if (o.interactions && o.interactions.length) box.append(contactMatrices(o.interactions));
+  if (o.comparison) box.append(comparisonTables(o.comparison));
+}
+// the comparison of conditions across the replicates (comparison.py): the tested pairs of each measure
+function comparisonTables(c) {
+  const wrap = el("div", {}, el("h4", { "data-help": "analysis/comparing-conditions" }, "Comparing conditions"));
+  if (c.error) { wrap.append(el("p", { class: "error" }, c.error)); return wrap; }
+  if (!c.conditions.length) { wrap.append(el("p", { class: "hint" }, "Give the datasets a condition and a replicate (step 2, the dataset tables) to compare conditions.")); return wrap; }
+  if (c.conditions.length > 1) wrap.append(el("div", { class: "row" }, el("label", {}, "Compare with"),
+    el("select", { onchange: e => { state.reference = e.target.value; refreshOverview(); } },
+      c.conditions.map(x => el("option", { value: x, selected: x === c.reference }, x)))));
+  for (const n of c.notes) wrap.append(el("p", { class: "hint" }, n));
+  const short = t => String(t).replace(/^Immune /, "");
+  const fmt = (v, d = 2) => v == null ? "" : Number(v).toFixed(d);
+  const pv = v => v == null ? "" : v < 0.001 ? "< 0.001" : Number(v).toFixed(3);
+  for (const [measure, effect, help] of [["subset preference", "ratio (condition / reference)", "observed / expected of the condition divided by that of the reference"],
+                                         ["membrane enrichment", "difference (median SD)", "median SD above mean of the condition minus that of the reference"]]) {
+    const rows = c.rows.filter(r => r.measure === measure);
+    if (!rows.length) continue;
+    const tested = rows.filter(r => r.p != null).sort((a, b) => a.p - b.p);
+    const table = el("table", {}, el("tr", {}, el("th", {}, measure === "subset preference" ? "Cell type" : "Membrane of"),
+      el("th", {}, measure === "subset preference" ? "Partner" : "Interface with"), el("th", {}, "Condition"), el("th", {}, "Design"),
+      el("th", { class: "num", title: help }, effect), el("th", { class: "num" }, "95% interval"), el("th", { class: "num" }, "p"),
+      el("th", { class: "num", title: "p adjusted for the number of pairs tested (Benjamini-Hochberg)" }, "q"), el("th", {}, "Per replicate (reference → condition)"), el("th", {}, "Note")));
+    for (const r of tested) table.append(el("tr", { class: r.q < 0.05 ? "sig" : "" },
+      el("td", {}, short(r["cell type"])), el("td", {}, short(r.partner)), el("td", {}, `${r.condition} vs ${r.reference}`),
+      el("td", {}, `${r.design} (${r.replicates})`), el("td", { class: "num" }, fmt(r.effect)),
+      el("td", { class: "num" }, `${fmt(r["95% low"])} – ${fmt(r["95% high"])}`), el("td", { class: "num" }, pv(r.p)), el("td", { class: "num" }, pv(r.q)),
+      el("td", {}, r["per replicate"] || ""), el("td", {}, r.note || "")));
+    const left = rows.length - tested.length;
+    wrap.append(el("h5", {}, measure[0].toUpperCase() + measure.slice(1)));
+    if (tested.length) wrap.append(table);
+    wrap.append(el("p", { class: "hint" }, (tested.length ? "" : "No pair could be tested. ") + (left ? `${left} pair(s) not tested (too few contacts or interfaces in a replicate, or too few replicates): see condition comparison.tsv.` : "")));
+  }
+  return wrap;
 }
 // the contacts of each experiment against chance (the cell types shuffled among the cells of each event), side by side
 function contactMatrices(rows) {

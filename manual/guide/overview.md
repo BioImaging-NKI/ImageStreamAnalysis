@@ -1,7 +1,8 @@
 # The project overview
 
-The last step of the import page shows one row per analysed dataset, and below it the partner preference of every
-experiment. The same is written to `overview.tsv` and `interactions.tsv` in the project folder.
+The last step of the import page shows one row per analysed dataset, below it the partner preference of every
+experiment and, when the datasets have a condition and a replicate, the comparison of the conditions. The same is
+written to `overview.tsv`, `interactions.tsv` and `condition comparison.tsv` in the project folder.
 
 ![The project overview](../images/gui_overview.png)
 
@@ -39,6 +40,16 @@ experiments shows whether a preference holds across samples. Between immune subt
 compares cells of different size (immune–immune ratios well below 1 appear without any preference), and it pools the
 datasets of the experiment, so it cannot show a difference between conditions within it. How it is computed, and what it does not measure, is in
 [Cell contacts](../analysis/interactions.md).
+
+## Comparing conditions
+
+When the datasets have a *Condition* and a *Replicate* (step 2), this section tests, across the replicates, whether
+the subset preference and the membrane enrichment differ between conditions: *Compare with* chooses the reference
+condition, the notes say how the conditions were compared (paired or unpaired) and which datasets were left out, and a
+table per measure gives the change with its 95 % interval, *p* and *q* (corrected for the number of pairs), and the
+value of every replicate. Read *q*, and look whether the change goes the same way in every replicate. How to label the
+datasets, how the test works and how much it can find with a few donors: [Comparing
+conditions](../analysis/comparing-conditions.md).
 
 ??? note "Technical: summing over datasets"
 

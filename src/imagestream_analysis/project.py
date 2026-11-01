@@ -19,6 +19,8 @@ their results. Stored as `project.toml` in the project's output folder; the resu
     name = 'folder in the zip'
     experiment = 'label for the overview'
     include = true
+    condition = 'treated'                                optional: the comparison of conditions
+    replicate = 'donor 1'                                (comparison.py); [comparison] reference = 'control'
 
 The roles go by name, so a zip whose channels are numbered differently needs only its own names. A zip may still
 have `roles = { tumor = 9, ... }` (channel numbers) that override the panel: projects written before 2026-10-31
@@ -41,6 +43,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .comparison import write_comparison
 from .config import CellOfInterest, ChannelSettings, Pool, Settings, _from_dict, _toml_value
 from .io import save_table
 from .membrane import pair_of
@@ -58,6 +61,8 @@ class DatasetEntry:
     name: str
     experiment: str = ""
     include: bool = True
+    condition: str = ""  # control, treated, ...: compared across the replicates (comparison.py)
+    replicate: str = ""  # the independent unit: a donor, an independent experiment
 
 
 @dataclass
@@ -75,6 +80,7 @@ class Project:
     folder: Path
     settings: Settings = field(default_factory=Settings)
     zips: list[ZipEntry] = field(default_factory=list)
+    reference: str = ""  # the condition the others are compared with (empty: the first one)
 
     def samples(self) -> list[tuple[ZipEntry, DatasetEntry, Settings]]:
         """The included datasets with their complete settings."""
@@ -125,6 +131,8 @@ class Project:
 
     def to_toml(self) -> str:
         lines = ["# ImageStream analysis project (imagestream-cli run-project)", "", self.settings.to_toml()]
+        if self.reference:
+            lines += ["[comparison]", f"reference = {_toml_value(self.reference)}", ""]
         for z in self.zips:
             lines += ["[[zip]]", f"path = {_toml_value(str(z.path))}"]
             if z.pixel_size:
@@ -135,7 +143,10 @@ class Project:
             lines.append("")
             for d in z.datasets:
                 lines += ["[[zip.dataset]]", f"name = {_toml_value(d.name)}",
-                          f"experiment = {_toml_value(d.experiment)}", f"include = {_toml_value(d.include)}", ""]
+                          f"experiment = {_toml_value(d.experiment)}", f"include = {_toml_value(d.include)}"]
+                lines += [f"{k} = {_toml_value(v)}" for k, v in (("condition", d.condition),
+                                                                  ("replicate", d.replicate)) if v]
+                lines.append("")
         return "\n".join(lines)
 
     def save(self) -> Path:
@@ -158,12 +169,13 @@ class Project:
         zips = [ZipEntry(Path(z["path"]), z.get("pixel_size"), [int(c) for c in z.get("channels", [])],
                          [str(n) for n in z.get("channel_names", [])],
                          ChannelSettings.migrate(dict(z.get("roles", {}))),
-                         [DatasetEntry(d["name"], d.get("experiment", ""), bool(d.get("include", True)))
+                         [DatasetEntry(d["name"], d.get("experiment", ""), bool(d.get("include", True)),
+                                       str(d.get("condition", "")).strip(), str(d.get("replicate", "")).strip())
                           for d in z.get("dataset", [])])
                  for z in data.get("zip", [])]
-        sections = {k: v for k, v in data.items() if k != "zip"}
+        sections = {k: v for k, v in data.items() if k not in ("zip", "comparison")}
         settings: Settings = _from_dict(Settings, sections)
-        project = cls(folder, settings, zips)
+        project = cls(folder, settings, zips, str(data.get("comparison", {}).get("reference", "")).strip())
         project.roles_to_panel()
         return project
 
@@ -376,7 +388,8 @@ def overview(folder: str | Path) -> pd.DataFrame:
 
 
 def write_overview(folder: str | Path) -> pd.DataFrame:
-    """overview.tsv, and interactions.tsv: the contact tables of all datasets, and summed per experiment."""
+    """overview.tsv, and interactions.tsv: the contact tables of all datasets, and summed per experiment;
+    subset preference.tsv, membrane pairs.tsv, and condition comparison.tsv (with a project file)."""
     folder = Path(folder)
     table = overview(folder)
     save_table(table, folder / OVERVIEW_FILE)
@@ -406,6 +419,8 @@ def write_overview(folder: str | Path) -> pd.DataFrame:
         each = pd.concat(pairs, ignore_index=True)
         save_table(each[["experiment", "dataset", *[c for c in each.columns if c not in ("experiment", "dataset")]]],
                    folder / PAIRS_FILE)
+    if (folder / PROJECT_FILE).exists() and len(table):
+        write_comparison(Project.load(folder), table)
     return table
 
 

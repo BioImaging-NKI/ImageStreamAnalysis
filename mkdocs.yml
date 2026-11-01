@@ -53,6 +53,7 @@ nav:
       - Cell types: analysis/classification.md
       - Cell contacts: analysis/interactions.md
       - Membrane enrichment: analysis/membrane.md
+      - Comparing conditions: analysis/comparing-conditions.md
   - Reference:
       - All settings: reference/settings.md
       - Settings files and the command line: reference/command-line.md

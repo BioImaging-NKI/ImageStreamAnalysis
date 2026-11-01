@@ -29,6 +29,7 @@ from typing import Any
 import pandas as pd
 
 from . import __version__, ideas
+from .comparison import compare, write_comparison
 from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
 from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview
@@ -64,8 +65,10 @@ def project_to_json(p: Project) -> dict[str, Any]:
     return {"folder": str(p.folder), "settings": p.settings.to_dict(),
             "zips": [{"path": str(z.path), "pixel_size": z.pixel_size, "channels": z.channels,
                       "channel_names": z.channel_names, "roles": z.roles,
-                      "datasets": [{"name": d.name, "experiment": d.experiment, "include": d.include}
-                                   for d in z.datasets]} for z in p.zips]}
+                      "datasets": [{"name": d.name, "experiment": d.experiment, "include": d.include,
+                                    "condition": d.condition, "replicate": d.replicate}
+                                   for d in z.datasets]} for z in p.zips],
+            "reference": p.reference}
 
 
 def project_from_json(data: dict[str, Any]) -> Project:
@@ -80,7 +83,8 @@ def project_from_json(data: dict[str, Any]) -> Project:
         if role in channels and channels[role] in (None, ""):
             settings.setdefault("channels", {})[role] = ""
     zips = [z | {"dataset": z.get("datasets", [])} for z in data.get("zips", [])]
-    return Project.from_dict(settings | {"zip": zips}, folder)
+    return Project.from_dict(settings | {"zip": zips, "comparison": {"reference": data.get("reference") or ""}},
+                             folder)
 
 
 # ---- requests
@@ -254,6 +258,9 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         p = project_from_json(data["project"])
         path = p.save()
         save_prefs({"project": str(p.folder)})
+        table = overview(p.folder)
+        if len(table):  # the comparison follows the conditions and replicates as saved
+            write_comparison(p, table)
         return {"path": str(path), "problems": p.problems()}
     if api == "run":
         p = project_from_json(data["project"])
@@ -275,16 +282,31 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         folder = Path(str(data["folder"]))
         if folder.is_dir():
             SERVED["root"] = folder
-        table = overview(folder) if folder.is_dir() else None
-        if table is None or table.empty:
-            return {"columns": [], "rows": [], "interactions": []}
+        found = overview(folder) if folder.is_dir() else None
+        if found is None or found.empty:
+            return {"columns": [], "rows": [], "interactions": [], "comparison": None}
+        table = found
         contacts = folder / INTERACTIONS_FILE
         summed = pd.read_csv(contacts, sep="	") if contacts.exists() else pd.DataFrame()
         if len(summed):
             summed = summed[summed["dataset"] == "(all)"]
+        # the comparison of conditions with the labels on the page (saved or not)
+        proj: Project | None = project_from_json(data["project"]) if data.get("project") else (
+            Project.load(folder) if (folder / PROJECT_FILE).exists() else None)
+        comparison: dict[str, Any] | None = None
+        if proj is not None:
+            proj.folder = folder
+            try:
+                result, notes, conditions, reference = compare(proj, table)
+                comparison = {"rows": json.loads(result.to_json(orient="records", force_ascii=False)),
+                              "notes": notes, "conditions": conditions, "reference": reference}
+            except Exception as e:  # noqa: BLE001 - the overview itself must still show
+                log.exception("Comparison failed")
+                comparison = {"error": f"The comparison failed: {e}"}
         return {"columns": list(table.columns),
                 "rows": json.loads(table.to_json(orient="records", force_ascii=False)),
-                "interactions": json.loads(summed.to_json(orient="records", force_ascii=False)) if len(summed) else []}
+                "interactions": json.loads(summed.to_json(orient="records", force_ascii=False)) if len(summed) else [],
+                "comparison": comparison}
     if api == "open":
         target = Path(str(data["path"]))
         if not target.exists():

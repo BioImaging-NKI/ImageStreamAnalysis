@@ -168,6 +168,9 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   bootstrap 95 % interval (`interactions.subset_preference`; the page repeats it in JS).
 - After the second user test (same day): the artefact rule uses the immune-cell thresholds of a first k-means;
   `membrane.thickness` default about 1.5 µm; `Membrane pairs.tsv` holds every pair (see SPEC.md).
+- Comparing conditions (`comparison.py`): only across replicates (paired t, else Welch, BH q); no per-donor test
+  (not calibrated when samples differ). Any change to the test: rerun `tools/stats/calibrate_comparison.py` and
+  update the tables in manual/analysis/comparing-conditions.md.
 - User tests: agents follow the manual on synthetic scenarios with a hidden truth (`usertest/make_scenarios.py`,
   local, outside the repository).
 

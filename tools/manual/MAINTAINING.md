@@ -22,6 +22,7 @@ replaces the paths shown on the import page).
 | `segmentation.py`, `_cellpose_runner.py` | `analysis/segmentation.md`, `start/install.md` |
 | `classification.py`, `imagej.py` (thresholds) | `analysis/classification.md`, `guide/dashboard.md` (subtype markers) |
 | `interactions.py` | `analysis/interactions.md`, `guide/dashboard.md` (interactions), `guide/overview.md` |
+| `comparison.py`, `tools/stats/calibrate_comparison.py` | `analysis/comparing-conditions.md` (its calibration tables come from the script), `guide/overview.md` |
 | `membrane.py`, `interfaces.py` | `analysis/membrane.md`, `guide/dashboard.md` (membrane enrichment) |
 | `pipeline.py` output files and columns | `guide/output-folder.md` |
 | `cli.py`, settings and project files | `reference/command-line.md` |
