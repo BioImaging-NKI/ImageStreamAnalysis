@@ -84,9 +84,17 @@ def dashboard_shots(page: Page, url: str, token: str, want: set[str]) -> None:
     page.wait_for_timeout(300)
     save(page.locator(".card", has=page.locator("#classes")), "dash_classes", want)
     save(page.locator("#contacts-card"), "dash_interactions", want)
+    page.click("#mx-subsets")  # the subset preference
+    page.wait_for_timeout(600)
+    save(page.locator("#contacts-card"), "dash_subsets", want)
+    page.click("#mx-ratio")
     page.locator("#membrane-card").scroll_into_view_if_needed()
     page.wait_for_timeout(300)
     save(page.locator("#membrane-card"), "dash_membrane", want)
+    page.locator("#pairs-box summary").click()  # the pair table
+    page.wait_for_timeout(600)
+    save(page.locator("#membrane-card"), "dash_pairs", want)
+    page.locator("#pairs-box summary").click()
     # a cell with an interface, selected
     page.evaluate("""() => { const k = M.sd.findIndex(v => v != null && v > 3); select(M.cell[k]); }""")
     page.wait_for_timeout(800)

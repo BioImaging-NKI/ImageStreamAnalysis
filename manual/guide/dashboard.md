@@ -106,6 +106,10 @@ shown without a marker of interest.
   more). *fraction touching* shows instead the share of the row's cells that touch one of the column's type.
   Hovering a square gives the counts. **Clicking a square shows only the events with that contact**, with the
   contacts drawn.
+- **Among immune cells** (tab): the [subset preference](../analysis/interactions.md#subset-preference-which-immune-cells-touch):
+  per immune subtype, whether it is the one touching the tumor cell (or another subtype) more often than chance when
+  an event offers a choice. Squares are coloured only where the 95 % interval excludes 1; hover for the counts and
+  the interval.
 - **Share of contacts** (right): per cell type, whom it touches, as a share of its contacts or as numbers; on the right
   the share of its cells that touch any cell.
 
@@ -126,6 +130,9 @@ immune subtype, or all immune cells positive for a marker. The page computes the
   windows on cells without an interface (dashed), in standard deviations above the mean of the free membrane.
 - **Average profile**: the profiles of the cells with an interface, centred on the interface.
 - **Heatmap**: one row per cell with an interface, the strongest on top.
+- **All pairs** (folded): the median enrichment of every *Membrane of* × *interface with* combination, with the number
+  of cells and the marker check of each pair. Compare pairs here (see
+  [The control](../analysis/membrane.md#the-control)); clicking a number shows that pair.
 - **The badge** next to the menus: whether the marker of interest is on the measured cells, also on their partners,
   on both at a similar level, or hardly on the measured cells at all (grey: not informative). Read
   [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed) before trusting a result with an amber,

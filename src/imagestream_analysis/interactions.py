@@ -8,6 +8,8 @@ the dataset (the 'Label' column of the cell table)."""
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 from scipy import ndimage as ndi
@@ -113,6 +115,109 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
                                                      else np.nan)})
     columns = ["cell type", "neighbour type", "cells", "contacts", "cells touching", "fraction touching",
                "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
+    return pd.DataFrame(rows, columns=columns)
+
+
+BOOTSTRAP = 1000  # resamples of the events for the 95 % interval of the subset preference
+BOOTSTRAP_SEED = 48
+
+
+def subset_preference(cells: pd.DataFrame, pairs: np.ndarray, bootstrap: int = BOOTSTRAP,
+                      seed: int = BOOTSTRAP_SEED, within: str = "event") -> pd.DataFrame:
+    """The partner preference of the immune subtypes, among the immune cells: the contacts of each subtype with tumor
+    cells and with each subtype, against those expected if the subtypes were shuffled among the immune cells, with
+    positions, cell types and contacts kept. The question: when an event offers a choice of immune cells, is the one
+    that touches the tumor cell (or another immune cell) more often of this subtype than chance? Only immune cells are
+    shuffled, and they are of similar size, so the size bias of contact_table does not arise.
+
+    within = "event" (the default): the subtypes are shuffled among the immune cells of each event, and only events
+    with at least two immune cells take part (with one, observed = expected by construction). An immune–tumor contact
+    in an event with c_S cells of subtype S among its n immune cells is with S with probability c_S / n; an
+    immune–immune contact is S–T with probability 2 c_S c_T / (n (n - 1)), S–S c_S (c_S - 1) / (n (n - 1)), counted
+    from both sides as in contact_table. within = "dataset": the same with the counts of the whole dataset and all
+    events; when nearly every immune cell touches a tumor cell (gated conjugates) this can hardly depart from 1.
+
+    The 95 % interval: the 2.5 and 97.5 percentiles of observed / expected over `bootstrap` resamples of the events
+    (with replacement; seeded, so the tables are reproducible). Artefacts take no part."""
+    columns = ["cell type", "neighbour type", "contacts", "expected (subtypes shuffled)",
+               "observed / expected (subtypes shuffled)", "95% low", "95% high"]
+    labels = type_label(cells)
+    immune = (cells["Cell type"] == "Immune").to_numpy()
+    subtypes = sorted(set(labels[immune]))
+    if len(subtypes) < 2:
+        return pd.DataFrame(columns=columns)
+    k = len(subtypes)
+    sub_idx = np.full(len(cells), -1, dtype=np.int64)
+    sub_idx[immune] = [subtypes.index(t) for t in labels[immune]]
+    is_tumor = (cells["Cell type"] == "Tumor").to_numpy()
+    frames = cells["frame"].to_numpy(dtype=np.int64)
+    events, event_of = np.unique(frames, return_inverse=True)
+    n_ev = len(events)
+    counts = np.zeros((n_ev, k))
+    np.add.at(counts, (event_of[immune], sub_idx[immune]), 1)
+    with_tumor = np.zeros((n_ev, k))  # contacts of subtype S with a tumor cell, per event
+    pair_counts = np.zeros((n_ev, k, k))  # immune–immune contacts, both sides
+    row_of = {int(lab): r for r, lab in enumerate(cells["label"].astype(int))}
+    for a, b in pairs:
+        ra, rb = row_of[int(a)], row_of[int(b)]
+        sa, sb, e = sub_idx[ra], sub_idx[rb], event_of[ra]
+        if sa >= 0 and sb >= 0:
+            pair_counts[e, sa, sb] += 1
+            pair_counts[e, sb, sa] += 1
+        elif sa >= 0 and is_tumor[rb]:
+            with_tumor[e, sa] += 1
+        elif sb >= 0 and is_tumor[ra]:
+            with_tumor[e, sb] += 1
+
+    # per event: the immune cells, and what the shuffle within the event expects (events of one immune cell: equal)
+    n_e = counts.sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        exp_t_e = np.where(n_e[:, None] > 0, with_tumor.sum(axis=1)[:, None] * counts / n_e[:, None], 0)
+        cc_e = counts[:, :, None] * counts[:, None, :] - counts[:, :, None] * np.eye(k)[None]
+        exp_ii_e = np.where((n_e > 1)[:, None, None], (pair_counts.sum(axis=(1, 2)) / 2)[:, None, None] * 2 * cc_e
+                            / (n_e * (n_e - 1))[:, None, None], 0)
+    choice = n_e >= 2  # within="event": only events with a choice of immune cells
+
+    def ratios(w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(observed, expected), (..., k, k + 1): column 0 the tumor cells, then the subtypes; w: event weights."""
+        if within == "event":
+            w = w * choice
+        obs_t = w @ with_tumor
+        obs_ii = np.tensordot(w, pair_counts, axes=(-1, 0))
+        if within == "event":
+            exp_t = w @ exp_t_e
+            exp_ii = np.tensordot(w, exp_ii_e, axes=(-1, 0))
+        else:
+            c = w @ counts
+            n = c.sum(axis=-1, keepdims=True)
+            n_it = obs_t.sum(axis=-1, keepdims=True)
+            n_ii = obs_ii.sum(axis=(-2, -1))[..., None, None] / 2
+            with np.errstate(divide="ignore", invalid="ignore"):
+                exp_t = n_it * c / n
+                cc = c[..., :, None] * c[..., None, :] - np.einsum("...i,ij->...ij", c, np.eye(k))
+                exp_ii = n_ii * 2 * cc / (n * (n - 1))[..., None]
+        obs = np.concatenate([obs_t[..., :, None], obs_ii], axis=-1)
+        exp = np.concatenate([exp_t[..., :, None], exp_ii], axis=-1)
+        return obs, exp
+
+    obs, exp = ratios(np.ones(n_ev))
+    rng = np.random.default_rng(seed)
+    weights = rng.multinomial(n_ev, np.full(n_ev, 1 / n_ev), size=bootstrap).astype(float)
+    b_obs, b_exp = ratios(weights)
+    with np.errstate(divide="ignore", invalid="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # a pair without any expected contact in a resample
+        b_ratio = np.where(b_exp > 0, b_obs / b_exp, np.nan)
+        low, high = np.nanpercentile(b_ratio, [2.5, 97.5], axis=0)
+    names = ["Tumor", *subtypes]
+    rows = []
+    for i, s_name in enumerate(subtypes):
+        for j, n_name in enumerate(names):
+            if exp[i, j] > 1e-9 or obs[i, j]:
+                rows.append({"cell type": s_name, "neighbour type": n_name, "contacts": int(obs[i, j]),
+                             "expected (subtypes shuffled)": exp[i, j],
+                             "observed / expected (subtypes shuffled)": (obs[i, j] / exp[i, j] if exp[i, j] > 0
+                                                                         else np.nan),
+                             "95% low": low[i, j], "95% high": high[i, j]})
     return pd.DataFrame(rows, columns=columns)
 
 

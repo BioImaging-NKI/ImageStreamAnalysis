@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 
 from . import imagej
 from .config import ChannelSettings, ClassificationSettings
@@ -26,7 +27,7 @@ CLASS_OF = {"Tumor": 0, "Immune": 1, "Artefact": 2}  # the Class column (macro v
 N_CLUSTERS = 2
 KMEANS_SEED = 48  # the macro's randomization_seed (the clustering itself is not bit-identical, see SPEC)
 MAX_TYPES = 8  # cell types that the dashboard can colour apart
-THRESHOLD_COLUMNS = ["marker", "role", "cells", "method", "threshold", "positive", "of"]
+THRESHOLD_COLUMNS = ["marker", "role", "cells", "method", "threshold", "positive", "of", "how"]
 
 
 @dataclass
@@ -55,7 +56,66 @@ STRICT = " strict"
 STRICT_SDS = 2.0  # "<method> strict": at least this many robust SDs above the median of the negative cells
 
 
-def log_threshold(values: np.ndarray, method: str) -> float:
+TWO_POPULATIONS = "Two populations"
+NOISE_SDS = 2.5  # the upper noise limit of the negative cells: their mode plus this many robust SDs (log scale)
+NOISE_SDS_ARTEFACTS = 3.0  # the same for the artefact rule (all detections): stricter, so that real cells stay cells
+MIN_WEIGHT = 0.005  # a second population needs at least this fraction of the cells
+MIN_SEPARATION = 2.0  # ... and its mean this many pooled SDs from the first (Ashman's D)
+
+
+def two_populations(x: np.ndarray, noise_sds: float = NOISE_SDS) -> tuple[float, str]:
+    """The threshold on the log scale x between the negative cells and a second, positive population, and how it was
+    found. See manual/analysis/classification.md (technical note on the thresholds) for the reasoning.
+
+    1. The negative cells: the highest peak of a kernel density estimate (Silverman bandwidth) is their mode; their
+       spread is estimated from its lower side only (1.4826 x the median distance below the mode), which positive
+       cells do not reach. Their upper noise limit is mode + noise_sds x that SD.
+    2. A mixture of two normal distributions (EM, started at the mode and at the maximum) is fitted to x. If the upper
+       component is credible (at least MIN_WEIGHT of the cells, separated by MIN_SEPARATION pooled SDs, its mean above
+       the noise limit), the threshold is where the two weighted densities cross: a cell above it is more likely
+       positive than negative. It is never below mode + 2 SD.
+    3. Otherwise (no second peak, e.g. a positive tail): the noise limit."""
+    x = np.sort(x[np.isfinite(x)])
+    n = len(x)
+    if n < 10:
+        return float(imagej.auto_threshold_dark(x, "MaxEntropy")) if n >= 2 else float("inf"), "too few cells"
+    iqr = float(np.subtract(*np.percentile(x, [75, 25])))
+    spread = min(float(x.std()), iqr / 1.34) if iqr > 0 else float(x.std())
+    bw = max(0.9 * spread * n ** -0.2, 1e-6)
+    grid = np.linspace(x[0], x[-1], 1024)
+    density = np.zeros(len(grid))
+    for chunk in range(0, n, 4096):  # a Gaussian kernel per value, summed
+        d = (grid[:, None] - x[None, chunk:chunk + 4096]) / bw
+        density += np.exp(-0.5 * d * d).sum(axis=1)
+    mode = float(grid[int(np.argmax(density))])
+    below = mode - x[x <= mode]
+    sd = 1.4826 * float(np.median(below)) if len(below) >= 3 else bw
+    sd = sd if sd > 0 else bw
+    noise = mode + noise_sds * sd
+    gm = GaussianMixture(2, random_state=0, means_init=[[mode], [float(x[-1])]]).fit(x[:, None])
+    order = np.argsort(gm.means_.ravel())
+    mu = gm.means_.ravel()[order]
+    sds = np.sqrt(gm.covariances_.ravel()[order])
+    w = gm.weights_[order]
+    separation = abs(mu[1] - mu[0]) / float(np.sqrt((sds[0] ** 2 + sds[1] ** 2) / 2))
+    if w[1] < MIN_WEIGHT or separation < MIN_SEPARATION or mu[1] < noise:
+        return noise, f"no second population: noise limit (mode + {noise_sds:g} SD)"
+    g = np.linspace(mu[0], mu[1], 2000)
+    p0 = w[0] * np.exp(-0.5 * ((g - mu[0]) / sds[0]) ** 2) / sds[0]
+    p1 = w[1] * np.exp(-0.5 * ((g - mu[1]) / sds[1]) ** 2) / sds[1]
+    if not (p1 >= p0).any():
+        return noise, f"no crossing: noise limit (mode + {noise_sds:g} SD)"
+    cross = float(g[int(np.argmax(p1 >= p0))])
+    if cross < mode + 2 * sd:
+        return mode + 2 * sd, f"two populations ({w[1]:.0%} positive), raised to mode + 2 SD"
+    return cross, f"two populations ({w[1]:.0%} positive): crossing"
+
+
+def log_threshold(values: np.ndarray, method: str, noise_sds: float = NOISE_SDS) -> float:
+    return log_threshold_how(values, method, noise_sds)[0]
+
+
+def log_threshold_how(values: np.ndarray, method: str, noise_sds: float = NOISE_SDS) -> tuple[float, str]:
     """A threshold on intensities that are roughly log-normal (2.8, lines 935-991): the auto-threshold of
     log(v - min + 1), transformed back to intensity.
 
@@ -64,16 +124,19 @@ def log_threshold(values: np.ndarray, method: str) -> float:
     synthetic log-normal mixtures this roughly halves the false positives of MaxEntropy, for a few more misses."""
     v = values[np.isfinite(values)]
     if len(v) < 2:
-        return float("inf")
+        return float("inf"), "too few cells"
     lo = float(v.min())
     x = np.log(v - lo + 1.0)
+    if method == TWO_POPULATIONS:
+        t, how = two_populations(x, noise_sds)
+        return float(np.exp(t) - 1.0 + lo), how
     t = imagej.auto_threshold_dark(x, method.removesuffix(STRICT))
     if method.endswith(STRICT):
         negative = x[x <= t]
         if len(negative) >= 2:
             median = float(np.median(negative))
             t = max(t, median + STRICT_SDS * 1.4826 * float(np.median(np.abs(negative - median))))
-    return float(np.exp(t) - 1.0 + lo)
+    return float(np.exp(t) - 1.0 + lo), method
 
 
 def kmeans_classes(df: pd.DataFrame, seed: int = KMEANS_SEED) -> np.ndarray:
@@ -125,12 +188,15 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
     def threshold(m: Marker, population: pd.Series) -> float:
         manual = settings.thresholds.get(m.name)
         values = pool.loc[population, f"_m {m.key}"].to_numpy(dtype=np.float64)
-        t = float(manual) if manual is not None else log_threshold(values, settings.threshold_method)
+        noise_sds = NOISE_SDS if population is not everyone else NOISE_SDS_ARTEFACTS
+        t, how = ((float(manual), "set by hand") if manual is not None
+                  else log_threshold_how(values, settings.threshold_method, noise_sds))
         positive = pool[f"_m {m.key}"] > t
         rows.append({"marker": m.name, "role": "subtype" if m.role == "functional" else m.role,
                      "cells": "all cells" if population is everyone else "immune cells",
                      "method": "manual" if manual is not None else settings.threshold_method,
-                     "threshold": t, "positive": int((positive & population).sum()), "of": int(population.sum())})
+                     "threshold": t, "positive": int((positive & population).sum()), "of": int(population.sum()),
+                     "how": how})
         return t
 
     # 1. the functional markers on all detections: the artefacts are positive in too many of them

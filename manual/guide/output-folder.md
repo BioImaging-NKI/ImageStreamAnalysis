@@ -7,6 +7,7 @@
 | `project.toml` | the project: exports, channel names, roles and settings (see [Settings files](../reference/command-line.md)) |
 | `overview.tsv` | one row per dataset (the [overview](overview.md)) |
 | `interactions.tsv` | the contact tables of all datasets, and summed per experiment |
+| `subset preference.tsv` | the subset preference of all datasets (with intervals), and summed per experiment (without) |
 | `<experiment>/<dataset>/` | the results of one dataset (below) |
 
 ## The folder of a dataset
@@ -19,8 +20,9 @@ For an IDEAS export, the tables per cell and per event end with the column `Obje
 | `Cell classification.tsv` | one row per cell: measurements, cell type, subtype, neighbours (below) |
 | `All cell combinations.tsv` | one row per event: cells per type, marker of interest at the interfaces (left out without a marker of interest), whether a tumor and an immune cell touch (`Tumor-immune interface`), contacts |
 | `Single Tumor Single Immune cell.tsv` | the events with exactly one tumor and one immune cell that touch |
-| `Marker thresholds.tsv` | the threshold of every subtype marker, on all detections and on the immune cells, in background-subtracted intensity (as `Mean ch<N>`) |
+| `Marker thresholds.tsv` | the threshold of every subtype marker, on all detections and on the immune cells, in background-subtracted intensity (as `Mean ch<N>`), and how it was found (`how`) |
 | `Interactions.tsv` | contacts per cell type and neighbour type, with the comparison with chance |
+| `Subset preference.tsv` | per immune subtype and partner: contacts against the subtypes shuffled among the immune cells of each event, with the 95 % interval (with two or more immune subtypes) |
 | `Multiplets.tsv` | the number of events with n cells and with n contacts |
 | `Membrane intensity analysis.tsv` | one row per measured cell: interface and membrane means, enrichment, control |
 | `Average normalized membrane profile values - interfaces centered at 20.tsv` | the average aligned profile |

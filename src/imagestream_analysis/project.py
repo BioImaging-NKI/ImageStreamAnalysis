@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 PROJECT_FILE = "project.toml"
 OVERVIEW_FILE = "overview.tsv"
 INTERACTIONS_FILE = "interactions.tsv"
+SUBSETS_FILE = "subset preference.tsv"
 
 
 @dataclass
@@ -396,4 +397,26 @@ def write_overview(folder: str | Path) -> pd.DataFrame:
         columns = ["experiment", "dataset", "cell type", "neighbour type", "cells", "contacts", "cells touching",
                    "fraction touching", "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
         save_table(pd.concat([each[columns], summed[columns]], ignore_index=True), folder / INTERACTIONS_FILE)
+    write_subsets(folder, table)
     return table
+
+
+def write_subsets(folder: Path, table: pd.DataFrame) -> None:
+    """subset preference.tsv: the subset preference of every dataset (with its 95 % interval), and per experiment the
+    observed and expected contacts summed over its datasets (their ratio; no interval: compare the datasets)."""
+    parts = []
+    for row in table.itertuples():
+        f = folder / str(row.folder) / "Subset preference.tsv"
+        if f.exists():
+            parts.append(pd.read_csv(f, sep="\t").assign(experiment=row.experiment, dataset=row.dataset))
+    if not parts:
+        return
+    each = pd.concat(parts, ignore_index=True)
+    summed = each.groupby(["experiment", "cell type", "neighbour type"], as_index=False)[
+        ["contacts", "expected (subtypes shuffled)"]].sum()
+    exp = summed["expected (subtypes shuffled)"]
+    summed["observed / expected (subtypes shuffled)"] = summed["contacts"] / exp.where(exp > 0)
+    summed.insert(1, "dataset", "(all)")
+    columns = ["experiment", "dataset", "cell type", "neighbour type", "contacts", "expected (subtypes shuffled)",
+               "observed / expected (subtypes shuffled)", "95% low", "95% high"]
+    save_table(pd.concat([each, summed], ignore_index=True).reindex(columns=columns), folder / SUBSETS_FILE)

@@ -59,7 +59,7 @@ Subtype thresholds, artefacts and pools.
 
 | Setting | Default | On the import page | Meaning |
 |---|---|---|---|
-| `threshold_method` | `'MaxEntropy'` | Threshold of the subtype markers | the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the negative cells) or "Otsu"; in a settings file also "Yen" or "RenyiEntropy" |
+| `threshold_method` | `'Two populations'` | Threshold of the subtype markers | the automatic threshold of the subtype markers, on log(intensity - min + 1): "Two populations" (where a positive population is as likely as the negative one, or the upper noise limit of the negative cells when there is no second population), "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the negative cells) or "Otsu"; in a settings file also "Yen" or "RenyiEntropy" |
 | `thresholds` | `{}` | Thresholds set by hand (Apply in a dashboard) | thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace the automatic ones |
 | `artefact_min_positive` | (empty) | Artefact: positive in at least N subtype markers (0 = none) | a detection positive in at least this many subtype markers is an artefact, not a cell; empty = all of them (with two or more markers); 0 = no artefacts |
 | `pool` | `'experiment'` | Classify together (one set of thresholds) | in a project: "experiment" classifies the datasets of each experiment together (one set of thresholds), "dataset" each dataset on its own |
@@ -74,7 +74,7 @@ The membrane profiles and the enrichment.
 | `cells` | `[]` | Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed) | the cells whose membrane is measured, a list of: a cell type ("Tumor", "Immune"), an immune subtype as in the tables ("Immune A+ B+"), or a marker ("A+": immune cells positive for A); empty = channels.cell_of_interest |
 | `partners` | `[]` | Interface with (empty = the other cell type) | the partners whose contact is the interface, as for cells; empty = the other cell type |
 | `thickness` | `3` | Membrane / interface width (px) | pixels: the width of the membrane band, and the distance at which cells touch |
-| `straightening_width` | `5` | Straightening width (px) | pixels: the width of the band across the outline that is straightened |
+| `straightening_width` | (empty) | Straightening width (px) | pixels: the width of the band across the outline that is straightened; empty = about 4.5 µm (5 px at 20x, 9 at 40x, 13 at 60x), so that the band reaches the membrane where the outline lies a little outside it |
 | `max_histogram_value` | `20.0` | Histogram maximum (SD) | the end of the histograms (SD above the mean); they start at -5 |
 | `histogram_bin_width` | `0.25` | Histogram bin width (SD) | the bin width of the histograms (SD) |
 | `control_repeats` | `10` | Control windows per cell | random control windows per cell without an interface, each as long as the median interface |

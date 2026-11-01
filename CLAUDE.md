@@ -158,6 +158,17 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   keeps the partner's pixels out (a sensitivity test only: touching membranes are nm apart, below the resolution,
   so the blur mixes both whatever is sampled).
 
+### Decisions after the user test (2026-11-01; details and numbers in docs/SPEC.md)
+
+- Subtype thresholds: **Two populations** is the default (the user: positive peaks are often small). MaxEntropy stays
+  selectable. Evaluate threshold changes with `C:/PythonProjects/ImageStreamAnalysis/usertest/sim2.py` (local).
+- Straightening width default about 4.5 µm (`membrane.straightening_width` empty); the Fiji comparison keeps 5 px.
+- No reference channel for the interface (a cytoplasmic dye fakes enrichment); the dashboard's pair table instead.
+- Subset preference: subtypes shuffled among the immune cells **within events** with two or more immune cells,
+  bootstrap 95 % interval (`interactions.subset_preference`; the page repeats it in JS).
+- User tests: agents follow the manual on synthetic scenarios with a hidden truth (`usertest/make_scenarios.py`,
+  local, outside the repository).
+
 ### Git
 
 The history of the first machine is not here (2026-10-31): the repository was started again with a snapshot commit

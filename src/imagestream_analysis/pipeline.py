@@ -18,9 +18,16 @@ import pandas as pd
 
 from . import __version__, ideas
 from .classification import class_map, classification_output, classify
-from .config import Settings
+from .config import Settings, straightening_px
 from .dashboard import write_dashboard
-from .interactions import add_neighbours, contact_table, interactions_per_event, multiplets, touching_pairs
+from .interactions import (
+    add_neighbours,
+    contact_table,
+    interactions_per_event,
+    multiplets,
+    subset_preference,
+    touching_pairs,
+)
 from .interfaces import InterfaceMasks, doublets, event_table, interface_masks
 from .io import EventStack, read_stack, save_stack, save_table
 from .measure import edge_labels, measure_cells
@@ -44,6 +51,7 @@ DOUBLETS_TABLE = "Single Tumor Single Immune cell"  # macro v1.8: ... Single T c
 MEMBRANE_TABLE = "Membrane intensity analysis"
 THRESHOLDS_TABLE = "Marker thresholds"
 CONTACTS_TABLE = "Interactions"
+SUBSETS_TABLE = "Subset preference"
 MULTIPLETS_TABLE = "Multiplets"
 AVERAGE_PROFILE = f"Average normalized membrane profile values - interfaces centered at {INTERFACE_OFFSET}"
 
@@ -75,6 +83,7 @@ class Result:
     membranes: MembraneResult | None = None
     profiles: Profiles | None = None  # the membrane of every cell, for any pair of cell types (dashboard)
     expression: dict[str, Any] = field(default_factory=dict)  # where the marker of interest is (membrane.py)
+    subsets: pd.DataFrame = field(default_factory=pd.DataFrame)  # interactions.subset_preference
 
 
 def measure(stack: EventStack, settings: Settings, out_dir: Path) -> Measured:
@@ -119,11 +128,13 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
                                       minlength=stack.n_events)
     events["Interactions"] = interactions_per_event(cells, pairs, stack.n_events)
     result = Result(stack, labels, classes, cells, thresholds, pairs, contact_table(cells, pairs),
-                    multiplets(cells, pairs, stack.n_events), events, doublets(events), masks, out_dir)
+                    multiplets(cells, pairs, stack.n_events), events, doublets(events), masks, out_dir,
+                    subsets=subset_preference(cells, pairs))
     if settings.membrane.analysis and moi is not None:
         m = settings.membrane
         result.profiles = membrane_profiles(labels, cells, moi, stack.median(ch.marker_of_interest),
-                                            m.straightening_width, m.thickness, m.inside_only)
+                                            straightening_px(m.straightening_width, stack.pixel_size), m.thickness,
+                                            m.inside_only)
         result.membranes = analyze_membranes(cells, result.profiles, ch.cell_of_interest, m)
     result.cells.attrs["cellpose"] = measured.cellpose
     if moi is None:
@@ -153,6 +164,8 @@ def save(result: Result, settings: Settings) -> None:
     save_table(_with_object_ids(classification_output(result.cells), ids), out / f"{CELL_TABLE}.tsv")
     save_table(result.thresholds, out / f"{THRESHOLDS_TABLE}.tsv")
     save_table(result.contacts, out / f"{CONTACTS_TABLE}.tsv")
+    if len(result.subsets):
+        save_table(result.subsets, out / f"{SUBSETS_TABLE}.tsv")
     save_table(result.multiplets, out / f"{MULTIPLETS_TABLE}.tsv")
     save_table(_with_object_ids(result.events, ids), out / f"{EVENT_TABLE}.tsv")
     d = _with_object_ids(result.doublets, ids)

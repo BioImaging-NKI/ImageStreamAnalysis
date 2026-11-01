@@ -196,7 +196,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
     <p class="sub" id="contacts-sub"></p>
     <div class="grid2">
       <div>
-        <div class="tabs"><button id="mx-ratio" class="on">partner preference</button><button id="mx-fraction">fraction touching</button></div>
+        <div class="tabs"><button id="mx-ratio" class="on" title="All cell types: contacts against the cell types shuffled among the cells of each event (events of 3+ cells)">partner preference</button><button id="mx-subsets" title="The immune subtypes: contacts against the subtypes shuffled among the immune cells of each event (events with two or more immune cells), with a 95 % interval">among immune cells</button><button id="mx-fraction">fraction touching</button></div>
         <div class="legend" id="matrix-legend"></div>
         <div class="plot"><svg id="matrix"></svg></div>
         <p class="note">Rows: cell type; columns: the type it touches. Click a square to show the events with that contact.</p>
@@ -218,6 +218,13 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
       <span class="spacer"></span><button class="apply">Apply to the project…</button>
     </div>
     <p class="sub" id="membrane-sub"></p>
+    <details id="pairs-box"><summary>All pairs: median enrichment per <i>membrane of</i> and <i>interface with</i></summary>
+      <p class="note">Median SD above mean of the cells with an interface (their number in brackets), all events. Compare
+        rows and columns: the same cells against partners that carry a ligand or not, or the same partners against
+        subsets that express the marker or not. Grey: fewer than 10 cells, or measured cells that hardly carry the
+        marker (–); ! and !!: the partners carry the marker too, or more of it (the marker check). Click a number to
+        show that pair.</p>
+      <div class="tablebox" style="max-height:none"><table id="pairs-table"></table></div></details>
     <div class="grid3">
       <div>
         <div class="legend"><span><span class="key" style="border-color:var(--s3)"></span>interface</span>
@@ -272,7 +279,7 @@ function subtypeOf(i) {
   return pos.length ? pos.join(" ") : "negative";
 }
 function recomputeTypes() { for (let i = 0; i < NC; i++) TYPE[i] = C.type[i] === "Immune" && MK.length ? "Immune " + subtypeOf(i) : C.type[i];
-  assignSlots(); }
+  assignSlots(); typesVersion++; }
 // the possible immune types, in a fixed order (by the combination of positive markers), so colours follow the entity
 const IMMUNE_TYPES = MK.length ? Array.from({ length: 2 ** MK.length }, (_, b) => {
   const pos = MK.filter((m, k) => b & (1 << k)).map(m => m.name + "+"); return "Immune " + (pos.length ? pos.join(" ") : "negative"); })
@@ -652,6 +659,76 @@ function contactStats() {
   }
   return { types, obs, obs3, exp, touch, nCells, touchingAny, pairs2, pairs3 };
 }
+// Among immune cells (as interactions.subset_preference, within = "event"): the subtypes shuffled among the immune
+// cells of each event, positions and contacts kept; only events with two or more immune cells (a choice). In an event
+// with c_S cells of subtype S among n immune cells, an immune–tumor contact is with S with probability c_S / n, an
+// immune–immune contact S–T with 2 c_S c_T / (n (n - 1)) (S–S: c_S (c_S - 1) / (n (n - 1)), counted twice).
+// The 95 % interval: percentiles over BOOT resamples of the events (seeded; Python uses 1000, so it differs slightly).
+const BOOT = 400;
+function subsetStats() {
+  const rows = typesPresent(new Set(base.flatMap(e => cellsOfEvent[e]))).filter(t => t.startsWith("Immune ")), K = rows.length;
+  if (K < 2) return null;
+  const idx = new Map(rows.map((t, k) => [t, k])), evs = [];
+  for (const e of base) {  // per event with a choice: observed and expected, [K][K + 1] flattened (column 0: tumor)
+    const c = new Float64Array(K); for (const i of cellsOfEvent[e]) { const k = idx.get(TYPE[i]); if (k != null) c[k]++; }
+    const n = c.reduce((x, y) => x + y, 0); if (n < 2) continue;
+    const obs = new Float64Array(K * (K + 1)), exp = new Float64Array(K * (K + 1)); let nIT = 0, nII = 0;
+    for (const [a, b] of pairsOfEvent[e]) { const ka = idx.get(TYPE[a]), kb = idx.get(TYPE[b]);
+      if (ka != null && kb != null) { obs[ka * (K + 1) + 1 + kb]++; obs[kb * (K + 1) + 1 + ka]++; nII++; }
+      else if (ka != null && TYPE[b] === "Tumor") { obs[ka * (K + 1)]++; nIT++; }
+      else if (kb != null && TYPE[a] === "Tumor") { obs[kb * (K + 1)]++; nIT++; } }
+    for (let a = 0; a < K; a++) { exp[a * (K + 1)] = nIT * c[a] / n;
+      for (let b = 0; b < K; b++) exp[a * (K + 1) + 1 + b] = nII * 2 * (a === b ? c[a] * (c[a] - 1) : c[a] * c[b]) / (n * (n - 1)); }
+    evs.push({ obs, exp });
+  }
+  const totals = w => { const o = new Float64Array(K * (K + 1)), x = new Float64Array(K * (K + 1));
+    evs.forEach((ev, q) => { const f = w ? w[q] : 1; if (!f) return; for (let j = 0; j < o.length; j++) { o[j] += f * ev.obs[j]; x[j] += f * ev.exp[j]; } });
+    const obs = [], exp = []; for (let a = 0; a < K; a++) { obs.push(Array.from(o.subarray(a * (K + 1), (a + 1) * (K + 1)))); exp.push(Array.from(x.subarray(a * (K + 1), (a + 1) * (K + 1)))); }
+    return { obs, exp }; };
+  const nEv = evs.length;
+  const all = totals(null), rand = mulberry32(48), boot = Array.from({ length: K }, () => Array.from({ length: K + 1 }, () => []));
+  const w = new Float64Array(nEv);
+  for (let r = 0; r < BOOT; r++) { w.fill(0); for (let q = 0; q < nEv; q++) w[Math.floor(rand() * nEv)]++;
+    const t = totals(w); for (let a = 0; a < K; a++) for (let b = 0; b <= K; b++) if (t.exp[a][b] > 0) boot[a][b].push(t.obs[a][b] / t.exp[a][b]); }
+  const pctl = (v, p) => { if (!v.length) return NaN; const s = [...v].sort((x, y) => x - y), h = (s.length - 1) * p, l = Math.floor(h);
+    return s[l] + (s[Math.min(l + 1, s.length - 1)] - s[l]) * (h - l); };
+  const ci = boot.map(row => row.map(v => [pctl(v, 0.025), pctl(v, 0.975)]));
+  return { rows, cols: ["Tumor", ...rows], obs: all.obs, exp: all.exp, ci, events: nEv };
+}
+function drawSubsetMatrix() {
+  const T = subsetStats(), svg = document.getElementById("matrix"); svg.replaceChildren();
+  const ml = document.getElementById("matrix-legend"); ml.replaceChildren();
+  if (!T) { svgText(svg, 8, 20, "Needs two or more immune subtypes in the shown events.", { class: "ink" }); fitSvg(svg, 30); return; }
+  const K = T.rows.length, C = T.cols.length, lab = labelWidth(T.rows.map(shortType)), avail = Math.max(280, svg.parentElement.clientWidth || 420);
+  const cell = Math.max(30, Math.min(64, Math.floor((avail - lab - 10) / C)));
+  const colName = t => shortType(t).replace(/^immune /, ""), slant = Math.max(...T.cols.map(t => colName(t).length)) * 6.4 * 0.64;
+  const top = Math.round(26 + slant), H = top + cell * K + 6;
+  fitSvg(svg, H, Math.min(avail, lab + cell * C + 10 + slant));
+  T.rows.forEach((t, k) => { svg.append(svgEl("circle", { cx: 8, cy: top + k * cell + cell / 2, r: 4, fill: `var(${colorVar(t)})` }));
+    svgText(svg, 16, top + k * cell + cell / 2 + 4, shortType(t), { class: "ink" }); });
+  T.cols.forEach((t, k) => { const x = lab + k * cell + cell / 2;
+    svg.append(svgEl("circle", { cx: x, cy: top - 8, r: 4, fill: `var(${colorVar(t)})` }));
+    svgText(svg, x + 4, top - 16, colName(t), { class: "ink", transform: `rotate(-40 ${x + 4} ${top - 16})` }); });
+  for (let a = 0; a < K; a++) for (let b = 0; b < C; b++) {
+    const o = T.obs[a][b], e = T.exp[a][b], [lo, hi] = T.ci[a][b], sure = e > 0 && (lo > 1 || hi < 1);
+    const fill = sure ? divergingRgb(Math.log2(Math.max(o, 0.5) / e) / 2) : hexRgb(css("--div-mid"));
+    const g = svgEl("g", { style: "cursor:pointer" });
+    g.append(svgEl("rect", { x: lab + b * cell + 1, y: top + a * cell + 1, width: cell - 2, height: cell - 2, rx: 3, fill: rgbCss(fill) }));
+    const tx = svgEl("text", { x: lab + b * cell + cell / 2, y: top + a * cell + cell / 2 + 4, "text-anchor": "middle",
+      style: `fill:${sure ? inkOn(fill) : css("--muted")};font-size:11px` });
+    tx.textContent = e > 0 ? fmt(o / e, 2) : "–"; g.append(tx);
+    g.addEventListener("pointermove", ev => showTip(ev, [[`${shortType(T.rows[a])} touching ${shortType(T.cols[b])}`, ""],
+      [String(o), `contacts (expected with the subtypes shuffled among the immune cells ${fmt(e, 1)})`],
+      [e > 0 ? fmt(o / e, 2) : "–", "observed / expected"], [isFinite(lo) ? `${fmt(lo, 2)} – ${fmt(hi, 2)}` : "–", "95 % interval (events resampled)"]]));
+    g.addEventListener("pointerleave", hideTip);
+    g.addEventListener("click", () => setContact([T.rows[a], T.cols[b]]));
+    svg.append(g);
+  }
+  const bar = document.createElement("span"); bar.style.cssText = "display:inline-block;width:120px;height:8px;border-radius:2px;vertical-align:middle;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))";
+  const a = document.createElement("span"), b = document.createElement("span"); a.className = b.className = "note";
+  a.textContent = "¼× "; b.textContent = ` 4×; coloured only where the 95 % interval excludes 1 (grey: consistent with chance); ${T.events.toLocaleString()} events with two or more immune cells`;
+  ml.append(a, bar, b);
+}
 let contactCache = null;
 function drawContacts() {
   const S = contactCache = contactStats(), K = S.types.length;
@@ -660,6 +737,7 @@ function drawContacts() {
     `two cells touch when they come within the interface width of each other. Partner preference: within the events of ${MIN_CELLS} or more cells ` +
     `(${S.pairs3.toLocaleString()} pairs; the ${S.pairs2.toLocaleString()} pairs of two-cell events cannot show one), contacts against chance, the cell types shuffled among the cells of each event. ` +
     `A preference among the exported multiplets, not a binding frequency.`;
+  if (state.matrix === "subsets") { drawSubsetMatrix(); drawBars(S); return; }
   // matrix
   const svg = document.getElementById("matrix"); svg.replaceChildren();
   const lab = labelWidth(S.types.map(shortType)), avail = Math.max(280, svg.parentElement.clientWidth || 420);
@@ -734,8 +812,10 @@ function setContact(c) {
     s.append("contact ", b, x); box.append(s); }
   gallery.scrollTop = 0; update();
 }
-document.getElementById("mx-ratio").onclick = () => { state.matrix = "ratio"; toggleOn("mx-ratio", "mx-fraction"); drawContacts(); };
-document.getElementById("mx-fraction").onclick = () => { state.matrix = "fraction"; toggleOn("mx-fraction", "mx-ratio"); drawContacts(); };
+const MX_TABS = { ratio: "mx-ratio", subsets: "mx-subsets", fraction: "mx-fraction" };
+for (const [mode, id] of Object.entries(MX_TABS)) document.getElementById(id).onclick = () => {
+  state.matrix = mode; for (const other of Object.values(MX_TABS)) document.getElementById(other).classList.toggle("on", other === id); drawContacts(); };
+document.getElementById("mx-subsets").hidden = !MK.length;
 document.getElementById("bars-share").onclick = () => { state.bars = "share"; toggleOn("bars-share", "bars-count"); drawContacts(); };
 document.getElementById("bars-count").onclick = () => { state.bars = "count"; toggleOn("bars-count", "bars-share"); drawContacts(); };
 function toggleOn(on, offId) { document.getElementById(on).classList.add("on"); document.getElementById(offId).classList.remove("on"); }
@@ -773,7 +853,7 @@ function renderMarkers() {
     slider.value = logv(m.thr);
     let pending = false;
     slider.oninput = () => { m.thr = Math.exp(+slider.value) - 1 + lo; place(); if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; typesChanged(); }); } };
-    const note = document.createElement("div"); note.className = "note"; note.textContent = `Immune cells, on log(intensity − min + 1); thresholds in intensity. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)` + (m.threshold_all != null ? `; over all detections, for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
+    const note = document.createElement("div"); note.className = "note"; note.textContent = `Immune cells, on log(intensity − min + 1); thresholds in intensity. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)${m.how && m.method !== "manual" ? ": " + m.how : ""}` + (m.threshold_all != null ? `; over all detections, for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
     div.append(slider, note);
     if (m.method === "manual") {  // set by hand (Apply, or a settings file): Apply can make it automatic again
       const auto = document.createElement("button"); auto.className = "auto"; auto.textContent = "automatic";
@@ -900,7 +980,47 @@ function expressionCheck(cellsSel, partnerSel) {  // as membrane.expression_chec
     : ratio >= 0.8 ? "similar" : ratio >= 0.25 ? "warning" : "good";
   return { ma, mb, ratio, level, brightest, brightestType };
 }
+// the median enrichment of every pair of selections (rows: membrane of; columns: interface with), as computeM
+// without the controls; recomputed when the subtypes change (typesVersion)
+let typesVersion = 0, pairTable = null;
+function pairTableStats() {
+  if (pairTable && pairTable.version === typesVersion) return pairTable;
+  const opts = selectorOptions(), cols = opts.filter(([v]) => !v.endsWith("+") || v.startsWith("Immune "));
+  const rows = opts.map(([v, t]) => {
+    const cells = []; for (let k = 0; k < MP.cell.length; k++) if (matches(MP.cell[k], v)) cells.push(k);
+    return { v, t, values: cols.map(([w]) => {
+      const sds = [];
+      for (const k of cells) { const s = [], f = [];
+        for (let j = OFFS[k]; j < OFFS[k + 1]; j++) { const t = TRACK[j]; if (t < 0) f.push(PROF[j]); else if (matches(t, w)) s.push(PROF[j]); }
+        if (s.length) { const v = score(s, f); if (isFinite(v)) sds.push(v); } }
+      return { median: sds.length ? median(sds) : NaN, n: sds.length, check: expressionCheck(v, w).level };
+    }) };
+  });
+  return pairTable = { version: typesVersion, rows, cols };
+}
+function drawPairTable() {
+  const box = document.getElementById("pairs-box"); if (!box.open) return;
+  const T = pairTableStats(), table = document.getElementById("pairs-table");
+  const head = document.createElement("tr"); head.append(document.createElement("th"));
+  for (const [, t] of T.cols) { const th = document.createElement("th"); th.textContent = "with " + t.replace(/ cells$/, ""); head.append(th); }
+  const body = T.rows.map(r => { const tr = document.createElement("tr"); const th = document.createElement("td"); th.textContent = r.t; tr.append(th);
+    r.values.forEach((x, j) => { const td = document.createElement("td");
+      const flag = { warning: " !", similar: " !", critical: " !!", low: " –" }[x.check] || "";
+      td.textContent = x.n ? `${fmt(x.median, 1)} (${x.n})${flag}` : "–";
+      if (x.n && x.n < 10 || x.check === "low") td.style.color = "var(--muted)";
+      else if (flag) td.style.color = x.check === "critical" ? "var(--critical)" : "var(--ink-2)";
+      if (r.v === pair.cells && T.cols[j][0] === pair.partners) td.style.fontWeight = "700";
+      if (x.n) { td.style.cursor = "pointer"; td.title = `${r.t} with ${T.cols[j][1]}: show this pair`;
+        if (flag) td.title += ` (marker check: ${{ warning: "the partners carry part of the marker", similar: "the marker is on both cells",
+          critical: "the marker is brighter on the partners", low: "the measured cells hardly carry the marker" }[x.check]})`;
+        td.onclick = () => { pair.cells = r.v; pair.partners = T.cols[j][0]; fillPairOptions(); computeM(); applyFilter(); drawPlots(); renderTable(); }; }
+      tr.append(td); });
+    return tr; });
+  table.replaceChildren(head, ...body);
+}
+document.getElementById("pairs-box").addEventListener("toggle", () => { if (M) drawPairTable(); });
 function drawMembranes() {
+  drawPairTable();
   document.getElementById("membrane-card").hidden = false;
   const shownMem = M.cell.map((c, k) => k).filter(k => shownSet.has(C.event[M.cell[k]]));
   const withIf = shownMem.filter(k => M.sd[k] != null);
@@ -1197,7 +1317,7 @@ if (VIEW) {  // the remembered view in the controls
 }
 update();
 if (VIEW) {
-  if (VIEW.matrix === "fraction") document.getElementById("mx-fraction").click();
+  if (VIEW.matrix === "fraction" || (VIEW.matrix === "subsets" && MK.length)) document.getElementById(MX_TABS[VIEW.matrix]).click();
   if (VIEW.bars === "count") document.getElementById("bars-count").click();
   if (["events", "contacts"].includes(VIEW.tab)) document.getElementById("tab-" + VIEW.tab).click();
 }

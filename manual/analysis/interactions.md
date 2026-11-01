@@ -83,6 +83,45 @@ T cells in conjugates") can only be computed from an export that keeps all event
       treatment rose only from 1.03 to 1.11, consistently in both donors. Compare datasets (donors, conditions) with
       each other rather than a ratio with 1.
 
+## Subset preference: which immune cells touch
+
+The partner preference above shuffles all cell types, and so compares tumor cells with immune cells, which differ in
+size. For the immune subtypes a cleaner question is: **when an event offers a choice of immune cells, is the one that
+touches the tumor cell (or another immune cell) more often of this subtype than chance?** For this only the subtypes
+are shuffled, among the immune cells of each event; the cells, their positions, the tumor cells and the contacts stay
+as they are. Only events with at least two immune cells take part: with one immune cell there is no choice.
+
+The result is observed / expected per subtype and partner (tumor cells or a subtype), with a **95 % interval**. In the
+dashboard (*Interactions*, tab *among immune cells*) only squares whose interval excludes 1 are coloured. The tables
+are `Subset preference.tsv` per dataset and `subset preference.tsv` in the project folder.
+
+![The subset preference in the dashboard](../images/dash_subsets.png)
+
+??? note "Technical: the subset preference, exactly"
+
+    **Expected.** In an event with *n* immune cells, *c<sub>S</sub>* of subtype *S*, every immune cell has subtype *S*
+    with probability *c<sub>S</sub>* / *n* when the subtypes are shuffled among them. So each immune–tumor contact of the
+    event is one of subtype *S* with that probability, and each immune–immune contact is one of subtypes *S* and *T*
+    with probability 2 *c<sub>S</sub>* *c<sub>T</sub>* / (*n* (*n* − 1)), or *S* and *S* with probability
+    *c<sub>S</sub>* (*c<sub>S</sub>* − 1) / (*n* (*n* − 1)), counted from both sides as in the contact table. The expected
+    contacts are these probabilities summed over the contacts of all events with *n* ≥ 2; observed are the contacts
+    counted in the same events (`contacts`). Artefacts take no part; tumor cells are never shuffled.
+
+    **The interval.** The events are resampled with replacement (as many as there are), observed and expected are
+    summed again, and observed / expected is recomputed; the 2.5th and 97.5th percentiles over 1000 resamples (Python,
+    seeded, so the tables are reproducible) or 400 (the page; slightly different) are the interval. It reflects the
+    sampling of events within one dataset, not the variation between donors: compare datasets for that.
+
+    **Why within events.** Shuffling the subtypes over the whole dataset asks whether a subtype is over-represented
+    among the immune cells that touch tumor cells. In an export of conjugates nearly every immune cell touches a tumor
+    cell (95 % in the example data), so that ratio can hardly exceed about 1.05 whatever the biology. Within an event
+    with a choice it can. In the example data (Subtype A+ cells were placed next to the tumor cell more often) the
+    dataset-wide version gave 1.00 (0.93–1.08), the within-event version 1.09 (1.03–1.17). Effects are small in both
+    because most events offer little choice: one tumor cell with two immune cells usually lets both touch it.
+
+    **What it does not remove.** A subtype that is larger, or more often segmented as two cells, still touches more;
+    subtypes are assumed to be of similar size. The selection in IDEAS applies as above.
+
 ## Comparing conditions
 
 The **experiment** label does two things: datasets with the same label are classified together (one threshold per

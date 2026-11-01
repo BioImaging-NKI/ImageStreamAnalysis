@@ -138,7 +138,7 @@ class SegmentationSettings:
 
 
 # the threshold methods offered on the page (any method of imagej.THRESHOLD_BINS works, plus " strict")
-THRESHOLD_METHODS = ["MaxEntropy", "MaxEntropy strict", "Otsu"]
+THRESHOLD_METHODS = ["Two populations", "MaxEntropy", "MaxEntropy strict", "Otsu"]
 
 
 class Pool(StrEnum):
@@ -148,10 +148,11 @@ class Pool(StrEnum):
 
 @dataclass
 class ClassificationSettings:
-    # the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8),
-    # "MaxEntropy strict" (at least 2 robust SDs above the negative cells) or "Otsu"; in a settings file also "Yen" or
-    # "RenyiEntropy"
-    threshold_method: str = "MaxEntropy"
+    # the automatic threshold of the subtype markers, on log(intensity - min + 1): "Two populations" (where a
+    # positive population is as likely as the negative one, or the upper noise limit of the negative cells when
+    # there is no second population), "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the
+    # negative cells) or "Otsu"; in a settings file also "Yen" or "RenyiEntropy"
+    threshold_method: str = "Two populations"
     # thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace
     # the automatic ones
     thresholds: dict[str, float] = field(default_factory=dict)
@@ -161,6 +162,16 @@ class ClassificationSettings:
     # in a project: "experiment" classifies the datasets of each experiment together (one set of thresholds),
     # "dataset" each dataset on its own
     pool: Pool = Pool.EXPERIMENT
+
+
+STRAIGHTENING_UM = 4.5  # the default straightening width in µm (manual: analysis/membrane.md)
+
+
+def straightening_px(width: int | None, pixel_size: float) -> int:
+    """The straightening width in pixels: as set, or the odd number of pixels nearest STRAIGHTENING_UM (at least 5)."""
+    if width:
+        return int(width)
+    return max(5, 2 * round((STRAIGHTENING_UM / pixel_size - 1) / 2) + 1)
 
 
 @dataclass
@@ -173,7 +184,9 @@ class MembraneSettings:
     # the partners whose contact is the interface, as for cells; empty = the other cell type
     partners: list[str] = field(default_factory=list)
     thickness: int = 3  # pixels: the width of the membrane band, and the distance at which cells touch
-    straightening_width: int = 5  # pixels: the width of the band across the outline that is straightened
+    # pixels: the width of the band across the outline that is straightened; empty = about 4.5 µm (5 px at 20x, 9 at
+    # 40x, 13 at 60x), so that the band reaches the membrane where the outline lies a little outside it
+    straightening_width: int | None = None
     max_histogram_value: float = 20.0  # the end of the histograms (SD above the mean); they start at -5
     histogram_bin_width: float = 0.25  # the bin width of the histograms (SD)
     # random control windows per cell without an interface, each as long as the median interface

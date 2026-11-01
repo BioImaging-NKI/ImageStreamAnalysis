@@ -65,6 +65,8 @@ page runs in that process with a state folder of its own; the user's settings ar
 | `dash_help` | the context help panel, opened from the ? of *Subtype markers* | dashboard |
 | `dash_interactions`, `dash_contact_filter` | interactions; the gallery filtered on a contact | dashboard, interactions |
 | `dash_membrane` | membrane enrichment | dashboard, membrane |
+| `dash_pairs` | the membrane card with *All pairs* open | membrane |
+| `dash_subsets` | interactions, tab *among immune cells* | interactions |
 
 After a change to a page of the program: remake the example project (its dashboards are written by the program), then
 the screenshots, and look at every changed image.

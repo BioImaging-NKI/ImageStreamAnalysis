@@ -238,9 +238,11 @@ def markers_data(result: Result, settings: Settings) -> list[dict[str, Any]]:
         name = column[len(prefix) : -1]
         rows = th[th["marker"] == name]
         thr = {str(c): float(v) for c, v in zip(rows["cells"], rows["threshold"], strict=True)}
+        how = list(rows.loc[rows["cells"] == "immune cells", "how"]) if "how" in rows else []
         out.append({"name": name, "values": _column(cells[column], 3), "threshold": thr.get("immune cells"),
                     "threshold_all": thr.get("all cells"),
-                    "method": str(rows["method"].iloc[0]) if len(rows) else ""})
+                    "method": str(rows["method"].iloc[0]) if len(rows) else "",
+                    "how": str(how[0]) if how else ""})
     return out
 
 

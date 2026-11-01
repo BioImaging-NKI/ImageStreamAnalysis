@@ -141,3 +141,19 @@ def test_strict_threshold_is_never_below_the_plain_one():
         neg = x[x <= np.log(plain - v.min() + 1)]
         bound = np.exp(np.median(neg) + 2 * 1.4826 * np.median(np.abs(neg - np.median(neg)))) - 1 + v.min()
         assert strict == pytest.approx(max(plain, bound))
+
+
+def test_two_populations_finds_a_small_positive_population():
+    """A large negative population and 5 % positive cells, well apart: the threshold lies between them (few errors);
+    without a second population it is the upper noise limit of the negative cells (about 1 % of them above it)."""
+    from imagestream_analysis.classification import TWO_POPULATIONS, log_threshold_how
+
+    rng = np.random.default_rng(1)
+    neg = rng.lognormal(np.log(6), 0.4, 950) - 4 + rng.normal(0, 1.5, 950)
+    pos = rng.lognormal(np.log(6 * 15), 0.5, 50)
+    t, how = log_threshold_how(np.concatenate([neg, pos]), TWO_POPULATIONS)
+    assert how.endswith("crossing") and (neg > t).sum() + (pos <= t).sum() <= 3
+    t, how = log_threshold_how(neg, TWO_POPULATIONS)
+    assert how.startswith("no second population") and (neg > t).mean() < 0.03
+    assert log_threshold_how(np.concatenate([neg, pos]), TWO_POPULATIONS) == log_threshold_how(
+        np.concatenate([neg, pos]), TWO_POPULATIONS)  # deterministic

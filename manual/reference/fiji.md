@@ -24,11 +24,12 @@ below, and in detail in `docs/SPEC.md` of the repository.
 | Names | T cell | immune cell | the immune side can be a panel of markers |
 | Immune markers | one (1.8); summed raw values (2.8) | several, each normalized, then summed | markers of different brightness weigh alike |
 | Clustering | 1.8: normalized markers and area; 2.8: raw sums, functional markers added unnormalized | 1.8's | 2.8 added the functional markers without normalizing them (a mistake) |
-| Subtype thresholds | MaxEntropy on all cells (2.8) | MaxEntropy (or others) on the immune cells | tumor cells do not shift the threshold |
+| Subtype thresholds | MaxEntropy on all cells (2.8) | *Two populations* (or MaxEntropy, Otsu) on the immune cells | tumor cells do not shift the threshold; MaxEntropy called noise positive or missed positive cells (see [Cell types](../analysis/classification.md#immune-subtypes)) |
 | Non-cells | "crap" class, switched off and not working | artefacts: positive in all subtype markers | — |
 | Contacts | region adjacency graph of the labels | within the interface width | agrees with the interfaces |
-| Contacts against chance | — | partner preference in events of 3+ cells | new |
+| Contacts against chance | — | partner preference in events of 3+ cells; subset preference among immune cells, with intervals | new |
 | Membranes | one ring per blob of touching cells of a class | one membrane per cell | a cell is the unit |
+| Straightening width | 5 px | about 4.5 µm (9 px at 40×) | 5 px at 40× gave a false enrichment at every contact (see [Membrane enrichment](../analysis/membrane.md#the-membrane-profile)) |
 | Baseline of the enrichment | all membrane outside the interface | the membrane that touches no cell | contacts with other marked cells raise the baseline |
 | Control | one window of 25 px per membrane, unseeded | 10 windows of the median interface length, on free membrane | a better null distribution |
 | Average profile | all rings, also without interface | cells with an interface | rings without interface halve the peak |

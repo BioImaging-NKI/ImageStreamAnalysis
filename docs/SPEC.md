@@ -267,9 +267,19 @@ repository). Fixed from their reports:
 - Manual: the control windows are no control for the interface (compare pairs; geometry alone gave ~1.3× / 1–1.5 SD
   in the test), thresholds can be off both ways, sizes in pixels, overview columns, comparing conditions.
 
-Open, for a decision by the user: default threshold method (gap between the peaks), a built-in reference for the
-interface (a channel or pair that should not be enriched), a per-subset enrichment summary, and a size-free null
-model with uncertainty for the partner preference.
+Decided by the user and built (2026-11-01, same day):
+- **Threshold "Two populations" (default)**: noise limit of the negative cells (KDE mode + 2.5 robust SD from the
+  lower side; 3 SD for the artefact rule) and a 2-component Gaussian mixture; threshold at the crossing of the
+  weighted densities when the upper component is credible (≥ 0.5 %, Ashman's D ≥ 2, mean above the noise limit), else
+  the noise limit. Simulation (500 samples): errors 4790 vs best 2417, MaxEntropy strict 14 881, MaxEntropy 21 965.
+  The user: positive peaks are often small, which is why a stricter threshold worked better.
+- **Straightening width default about 4.5 µm** (`membrane.straightening_width` empty): 5 px at 40× gave 1.4–1.6 SD of
+  false enrichment at contacts without biology (outline outside the membrane at free edges); 9 px 0.35 SD, real
+  enrichment kept. A reference channel was tested (the cells' own cytoplasmic tracker) and rejected: 4.8 SD false.
+- **Pair table** in the dashboard: median enrichment for every Membrane of × Interface with, with the marker check.
+- **Subset preference** (`interactions.subset_preference`, within events with ≥ 2 immune cells, bootstrap 95 %
+  interval, 1000 resamples, seed 48; page 400): `Subset preference.tsv`, project `subset preference.tsv`, dashboard
+  tab "among immune cells". The dataset-wide variant was tested and is too insensitive for conjugate exports.
 
 ## The dashboard (new; replaces the macro's plots and overlays) ✅
 

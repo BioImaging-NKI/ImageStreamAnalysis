@@ -29,8 +29,14 @@ thresholds are automatic, or set by hand (`classification.thresholds`, or with t
 
 *Threshold of the subtype markers*:
 
-- **MaxEntropy** (default, as ClassifyCellTypes 2.8): finds the split of the histogram with the most information on
-  both sides; suited to a large negative population with a positive tail.
+- **Two populations** (default): looks for a second, positive population next to the negative cells and puts the
+  threshold where a cell is as likely to belong to one as to the other. If there is no such population (the positive
+  cells form a tail rather than a peak), the threshold is the upper noise limit of the negative cells. It copes with a
+  small positive population close to a large negative one, the usual case for a subtype marker.
+- **MaxEntropy** (as ClassifyCellTypes 2.8): finds the split of the histogram with the most information on both
+  sides.
+
+`Marker thresholds.tsv` says for every threshold how it was found (column `how`).
 
 **Check every threshold on its histogram** in the dashboard before reading subtype numbers. Where the negative and
 positive cells form two clear peaks, the threshold belongs in the gap between them; the automatic methods can miss it
@@ -62,6 +68,45 @@ on either side (see the technical note). A threshold set in the gap with the sli
     as *A+ C+*. On other data it cuts into the positive population instead (in a test at 60×, a quarter of the
     positive cells were missed, where Otsu found them all). *MaxEntropy strict* only raises the threshold. The
     thresholds are in `Marker thresholds.tsv`, in background-subtracted intensity (as `Mean ch<N>`).
+
+??? note "Technical: Two populations, step by step"
+
+    All on the log scale *x* above (one value per cell of the population: the immune cells, or all detections for the
+    artefact rule).
+
+    1. **The negative cells.** A kernel density estimate of *x* (Gaussian kernel; bandwidth
+       $0.9 \cdot \min(s, \mathrm{IQR}/1.34) \cdot n^{-1/5}$, Silverman's rule; evaluated on 1024 points) has its
+       highest peak at the mode *m* of the negative cells. Their spread is estimated from the **lower** side of the
+       peak only, where positive cells do not reach: $\sigma = 1.4826 \cdot \mathrm{median}(m - x)$ over the cells
+       with $x \le m$ (for a normal distribution this is its standard deviation). The **noise limit** is
+       $m + 2.5\,\sigma$; for the artefact rule $m + 3\,\sigma$, so that real cells are not made artefacts.
+    2. **A second population.** A mixture of two normal distributions is fitted to *x* by expectation–maximization,
+       started at the mode and at the largest value (deterministic). Its upper component counts as a positive
+       population when it holds at least 0.5 % of the cells, its mean lies at least two pooled standard deviations
+       from the lower one (Ashman's *D* ≥ 2), and its mean lies above the noise limit.
+    3. **The threshold.** With a positive population: where the two weighted normal densities cross, between their
+       means: above it a cell is more likely positive than negative. It is never lower than $m + 2\sigma$. Without
+       one: the noise limit. Fewer than ten cells: MaxEntropy.
+
+    `how` in `Marker thresholds.tsv` reports which case applied, with the fraction of the fitted positive
+    population: *two populations (12 % positive): crossing*, *... raised to mode + 2 SD*, or *no second population:
+    noise limit*.
+
+    **Why.** A threshold that maximizes a criterion over the whole histogram (Otsu, MaxEntropy) is pulled into the
+    large negative population when the positive one is small, which is the common case for a subtype marker; a fixed
+    distance above the negative cells ("strict") is right when there is no clear second population but cuts into
+    a positive population that lies close. The two steps cover both. The method was chosen on simulated data: 600
+    cells, log-normal negative cells with noise (two spreads), positive cells 2–40 % of them and 3–40 times as
+    bright, five repeats (500 samples). Total errors (false + missed positives) against the best possible threshold of
+    each sample: best 2417, **Two populations 4790**, the noise limit alone 6825, MaxEntropy strict 14 881, Otsu
+    21 132, MaxEntropy 21 965. Almost all remaining errors are in samples where the two populations overlap (positive
+    cells 2–5 % and at most 5 times as bright), where no threshold separates them. On the four user-test datasets
+    (2289 positive cells in all), Two populations made 4 errors, MaxEntropy 286.
+
+    **Limits.** When the positive cells are a continuous tail, the noise limit decides, and the count depends on
+    2.5 SD: set the threshold by hand if the histogram shows a clearer place. A bimodal *negative* population (two
+    batches of differently stained cells pooled) can be taken for two populations: classify such datasets separately
+    (*Classify together* = dataset).
 
 ??? note "Technical: why two steps, and not one clustering of all cells"
 

@@ -34,6 +34,10 @@ drag the slider into the gap between the two peaks and *Apply to the project…*
 **I only want cell types and contacts.** Leave the *MOI* role unticked and *Membrane profiles and enrichment* off;
 the run then needs no marker of interest.
 
+**Does a subtype prefer the tumor cells?** Look at the tab *among immune cells* in the dashboard's *Interactions*
+card: it compares the subtypes with each other within events, with a 95 % interval. See
+[Cell contacts](../analysis/interactions.md#subset-preference-which-immune-cells-touch).
+
 **The partner preference is close to 1 everywhere.** Most contacts may be in events of two cells, which cannot show a
 preference and are left out; the dashboard says how many pairs remain. With few events of three or more cells, the
 ratios are uncertain. See [Cell contacts](../analysis/interactions.md).

@@ -4,7 +4,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from imagestream_analysis.interactions import add_neighbours, contact_table, multiplets, touching_pairs
+from imagestream_analysis.interactions import (
+    add_neighbours,
+    contact_table,
+    multiplets,
+    subset_preference,
+    touching_pairs,
+)
 from imagestream_analysis.pipeline import CONTACTS_TABLE, MULTIPLETS_TABLE, run
 from test_pipeline import settings_for
 
@@ -80,3 +86,34 @@ def test_two_cell_events_alone_give_no_preference():
     t = contact_table(cells, np.array([[1, 2], [3, 4]]))
     assert (t["contacts"] == 2).all() and (t["contacts (3+ cells)"] == 0).all()
     assert t["observed / expected"].isna().all()
+
+
+def _subset_events(prefer: bool, n_events: int = 200, seed: int = 0):
+    """Events of one tumor cell and three immune cells (A+ or negative, half each); two of the immune cells touch the
+    tumor cell, the third touches an immune cell. prefer: the A+ cells are the ones that touch the tumor cell."""
+    rng = np.random.default_rng(seed)
+    rows, pairs, label = [], [], 0
+    for e in range(n_events):
+        kinds = ["A+", "A+", "negative", "negative"]
+        rng.shuffle(kinds)
+        imm = sorted(kinds[:3], key=lambda k: k != "A+") if prefer else kinds[:3]
+        ids = list(range(label + 1, label + 5))  # the tumor cell, then the three immune cells
+        label += 4
+        rows.append({"label": ids[0], "frame": e, "Cell type": "Tumor", "Subtype": ""})
+        rows += [{"label": i, "frame": e, "Cell type": "Immune", "Subtype": k}
+                 for i, k in zip(ids[1:], imm, strict=True)]
+        pairs += [(ids[0], ids[1]), (ids[0], ids[2]), (ids[2], ids[3])]
+    return pd.DataFrame(rows), np.array(pairs)
+
+
+def test_subset_preference_finds_a_planted_preference_with_an_interval():
+    cells, pairs = _subset_events(prefer=True)
+    sp = subset_preference(cells, pairs).set_index(["cell type", "neighbour type"])
+    a = sp.loc[("Immune A+", "Tumor")]
+    assert a["observed / expected (subtypes shuffled)"] > 1.2 and a["95% low"] > 1
+    cells, pairs = _subset_events(prefer=False)
+    sp = subset_preference(cells, pairs).set_index(["cell type", "neighbour type"])
+    a = sp.loc[("Immune A+", "Tumor")]
+    assert a["95% low"] < 1 < a["95% high"]
+    # deterministic (seeded bootstrap)
+    assert subset_preference(cells, pairs).equals(subset_preference(cells, pairs))
