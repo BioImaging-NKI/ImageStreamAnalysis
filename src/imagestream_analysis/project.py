@@ -50,6 +50,7 @@ PROJECT_FILE = "project.toml"
 OVERVIEW_FILE = "overview.tsv"
 INTERACTIONS_FILE = "interactions.tsv"
 SUBSETS_FILE = "subset preference.tsv"
+PAIRS_FILE = "membrane pairs.tsv"
 
 
 @dataclass
@@ -210,6 +211,7 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
         "single tumor + single immune cell": int(len(d)),
         "interactions": int(len(result.pairs)),
         "MOI partners / measured": _finite(result.expression.get("partners / measured")),
+        "marker check": result.expression.get("level", ""),
         "tumor–immune contacts": int(result.contacts.loc[(result.contacts["cell type"] == "Tumor")
                                                          & result.contacts["neighbour type"].str.startswith("Immune"),
                                                          "contacts"].sum()),
@@ -398,6 +400,12 @@ def write_overview(folder: str | Path) -> pd.DataFrame:
                    "fraction touching", "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
         save_table(pd.concat([each[columns], summed[columns]], ignore_index=True), folder / INTERACTIONS_FILE)
     write_subsets(folder, table)
+    pairs = [pd.read_csv(f, sep="\t").assign(experiment=row.experiment, dataset=row.dataset)
+             for row in table.itertuples() if (f := folder / str(row.folder) / "Membrane pairs.tsv").exists()]
+    if pairs:
+        each = pd.concat(pairs, ignore_index=True)
+        save_table(each[["experiment", "dataset", *[c for c in each.columns if c not in ("experiment", "dataset")]]],
+                   folder / PAIRS_FILE)
     return table
 
 

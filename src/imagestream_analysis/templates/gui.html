@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>ImageStream Analysis</title>
 <style>
 :root {
@@ -387,7 +388,7 @@ const FIELDS = [
     [["classification.thresholds", "Thresholds set by hand (Apply in a dashboard)", "thresholds"]]]],
   ["Membranes", "analysis/membrane", [
     [["membrane.analysis", "Membrane profiles and enrichment", "bool"],
-     ["membrane.thickness", "Membrane / interface width (px)", "int"]],
+     ["membrane.thickness", "Membrane / interface width (px)", "int", null, "about 1.5 µm"]],
     [["membrane.cells", "Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed)", "list", null, "where the marker is expressed"]],
     [["membrane.partners", "Interface with (empty = the other cell type)", "list", null, "the other cell type"]],
     [["membrane.straightening_width", "Straightening width (px)", "int", null, "about 4.5 µm"],
@@ -504,6 +505,7 @@ const COLUMN_HELP = {
   "single tumor + single immune cell": "events with exactly one tumor and one immune cell that touch",
   "interactions": "pairs of touching cells (all types)",
   "MOI partners / measured": "the marker check: median marker of interest on the partners divided by that on the measured cells (empty: no marker of interest)",
+  "marker check": "the marker check of the project's membrane pair, in words (see the manual: where the marker is expressed)",
   "tumor–immune contacts": "pairs of a tumor and an immune cell that touch",
   "doublet fraction": "single tumor + single immune cell events divided by all events",
   "immune negative": "immune cells negative for every subtype marker",
@@ -514,7 +516,7 @@ const COLUMN_HELP = {
 };
 function columnHelp(c) {
   if (COLUMN_HELP[c]) return COLUMN_HELP[c];
-  if (/^median .* membrane ratio \(doublets\)$/.test(c)) return "in single tumor + single immune cell events: mean marker of interest in the measured cell's membrane band at the interface over the rest of its band (as macro 1.8; all immune cells, whatever the membrane pair)";
+  if (/^median .* membrane ratio \(doublets\)$/.test(c)) return "in single tumor + single immune cell events: mean marker of interest in the measured cell's membrane band at the interface over the rest of its band (as macro 1.8; all immune cells, whatever the membrane pair; no control: a partner that carries the marker, or two stained membranes, raise it too)";
   if (/^immune .*\+/.test(c)) return "immune cells with exactly this combination of positive subtype markers (and negative for the others)";
   return null;
 }
@@ -551,7 +553,7 @@ function contactMatrices(rows) {
   const rank = t => t === "Tumor" ? "0" : t === "Artefact" ? "9" : t === "Immune negative" || t === "Immune" ? "1" : "2" + (t.match(/\+/g) || []).length + t;
   const NS = "http://www.w3.org/2000/svg", svgEl = (tag, a) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
   const wrap = el("div", {}, el("h4", { "data-help": "guide/overview#partner-preference-per-experiment" }, "Partner preference per experiment"),
-    el("p", { class: "hint" }, "Within the exported events of three or more cells (all datasets of the experiment): contacts observed / expected when the cell types are shuffled among the cells of each event; blue: fewer than chance, red: more. Rows: cell type; columns: the type it touches. A preference among the selected multiplets, not a binding frequency: events without contacts, and those left out before the export, take no part."));
+    el("p", { class: "hint" }, "Within the exported events of three or more cells (all datasets of the experiment): contacts observed / expected when the cell types are shuffled among the cells of each event; blue: fewer than chance, red: more. Rows: cell type; columns: the type it touches. A preference among the selected multiplets, not a binding frequency: events without contacts, and those left out before the export, take no part. Between immune subtypes, read the subset preference instead (dashboard: Interactions, among immune cells; subset preference.tsv): this matrix also compares cells of different size and pools the datasets of the experiment."));
   const grid = el("div", { style: "display:flex;flex-wrap:wrap;gap:18px" });
   for (const exp of [...new Set(rows.map(r => r.experiment))].sort()) {
     const sub = rows.filter(r => r.experiment === exp), types = [...new Set(sub.flatMap(r => [r["cell type"], r["neighbour type"]]))].sort((a, b) => rank(a).localeCompare(rank(b)));
@@ -612,14 +614,16 @@ const DRAFT_KEY = "isa-draft";
 let savedJson = "";  // the project as last saved or opened
 function forgetDraft() { savedJson = JSON.stringify(toProject()); try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
 let draftTimer = null;
-for (const type of ["input", "change", "click"]) document.addEventListener(type, () => {
+function saveDraft() {
   clearTimeout(draftTimer);
-  draftTimer = setTimeout(() => {
-    if (!state.settings) return;
-    const j = JSON.stringify(toProject());
-    try { if (j === savedJson) localStorage.removeItem(DRAFT_KEY); else localStorage.setItem(DRAFT_KEY, j); } catch (e) {}
-  }, 600);
-}, true);
+  if (!state.settings) return;
+  const j = JSON.stringify(toProject());
+  try { if (j === savedJson) localStorage.removeItem(DRAFT_KEY); else localStorage.setItem(DRAFT_KEY, j); } catch (e) {}
+}
+for (const type of ["input", "change", "click"]) document.addEventListener(type, () => {
+  clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 300); }, true);
+addEventListener("pagehide", saveDraft);  // also when the page is closed or reloaded right after a change
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveDraft(); });
 
 (async () => {
   const s = await api("state");

@@ -269,7 +269,7 @@ repository). Fixed from their reports:
 
 Decided by the user and built (2026-11-01, same day):
 - **Threshold "Two populations" (default)**: noise limit of the negative cells (KDE mode + 2.5 robust SD from the
-  lower side; 3 SD for the artefact rule) and a 2-component Gaussian mixture; threshold at the crossing of the
+  lower side) and a 2-component Gaussian mixture; threshold at the crossing of the
   weighted densities when the upper component is credible (≥ 0.5 %, Ashman's D ≥ 2, mean above the noise limit), else
   the noise limit. Simulation (500 samples): errors 4790 vs best 2417, MaxEntropy strict 14 881, MaxEntropy 21 965.
   The user: positive peaks are often small, which is why a stricter threshold worked better.
@@ -280,6 +280,21 @@ Decided by the user and built (2026-11-01, same day):
 - **Subset preference** (`interactions.subset_preference`, within events with ≥ 2 immune cells, bootstrap 95 %
   interval, 1000 resamples, seed 48; page 400): `Subset preference.tsv`, project `subset preference.tsv`, dashboard
   tab "among immune cells". The dataset-wide variant was tested and is too insensitive for conjugate exports.
+
+## Fixes from the second user test (2026-11-01)
+
+Round 2: three of four users reached the right conclusion; counts matched the truth almost cell for cell. Fixed:
+- **Artefact rule** on the subtype thresholds of the immune cells of a first k-means (rows "artefact rule" in
+  Marker thresholds.tsv), then the final k-means without the artefacts. Over all detections the thresholds lay at the
+  noise: 5 of 47 "artefacts" were cells with a neighbour's light, and the user then switched the rule off, which made
+  the 42 real artefacts a fake triple-positive subset. Now exactly the 42.
+- Subset preference: no interval below 5 expected contacts (zero-width intervals coloured 1-contact squares).
+- `Membrane pairs.tsv` / project `membrane pairs.tsv`: every pair (membrane.pair_table), so no re-run per pair.
+- Overview `marker check` in words (`expression_check(...)["level"]`); the macro's doublet ratio and the per-event
+  card carry a caveat.
+- `membrane.thickness` default about 1.5 µm (2/3/5 px at 20/40/60x); the reference comparison keeps its 2 px.
+- Draft of the import page also saved on pagehide; favicon; no tracebacks for aborted connections; one subtype
+  marker: no duplicate marker selection; artefacts counted on the cell card; warning above six immune subtypes.
 
 ## The dashboard (new; replaces the macro's plots and overlays) ✅
 

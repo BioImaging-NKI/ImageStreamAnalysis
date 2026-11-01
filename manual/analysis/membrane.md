@@ -165,10 +165,11 @@ cells, and reports it in the log, `run.json`, the overview (*MOI partners / meas
 If the badge is amber or red, choose the pair the other way round (if the marker is on the partners), compare the
 enrichment with that of a pair whose partners do not carry the marker, or treat the result as an upper bound.
 
-**Look at the subsets.** The default pair (all cells of the type that expresses the marker) can hide an effect that
-only one subset has: in a test, a receptor polarized strongly on *A+* immune cells gave a median of 0.2 SD over all
-immune cells. Choose each subset under *Membrane of* in the dashboard before concluding that there is no
-enrichment.
+**Look at the subsets, on both sides.** The default pair (all cells of the type that expresses the marker, with all
+cells of the other type) can hide an effect that only one subset has: in a test, a receptor polarized strongly on *A+*
+immune cells gave a median of 0.2 SD over all immune cells, and a ligand enriched only where *B+* cells touch gave
+0.7 SD with all immune cells. The *All pairs* table of the dashboard and `Membrane pairs.tsv` give every combination of
+*Membrane of* and *Interface with* at once; read them before concluding that there is no enrichment.
 
 ??? note "Technical: inside only, and why it is no cure"
 
@@ -184,3 +185,9 @@ Independently of the profiles, every event gets the mean of the marker of intere
 of the membrane of each cell type (`All cell combinations.tsv`; for the events with one tumor and one immune cell,
 `Single Tumor Single Immune cell.tsv`), as in the macro. These use the membrane band of each cell type
 (*Membrane / interface width*) rather than the straightened profiles.
+
+This is the macro's measure, and it has none of the safeguards above: it takes all partners of the other type
+together, has no control, and does not follow the membrane pair. A partner that carries the marker, or two stained
+membranes side by side, raise it as much as a real enrichment does (in a test without any enrichment it was 1.27).
+The overview's *median … membrane ratio (doublets)* and the dashboard card *Marker of interest at the interface*
+show it; read them together with the marker check, and use the pair comparisons for conclusions.

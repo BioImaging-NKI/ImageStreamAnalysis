@@ -207,3 +207,19 @@ def test_without_a_marker_of_interest(synthetic):
     s.membrane.analysis = True
     with pytest.raises(ValueError, match="needs a marker of interest"):
         run(s)
+
+
+def test_widths_in_micrometres():
+    from imagestream_analysis.config import membrane_px, straightening_px
+
+    assert [membrane_px(None, px) for px in (1.0, 0.5, 0.33)] == [2, 3, 5]
+    assert [straightening_px(None, px) for px in (1.0, 0.5, 0.33)] == [5, 9, 13]
+    assert membrane_px(4, 0.5) == 4 and straightening_px(7, 0.5) == 7  # set in pixels: as it is
+
+
+def test_pair_table_of_every_membrane_pair(synthetic):
+    result = run(settings_for(synthetic))
+    t = result.pairs_table.set_index(["membrane of", "interface with"])
+    row = t.loc[("Tumor", "Immune")]
+    assert row["cells with an interface"] == 10 and row["median stdDevs above mean"] > 2
+    assert row["marker check"] and (result.out_dir / "Membrane pairs.tsv").exists()

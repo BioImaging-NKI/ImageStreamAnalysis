@@ -81,9 +81,9 @@ def test_lineage_and_subtypes():
     sub = cells.loc[immune, "Subtype"]
     assert {"A+", "B+", "negative"} <= set(sub) and (cells.loc[~immune, "Subtype"] == "").all()
     assert (sub == "A+ B+").sum() == (cells.loc[immune, "A+"] & cells.loc[immune, "B+"]).sum()
-    assert list(thresholds["cells"]) == ["all cells", "all cells", "immune cells", "immune cells"]
-    assert list(thresholds["marker"]) == ["A", "B", "A", "B"]
-    assert thresholds.loc[2, "of"] == immune.sum()
+    assert list(thresholds["cells"]) == ["immune cells", "immune cells"]  # the artefact rule is off here
+    assert list(thresholds["marker"]) == ["A", "B"]
+    assert thresholds.loc[0, "of"] == immune.sum()
 
 
 def test_artefacts_are_left_out_of_the_clustering():
@@ -116,7 +116,8 @@ def test_a_pool_shares_thresholds_and_matches_channels_by_role():
     second, ch2, *_ = measured(rng, n_tumor=50, n_immune=300, numbers=(9, 2, 11, 7))  # numbered differently
     (c1, c2), thresholds = classify_pool([(first, ch1), (second, ch2)], ClassificationSettings())
     assert len(c1) == len(first) and len(c2) == len(second)
-    assert thresholds["of"].iloc[0] == len(first) + len(second)
+    immune_rows = thresholds[thresholds["cells"] == "immune cells"]
+    assert immune_rows["of"].iloc[0] == (c1["Cell type"] == "Immune").sum() + (c2["Cell type"] == "Immune").sum()
     t_a = thresholds.query("marker == 'A' and cells == 'immune cells'")["threshold"].item()
     assert ((c2["Mean ch11 (A)"] > t_a) == c2["A+"].astype(bool)).all()  # the pool's threshold in both datasets
     alone = classify(second, ch2, ClassificationSettings())[1]
@@ -157,3 +158,16 @@ def test_two_populations_finds_a_small_positive_population():
     assert how.startswith("no second population") and (neg > t).mean() < 0.03
     assert log_threshold_how(np.concatenate([neg, pos]), TWO_POPULATIONS) == log_threshold_how(
         np.concatenate([neg, pos]), TWO_POPULATIONS)  # deterministic
+
+
+def test_artefact_rule_ignores_light_from_a_neighbour():
+    """A cell positive for A that picked up a little B light (far below the B+ cells) is not an artefact; a detection
+    bright in both is."""
+    df, ch, kind, a_pos, b_pos = measured(np.random.default_rng(6), n_artefact=10)
+    spill = np.flatnonzero((kind == "I") & a_pos & ~b_pos)[:15]
+    b_col = f"Mean ch{ch.functional[1]} (B)"
+    df.loc[spill, b_col] = df.loc[kind == "I", b_col].median() * 3  # a little above the negative cells
+    cells, thresholds = classify(df, ch, ClassificationSettings())
+    assert (cells.loc[spill, "Cell type"] == "Immune").all()
+    assert (cells.loc[kind == "X", "Cell type"] == "Artefact").all()
+    assert set(thresholds["cells"]) == {"artefact rule", "immune cells"}

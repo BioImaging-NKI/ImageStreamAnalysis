@@ -221,14 +221,59 @@ def expression_check(cells: pd.DataFrame, membranes: Profiles | None, moi_column
                    "signal at the interface may be theirs (membrane.inside_only limits the band to the measured cell).")
     else:
         verdict = "ok: the marker of interest is mainly on the measured cells"
+    level = next((name for prefix, name in CHECK_LEVELS if verdict.startswith(prefix)), "none")
     source = "membrane that touches no cell" if membranes is not None else "whole cell"
     return {"measured cells": " / ".join(wanted), "partners": " / ".join(partners), "measured on": source,
+            "level": level,
             "median (measured cells)": a, "median (partners)": b, "partners / measured": ratio, "check": verdict}
 
 
+# the marker check in a few words (the overview, the pair table), by the start of its verdict
+CHECK_LEVELS = [("ok", "mainly on the measured cells"), ("CAUTION", "partners carry part"),
+                ("WARNING: the marker of interest is on both", "on both cells"),
+                ("WARNING", "brighter on the partners"), ("NOT INFORMATIVE", "measured cells hardly carry it")]
 EXPRESSION_CAUTION = 0.25  # partners / measured cells above this: part of the interface signal may be the partners'
 EXPRESSION_SIMILAR = (0.8, 1.25)  # partners / measured in this range: on both cells; above: brighter on the partners
 EXPRESSION_LOW = 0.25  # measured cells below this fraction of the brightest cell type: they hardly carry the marker
+
+
+def pair_selections(cells: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """The selections of the pair table: rows (membrane of) the cell types, the immune subtypes present and, with two
+    or more subtype markers, every marker ('A+'); columns (interface with) the cell types and the subtypes."""
+    labels = type_label(cells)
+    subtypes = sorted({t for t in labels if t.startswith("Immune ")},
+                      key=lambda t: (t != "Immune negative", t.count("+"), t))
+    markers = [c for c in cells.columns if c.endswith("+") and not c.startswith(("Immune", "Mean"))]
+    rows = ["Tumor", "Immune", *subtypes, *(markers if len(markers) >= 2 else [])]
+    return rows, ["Tumor", "Immune", *subtypes]
+
+
+def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str) -> pd.DataFrame:
+    """Every pair of selections (pair_selections), as the dashboard's 'All pairs': the measured cells with an interface
+    with the partners, their median SD above mean and median ratio interface / free membrane (scored as
+    analyze_membranes, without the controls), and the marker check of the pair."""
+    rows, cols = pair_selections(cells)
+    labels = cells["label"].astype(int)
+    index = {int(lab): k for k, lab in enumerate(membranes.labels)}
+    out = []
+    for r in rows:
+        chosen = [index[int(lab)] for lab in labels[select(cells, [r])] if int(lab) in index]
+        for c in cols:
+            partners = np.array(sorted(labels[select(cells, [c])]), dtype=np.int64)
+            scores, ratios = [], []
+            for k in chosen:
+                p, track = membranes.profiles[k], membranes.tracks[k]
+                f, free = np.isin(track, partners), track == 0
+                if f.any() and free.sum() > 1:
+                    scores.append(_score(p[f], p[free]))
+                    mean_free = float(p[free].mean())
+                    ratios.append(float(p[f].mean()) / mean_free if mean_free else np.nan)
+            check = expression_check(cells, membranes, moi_column, [r], [c])
+            out.append({"membrane of": r, "interface with": c, "cells with an interface": len(scores),
+                        "median stdDevs above mean": float(np.nanmedian(scores)) if scores else np.nan,
+                        "median ratio interface/free": float(np.nanmedian(ratios)) if ratios else np.nan,
+                        "marker check": check["level"], "partners / measured": check["partners / measured"]})
+    return pd.DataFrame(out)
 
 
 def pair_of(settings: MembraneSettings, cell_of_interest: CellOfInterest) -> tuple[list[str], list[str]]:

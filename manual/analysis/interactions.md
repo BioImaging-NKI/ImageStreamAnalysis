@@ -2,8 +2,9 @@
 
 ## Which cells touch
 
-Two cells of the same event **touch** when one comes within *Membrane / interface width* pixels of the other: the
-same distance that defines the [interfaces](membrane.md). So a cell with an interface always lists its partner among
+Two cells of the same event **touch** when one comes within *Membrane / interface width* of the other (empty, the
+default: about 1.5 µm, i.e. 2 px at 20×, 3 px at 40×, 5 px at 60×): the same distance that defines the
+[interfaces](membrane.md). So a cell with an interface always lists its partner among
 the cells it touches. Cells in different events never touch.
 
 Every cell lists the cells it touches (`Touching (labels)`) and their types (`Neighbour types`); every event counts its
@@ -14,8 +15,11 @@ pairs (`Interactions`).
     "Within *k* pixels" means *k* steps between 4-connected pixels: the reach of the dilation that makes the
     interfaces (as CLIJ2 in the macro). Two cells with no background pixel between them are 1 step apart; with a gap of
     *g* pixels, *g* + 1. ClassifyCellTypes 2.8 used MorphoLibJ's region adjacency graph on the shrunk labels, which
-    counts only cells that touch directly; with the default width of 3 px, cells that almost touch also count here,
-    as they do for the interfaces.
+    counts only cells that touch directly; here cells that almost touch also count, as they do for the interfaces.
+
+    The default is set in µm, not in pixels, so that "touching" means the same at every magnification: the number of
+    pixels nearest $1.5\,\mu\mathrm{m}$ / pixel size, at least 2. A fixed 3 px meant 3 µm at
+    20× (near misses counted as contacts) and 1 µm at 60×. A width set in pixels is used as it is.
 
 ## Counting contacts
 
@@ -91,8 +95,10 @@ touches the tumor cell (or another immune cell) more often of this subtype than 
 are shuffled, among the immune cells of each event; the cells, their positions, the tumor cells and the contacts stay
 as they are. Only events with at least two immune cells take part: with one immune cell there is no choice.
 
-The result is observed / expected per subtype and partner (tumor cells or a subtype), with a **95 % interval**. In the
-dashboard (*Interactions*, tab *among immune cells*) only squares whose interval excludes 1 are coloured. The tables
+The result is observed / expected per subtype and partner (tumor cells or a subtype), with a **95 % interval**; with
+fewer than 5 contacts expected there is no interval. In the dashboard (*Interactions*, tab *among immune cells*) only
+squares whose interval excludes 1 are coloured. Many squares are tested at once: one square out of twenty excludes 1
+by chance alone, so trust a preference that holds in every dataset (donor, replicate), not one square. The tables
 are `Subset preference.tsv` per dataset and `subset preference.tsv` in the project folder.
 
 ![The subset preference in the dashboard](../images/dash_subsets.png)
@@ -110,7 +116,9 @@ are `Subset preference.tsv` per dataset and `subset preference.tsv` in the proje
     **The interval.** The events are resampled with replacement (as many as there are), observed and expected are
     summed again, and observed / expected is recomputed; the 2.5th and 97.5th percentiles over 1000 resamples (Python,
     seeded, so the tables are reproducible) or 400 (the page; slightly different) are the interval. It reflects the
-    sampling of events within one dataset, not the variation between donors: compare datasets for that.
+    sampling of events within one dataset, not the variation between donors: compare datasets for that. Below 5
+    expected contacts no interval is given: a resample of a handful of contacts often contains the same contacts
+    every time, which gives an interval of zero width that excludes 1 on one or two contacts.
 
     **Why within events.** Shuffling the subtypes over the whole dataset asks whether a subtype is over-represented
     among the immune cells that touch tumor cells. In an export of conjugates nearly every immune cell touches a tumor
@@ -129,9 +137,14 @@ marker, see [pools](classification.md#several-datasets-pools)), and the overview
 matrix. To compare, for example, control and treated samples stained in the same way:
 
 - give them **one** experiment label, so that "positive for A" means the same in both (or set the thresholds by hand);
-- compare the conditions **per dataset**: every dataset's own table is in `interactions.tsv` (and in its own
-  `Interactions.tsv`), with the observed and expected contacts; look at the same ratio in every donor, and at the
-  counts behind it.
+- compare the conditions **per dataset**: every dataset's own table is in `interactions.tsv` and
+  `subset preference.tsv` (and in the dataset folders), with the observed and expected contacts; look at the same
+  ratio in every donor, and at the counts behind it. A change that goes the same way in every donor is the result;
+  the overview's matrix per experiment pools the conditions and cannot show it.
+- expect **small numbers**: few events give the immune cells a choice, so real changes of preference come out weak.
+  In a test where a subset was placed next to the tumor cell more than twice as often after treatment, the ratio
+  rose by 0.05–0.25, in the data's own geometry by about as much: the tool cannot recover more than the events
+  contain.
 
 ## Multiplets
 

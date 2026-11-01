@@ -189,6 +189,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "channels": channels,
         "cell_of_interest": of_interest,
         "has_moi": settings.channels.has_marker_of_interest,
+        "marker_check": result.expression.get("level", ""),  # of the project's pair (the per-event card)
         "artefact_min_positive": settings.classification.artefact_min_positive,
         "events": {
             "object": _column(ids) if ids is not None else None,
@@ -240,7 +241,7 @@ def markers_data(result: Result, settings: Settings) -> list[dict[str, Any]]:
         thr = {str(c): float(v) for c, v in zip(rows["cells"], rows["threshold"], strict=True)}
         how = list(rows.loc[rows["cells"] == "immune cells", "how"]) if "how" in rows else []
         out.append({"name": name, "values": _column(cells[column], 3), "threshold": thr.get("immune cells"),
-                    "threshold_all": thr.get("all cells"),
+                    "threshold_all": thr.get("artefact rule"),
                     "method": str(rows["method"].iloc[0]) if len(rows) else "",
                     "how": str(how[0]) if how else ""})
     return out

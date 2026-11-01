@@ -23,8 +23,8 @@ writes the project file without running. The results of a dataset go to `<projec
 - **Pixel size**: 20×, 40× or 60× (1, 0.5 or 0.33 µm per pixel), or *other…*. IDEAS files do not contain it. Check it
   for your instrument: these are the nominal values.
 - **Datasets**: every first-level folder of the zip is a dataset. *Use* includes it; *Objects* counts the objects,
-  *Complete* those that have every needed channel (the others are left out). *Experiment* groups datasets: see
-  [Pools](#pools) below.
+  *Complete* those that have every needed channel (the others are left out). *Experiment* groups datasets (it starts
+  as the name of the zip): see [Pools](#pools) below.
 - **Channels**: the example images show a few objects of each channel. Give every needed channel a **name**; tick its
   **role**:
 

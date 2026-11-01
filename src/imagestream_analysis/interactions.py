@@ -120,6 +120,7 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
 
 BOOTSTRAP = 1000  # resamples of the events for the 95 % interval of the subset preference
 BOOTSTRAP_SEED = 48
+MIN_EXPECTED = 5.0  # fewer expected contacts: no interval (a resample of a handful of contacts says nothing)
 
 
 def subset_preference(cells: pd.DataFrame, pairs: np.ndarray, bootstrap: int = BOOTSTRAP,
@@ -138,7 +139,8 @@ def subset_preference(cells: pd.DataFrame, pairs: np.ndarray, bootstrap: int = B
     events; when nearly every immune cell touches a tumor cell (gated conjugates) this can hardly depart from 1.
 
     The 95 % interval: the 2.5 and 97.5 percentiles of observed / expected over `bootstrap` resamples of the events
-    (with replacement; seeded, so the tables are reproducible). Artefacts take no part."""
+    (with replacement; seeded, so the tables are reproducible); none below MIN_EXPECTED expected contacts.
+    Artefacts take no part."""
     columns = ["cell type", "neighbour type", "contacts", "expected (subtypes shuffled)",
                "observed / expected (subtypes shuffled)", "95% low", "95% high"]
     labels = type_label(cells)
@@ -217,7 +219,8 @@ def subset_preference(cells: pd.DataFrame, pairs: np.ndarray, bootstrap: int = B
                              "expected (subtypes shuffled)": exp[i, j],
                              "observed / expected (subtypes shuffled)": (obs[i, j] / exp[i, j] if exp[i, j] > 0
                                                                          else np.nan),
-                             "95% low": low[i, j], "95% high": high[i, j]})
+                             "95% low": low[i, j] if exp[i, j] >= MIN_EXPECTED else np.nan,
+                             "95% high": high[i, j] if exp[i, j] >= MIN_EXPECTED else np.nan})
     return pd.DataFrame(rows, columns=columns)
 
 

@@ -165,6 +165,12 @@ class ClassificationSettings:
 
 
 STRAIGHTENING_UM = 4.5  # the default straightening width in µm (manual: analysis/membrane.md)
+MEMBRANE_UM = 1.5  # the default membrane band and touching distance in µm (manual: analysis/interactions.md)
+
+
+def membrane_px(thickness: int | None, pixel_size: float) -> int:
+    """The membrane band and touching distance in pixels: as set, or the number nearest MEMBRANE_UM (at least 2)."""
+    return int(thickness) if thickness else max(2, round(MEMBRANE_UM / pixel_size))
 
 
 def straightening_px(width: int | None, pixel_size: float) -> int:
@@ -183,7 +189,9 @@ class MembraneSettings:
     cells: list[str] = field(default_factory=list)
     # the partners whose contact is the interface, as for cells; empty = the other cell type
     partners: list[str] = field(default_factory=list)
-    thickness: int = 3  # pixels: the width of the membrane band, and the distance at which cells touch
+    # pixels: the width of the membrane band, and the distance at which cells touch; empty = about 1.5 µm (2 px at
+    # 20x, 3 at 40x, 5 at 60x)
+    thickness: int | None = None
     # pixels: the width of the band across the outline that is straightened; empty = about 4.5 µm (5 px at 20x, 9 at
     # 40x, 13 at 60x), so that the band reaches the membrane where the outline lies a little outside it
     straightening_width: int | None = None

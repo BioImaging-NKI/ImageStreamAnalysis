@@ -40,7 +40,8 @@ All sizes are in pixels of the export: a size in µm divided by the pixel size (
   it: 0).
 - **Min. / Max. cell size (px)**: areas after shrinking; keep the minimum well below the area of the smallest cells
   (about a third of it) and the maximum above the largest.
-- **Membrane / interface width (px)**: about 1–1.5 µm; the default of 3 px suits 20× and 40×.
+- **Membrane / interface width (px)**: empty (the default) is about 1.5 µm: 2 px at 20×, 3 px at 40×, 5 px at 60×.
+  It is also the distance at which two cells count as touching (see [Cell contacts](interactions.md)).
 
 ## Clean-up
 

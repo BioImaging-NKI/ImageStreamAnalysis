@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>ImageStream Dashboard</title>
 <style>
 /* Colours: the validated reference palette of the dataviz skill. Categorical slots in fixed order: tumor cells slot 2,
@@ -603,7 +604,8 @@ function drawPlots() {
   document.getElementById("iface-card").hidden = !D.has_moi;
   const evPts = !D.has_moi ? [] : shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--s2" : "--s1") }));
   const who = OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell";
-  document.getElementById("iface-sub").textContent = `Per event: mean of the marker of interest in the ${who} membrane at the interface against the rest of its membrane (${evPts.length.toLocaleString()} events; dashed: equal)`;
+  document.getElementById("iface-sub").textContent = `Per event: mean of the marker of interest in the ${who} membrane at the interface against the rest of its membrane (${evPts.length.toLocaleString()} events; dashed: equal). ` +
+    `The macro's measure: all ${OF_INTEREST === "Tumor" ? "immune" : "tumor"} partners together, no control${D.marker_check ? "; marker check: " + D.marker_check : ""}. Points above the line are not proof of enrichment: compare pairs under Membrane enrichment.`;
   const all = evPts.flatMap(p => [p.x, p.y]); const d = extent(all, false); d[0] = Math.min(0, d[0]);
   if (D.has_moi) scatter("iface", "iface", evPts, { kind: "event", xd: d, yd: d, identity: true, xlabel: "rest of the membrane", ylabel: "at the interface" });
   drawContacts();
@@ -710,7 +712,8 @@ function drawSubsetMatrix() {
     svg.append(svgEl("circle", { cx: x, cy: top - 8, r: 4, fill: `var(${colorVar(t)})` }));
     svgText(svg, x + 4, top - 16, colName(t), { class: "ink", transform: `rotate(-40 ${x + 4} ${top - 16})` }); });
   for (let a = 0; a < K; a++) for (let b = 0; b < C; b++) {
-    const o = T.obs[a][b], e = T.exp[a][b], [lo, hi] = T.ci[a][b], sure = e > 0 && (lo > 1 || hi < 1);
+    const o = T.obs[a][b], e = T.exp[a][b], few = e < 5, [lo, hi] = few ? [NaN, NaN] : T.ci[a][b];  // as MIN_EXPECTED
+    const sure = !few && (lo > 1 || hi < 1);
     const fill = sure ? divergingRgb(Math.log2(Math.max(o, 0.5) / e) / 2) : hexRgb(css("--div-mid"));
     const g = svgEl("g", { style: "cursor:pointer" });
     g.append(svgEl("rect", { x: lab + b * cell + 1, y: top + a * cell + 1, width: cell - 2, height: cell - 2, rx: 3, fill: rgbCss(fill) }));
@@ -718,16 +721,19 @@ function drawSubsetMatrix() {
       style: `fill:${sure ? inkOn(fill) : css("--muted")};font-size:11px` });
     tx.textContent = e > 0 ? fmt(o / e, 2) : "–"; g.append(tx);
     g.addEventListener("pointermove", ev => showTip(ev, [[`${shortType(T.rows[a])} touching ${shortType(T.cols[b])}`, ""],
-      [String(o), `contacts (expected with the subtypes shuffled among the immune cells ${fmt(e, 1)})`],
-      [e > 0 ? fmt(o / e, 2) : "–", "observed / expected"], [isFinite(lo) ? `${fmt(lo, 2)} – ${fmt(hi, 2)}` : "–", "95 % interval (events resampled)"]]));
+      [String(o), `${o === 1 ? "contact" : "contacts"} (expected with the subtypes shuffled among the immune cells ${fmt(e, 1)})`],
+      [e > 0 ? fmt(o / e, 2) : "–", "observed / expected"], [isFinite(lo) ? `${fmt(lo, 2)} – ${fmt(hi, 2)}` : "–", few ? "no interval: fewer than 5 contacts expected" : "95 % interval (events resampled)"]]));
     g.addEventListener("pointerleave", hideTip);
     g.addEventListener("click", () => setContact([T.rows[a], T.cols[b]]));
     svg.append(g);
   }
   const bar = document.createElement("span"); bar.style.cssText = "display:inline-block;width:120px;height:8px;border-radius:2px;vertical-align:middle;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))";
   const a = document.createElement("span"), b = document.createElement("span"); a.className = b.className = "note";
-  a.textContent = "¼× "; b.textContent = ` 4×; coloured only where the 95 % interval excludes 1 (grey: consistent with chance); ${T.events.toLocaleString()} events with two or more immune cells`;
-  ml.append(a, bar, b);
+  a.textContent = "¼× "; b.textContent = " 4×";
+  const why = document.createElement("div"); why.className = "note";
+  why.textContent = `Coloured only where the 95 % interval excludes 1 (grey: consistent with chance, or fewer than 5 contacts expected); ${T.events.toLocaleString()} events with two or more immune cells.`;
+  const scale = document.createElement("span"); scale.style.whiteSpace = "nowrap"; scale.append(a, bar, b);
+  ml.append(scale, why);
 }
 let contactCache = null;
 function drawContacts() {
@@ -794,7 +800,7 @@ function drawBars(S) {
     let x = x0;
     S.types.forEach((n, b) => { const v = S.obs[a][b]; if (!v) return;
       const w = (x1 - x0) * v / scaleTo, seg = svgEl("rect", { x: x + 1, y, width: Math.max(0, w - 2), height: 18, rx: 2, fill: `var(${colorVar(n)})` });
-      seg.addEventListener("pointermove", ev => showTip(ev, [[`${shortType(t)} → ${shortType(n)}`, ""], [String(v), "contacts"], [pct(v / (totals[a] || 1)), `of the ${shortType(t)} contacts`]]));
+      seg.addEventListener("pointermove", ev => showTip(ev, [[`${shortType(t)} → ${shortType(n)}`, ""], [String(v), v === 1 ? "contact" : "contacts"], [pct(v / (totals[a] || 1)), `of the ${shortType(t)} contacts`]]));
       seg.addEventListener("pointerleave", hideTip); seg.style.cursor = "pointer"; seg.addEventListener("click", () => setContact([t, n]));
       svg.append(seg); x += w; });
     svgText(svg, W - 4, y + 13, pct(S.nCells[a] ? S.touchingAny[a] / S.nCells[a] : 0), { "text-anchor": "end", class: "ink" });
@@ -853,7 +859,7 @@ function renderMarkers() {
     slider.value = logv(m.thr);
     let pending = false;
     slider.oninput = () => { m.thr = Math.exp(+slider.value) - 1 + lo; place(); if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; typesChanged(); }); } };
-    const note = document.createElement("div"); note.className = "note"; note.textContent = `Immune cells, on log(intensity − min + 1); thresholds in intensity. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)${m.how && m.method !== "manual" ? ": " + m.how : ""}` + (m.threshold_all != null ? `; over all detections, for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
+    const note = document.createElement("div"); note.className = "note"; note.textContent = `Immune cells, on log(intensity − min + 1); thresholds in intensity. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)${m.how && m.method !== "manual" ? ": " + m.how : ""}` + (m.threshold_all != null ? `; for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
     div.append(slider, note);
     if (m.method === "manual") {  // set by hand (Apply, or a settings file): Apply can make it automatic again
       const auto = document.createElement("button"); auto.className = "auto"; auto.textContent = "automatic";
@@ -891,7 +897,7 @@ function decodeMembranes() {
 function selectorOptions() {
   const opts = [["Tumor", "tumor cells"], ["Immune", "immune cells (all)"]];
   if (MK.length) { for (const t of IMMUNE_TYPES) if (TYPE.includes(t)) opts.push([t, shortType(t) + " cells"]);
-    for (const m of MK) opts.push([m.name + "+", `immune cells ${m.name}+ (any other markers)`]); }
+    if (MK.length > 1) for (const m of MK) opts.push([m.name + "+", `immune cells ${m.name}+ (any other markers)`]); }
   return opts;
 }
 function matches(i, sel) {
@@ -1109,7 +1115,8 @@ function renderCard() {
   drawEvent(cv, e, z);
   const dl = document.createElement("dl");
   const rows = [["object", E.object ? E.object[e] : "–"], ["label", C.label[i]], ["area", fmt(C.area[i], 0) + " px"], ["immune marker", fmt(C.t_int[i])], ["tumor marker", fmt(C.tu_int[i])],
-                ["marker ratio", fmt(C.ratio[i])], [`cells in the event`, `${E.t_cells[e]} immune, ${E.tumor_cells[e]} tumor`]];
+                ["marker ratio", fmt(C.ratio[i])], [`cells in the event`, `${E.t_cells[e]} immune, ${E.tumor_cells[e]} tumor` +
+                  ((n => n ? `, ${n} artefact${n > 1 ? "s" : ""}` : "")(cellsOfEvent[e].filter(c => C.type[c] === "Artefact").length))]];
   for (const m of MK) rows.push([m.name, C.type[i] === "Immune" ? `${fmt(m.values[i], 1)} (${m.values[i] > m.thr ? "positive" : "negative"}; threshold ${fmt(m.thr, 1)})`
                                                           : fmt(m.values[i], 1)]);  // only immune cells have a subtype
   rows.push(["touching", neighbours[i].length ? neighbours[i].map(j => `${shortType(TYPE[j])} (${C.label[j]})`).join(", ") : "none"]);

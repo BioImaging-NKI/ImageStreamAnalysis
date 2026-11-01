@@ -18,7 +18,7 @@ import pandas as pd
 
 from . import __version__, ideas
 from .classification import class_map, classification_output, classify
-from .config import Settings, straightening_px
+from .config import Settings, membrane_px, straightening_px
 from .dashboard import write_dashboard
 from .interactions import (
     add_neighbours,
@@ -39,6 +39,7 @@ from .membrane import (
     expression_check,
     membrane_profiles,
     pair_of,
+    pair_table,
 )
 from .segmentation import clean_labels, markers, remove_labels, save_cellpose_result, segment
 
@@ -52,6 +53,7 @@ MEMBRANE_TABLE = "Membrane intensity analysis"
 THRESHOLDS_TABLE = "Marker thresholds"
 CONTACTS_TABLE = "Interactions"
 SUBSETS_TABLE = "Subset preference"
+PAIRS_TABLE = "Membrane pairs"
 MULTIPLETS_TABLE = "Multiplets"
 AVERAGE_PROFILE = f"Average normalized membrane profile values - interfaces centered at {INTERFACE_OFFSET}"
 
@@ -84,6 +86,7 @@ class Result:
     profiles: Profiles | None = None  # the membrane of every cell, for any pair of cell types (dashboard)
     expression: dict[str, Any] = field(default_factory=dict)  # where the marker of interest is (membrane.py)
     subsets: pd.DataFrame = field(default_factory=pd.DataFrame)  # interactions.subset_preference
+    pairs_table: pd.DataFrame = field(default_factory=pd.DataFrame)  # membrane.pair_table
 
 
 def measure(stack: EventStack, settings: Settings, out_dir: Path) -> Measured:
@@ -115,10 +118,11 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
            out_dir: Path) -> Result:
     """The interfaces and membranes of the classified cells."""
     stack, labels = measured.stack, measured.labels
-    pairs = touching_pairs(labels, settings.membrane.thickness)
+    reach = membrane_px(settings.membrane.thickness, stack.pixel_size)
+    pairs = touching_pairs(labels, reach)
     cells = add_neighbours(cells, pairs)
     classes = class_map(labels, cells)
-    masks = interface_masks(classes, settings.membrane.thickness)
+    masks = interface_masks(classes, reach)
     ch = settings.channels
     moi = stack.channel(ch.marker_of_interest) if ch.has_marker_of_interest else None
     if moi is None and settings.membrane.analysis:
@@ -133,7 +137,7 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
     if settings.membrane.analysis and moi is not None:
         m = settings.membrane
         result.profiles = membrane_profiles(labels, cells, moi, stack.median(ch.marker_of_interest),
-                                            straightening_px(m.straightening_width, stack.pixel_size), m.thickness,
+                                            straightening_px(m.straightening_width, stack.pixel_size), reach,
                                             m.inside_only)
         result.membranes = analyze_membranes(cells, result.profiles, ch.cell_of_interest, m)
     result.cells.attrs["cellpose"] = measured.cellpose
@@ -143,6 +147,8 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
     wanted, partners = pair_of(settings.membrane, ch.cell_of_interest)
     moi_column = next(c for c in cells.columns if c.startswith(f"Mean ch{stack.number(ch.marker_of_interest)} ("))
     result.expression = expression_check(cells, result.profiles, moi_column, wanted, partners)
+    if result.profiles is not None:
+        result.pairs_table = pair_table(cells, result.profiles, moi_column)
     level = (logging.WARNING if result.expression["check"].startswith(("WARNING", "CAUTION", "NOT INFORMATIVE"))
              else logging.INFO)
     log.log(level, "Marker of interest, %s against %s: medians %.4g and %.4g (%s); %s", wanted, partners,
@@ -166,6 +172,8 @@ def save(result: Result, settings: Settings) -> None:
     save_table(result.contacts, out / f"{CONTACTS_TABLE}.tsv")
     if len(result.subsets):
         save_table(result.subsets, out / f"{SUBSETS_TABLE}.tsv")
+    if len(result.pairs_table):
+        save_table(result.pairs_table, out / f"{PAIRS_TABLE}.tsv")
     save_table(result.multiplets, out / f"{MULTIPLETS_TABLE}.tsv")
     save_table(_with_object_ids(result.events, ids), out / f"{EVENT_TABLE}.tsv")
     d = _with_object_ids(result.doublets, ids)

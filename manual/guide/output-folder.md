@@ -7,6 +7,7 @@
 | `project.toml` | the project: exports, channel names, roles and settings (see [Settings files](../reference/command-line.md)) |
 | `overview.tsv` | one row per dataset (the [overview](overview.md)) |
 | `interactions.tsv` | the contact tables of all datasets, and summed per experiment |
+| `membrane pairs.tsv` | the membrane pairs of all datasets |
 | `subset preference.tsv` | the subset preference of all datasets (with intervals), and summed per experiment (without) |
 | `<experiment>/<dataset>/` | the results of one dataset (below) |
 
@@ -20,8 +21,9 @@ For an IDEAS export, the tables per cell and per event end with the column `Obje
 | `Cell classification.tsv` | one row per cell: measurements, cell type, subtype, neighbours (below) |
 | `All cell combinations.tsv` | one row per event: cells per type, marker of interest at the interfaces (left out without a marker of interest), whether a tumor and an immune cell touch (`Tumor-immune interface`), contacts |
 | `Single Tumor Single Immune cell.tsv` | the events with exactly one tumor and one immune cell that touch |
-| `Marker thresholds.tsv` | the threshold of every subtype marker, on all detections and on the immune cells, in background-subtracted intensity (as `Mean ch<N>`), and how it was found (`how`) |
+| `Marker thresholds.tsv` | the threshold of every subtype marker, for the artefact rule and on the immune cells, in background-subtracted intensity (as `Mean ch<N>`), and how it was found (`how`) |
 | `Interactions.tsv` | contacts per cell type and neighbour type, with the comparison with chance |
+| `Membrane pairs.tsv` | every pair of *Membrane of* and *Interface with*: the cells with an interface, the median enrichment and ratio, the marker check (with the membrane analysis) |
 | `Subset preference.tsv` | per immune subtype and partner: contacts against the subtypes shuffled among the immune cells of each event, with the 95 % interval (with two or more immune subtypes) |
 | `Multiplets.tsv` | the number of events with n cells and with n contacts |
 | `Membrane intensity analysis.tsv` | one row per measured cell: interface and membrane means, enrichment, control |
@@ -49,7 +51,7 @@ The membrane files exist only when the membrane analysis was run.
 | `Edge` | 1: the cell is cut by the edge of its event image |
 | `Mean ch<N> (<name>)` | the mean of every loaded channel, minus the channel's background |
 | `<marker>+` | 0/1 per subtype marker (with the threshold of the immune cells) |
-| `Positive markers` | the number of subtype markers the detection is positive in (thresholds over all detections: the artefact rule) |
+| `Positive markers` | the number of subtype markers the detection is positive in (the thresholds of the artefact rule) |
 | `Subtype` | the immune subtype ("A+ B+", "negative"); empty for other cells |
 | `Neighbours`, `Touching (labels)`, `Neighbour types` | the cells it touches: how many, which (labels), and their types |
 | `Object ID` | the IDEAS object number of the event |

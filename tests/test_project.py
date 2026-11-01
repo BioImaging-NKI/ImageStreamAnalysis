@@ -244,10 +244,10 @@ def test_datasets_of_an_experiment_are_classified_together(ideas_zip, pool):
     ta, tb = (pd.read_csv(f / "Marker thresholds.tsv", sep="\t") for f in (a, b))
     info = json.loads((a / "run.json").read_text(encoding="utf-8"))
     if pool == "experiment":
-        assert ta.equals(tb) and ta["of"].iloc[0] == 40  # one set of thresholds for the cells of both
+        assert ta.equals(tb) and ta["of"].iloc[0] == 20  # one set of thresholds for the immune cells of both
         assert info["classified with"] == "1 other dataset(s)"
     else:
-        assert ta["of"].iloc[0] == 20 and info["classified with"] == "this dataset only"
+        assert ta["of"].iloc[0] == 10 and info["classified with"] == "this dataset only"
     inter = pd.read_csv(folder / "interactions.tsv", sep="	")
     total = inter[(inter["dataset"] == "(all)") & (inter["cell type"] == "Tumor")
                   & inter["neighbour type"].str.startswith("Immune")]  # immune subtypes: one row each

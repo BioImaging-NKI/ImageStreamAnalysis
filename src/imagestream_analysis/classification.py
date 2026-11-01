@@ -26,7 +26,7 @@ IMMUNE, TUMOR, ARTEFACT = 1, 2, 3  # values in the class map (macro: changeValue
 CLASS_OF = {"Tumor": 0, "Immune": 1, "Artefact": 2}  # the Class column (macro v1.8: 1 = T cell, 0 = tumor cell)
 N_CLUSTERS = 2
 KMEANS_SEED = 48  # the macro's randomization_seed (the clustering itself is not bit-identical, see SPEC)
-MAX_TYPES = 8  # cell types that the dashboard can colour apart
+MAX_IMMUNE_TYPES = 6  # immune subtypes that the dashboard colours apart (palette slots 1, 4-8)
 THRESHOLD_COLUMNS = ["marker", "role", "cells", "method", "threshold", "positive", "of", "how"]
 
 
@@ -58,7 +58,6 @@ STRICT_SDS = 2.0  # "<method> strict": at least this many robust SDs above the m
 
 TWO_POPULATIONS = "Two populations"
 NOISE_SDS = 2.5  # the upper noise limit of the negative cells: their mode plus this many robust SDs (log scale)
-NOISE_SDS_ARTEFACTS = 3.0  # the same for the artefact rule (all detections): stricter, so that real cells stay cells
 MIN_WEIGHT = 0.005  # a second population needs at least this fraction of the cells
 MIN_SEPARATION = 2.0  # ... and its mean this many pooled SDs from the first (Ashman's D)
 
@@ -166,7 +165,14 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
     the markers are matched by role and position. Returns the cells of each dataset with the columns 'Cell type'
     (Tumor, Immune or Artefact), 'Class', '<marker>+' (0/1) per functional marker (with the threshold of the immune
     cells), 'Positive markers' (the number of functional markers a detection is positive in, with the thresholds of
-    all detections: the artefact rule) and 'Subtype', and the table of thresholds.
+    the artefact rule) and 'Subtype', and the table of thresholds.
+
+    The artefact rule (2026-11-01, after the second user test): a first k-means of all detections only finds the
+    immune cells; each subtype marker is thresholded on them, and a detection positive in at least
+    artefact_min_positive markers by those thresholds is an artefact. The final k-means runs without the artefacts,
+    and the subtype thresholds are computed again on its immune cells. (Thresholds over all detections lay at the
+    noise of the many negative cells, so a cell that picked up a little light from a touching neighbour became an
+    artefact.)
 
     The tumor and immune markers are not thresholded: on the test data an automatic threshold over all detections
     calls far more cells positive than the k-means finds, so they would make most detections artefacts."""
@@ -182,29 +188,29 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
     pool = pd.concat(parts, ignore_index=True)
     if len(pool) < N_CLUSTERS:
         raise ValueError(f"Only {len(pool)} cells: too few to classify")
-    everyone = pd.Series(True, index=pool.index)
     rows = []
 
-    def threshold(m: Marker, population: pd.Series) -> float:
+    def threshold(m: Marker, population: pd.Series, purpose: str) -> float:
         manual = settings.thresholds.get(m.name)
         values = pool.loc[population, f"_m {m.key}"].to_numpy(dtype=np.float64)
-        noise_sds = NOISE_SDS if population is not everyone else NOISE_SDS_ARTEFACTS
         t, how = ((float(manual), "set by hand") if manual is not None
-                  else log_threshold_how(values, settings.threshold_method, noise_sds))
+                  else log_threshold_how(values, settings.threshold_method))
         positive = pool[f"_m {m.key}"] > t
-        rows.append({"marker": m.name, "role": "subtype" if m.role == "functional" else m.role,
-                     "cells": "all cells" if population is everyone else "immune cells",
+        rows.append({"marker": m.name, "role": "subtype" if m.role == "functional" else m.role, "cells": purpose,
                      "method": "manual" if manual is not None else settings.threshold_method,
                      "threshold": t, "positive": int((positive & population).sum()), "of": int(population.sum()),
                      "how": how})
         return t
 
-    # 1. the functional markers on all detections: the artefacts are positive in too many of them
-    positive_all = [pool[f"_m {m.key}"] > threshold(m, everyone) for m in markers]
-    pool["Positive markers"] = np.sum(positive_all, axis=0).astype(int) if markers else 0
+    # 1. the artefacts: positive in too many subtype markers, thresholded on the immune cells of a first clustering
     n_min = settings.artefact_min_positive
     if n_min is None:  # all functional markers, when there are at least two
         n_min = len(markers) if len(markers) >= 2 else 0
+    pool["Positive markers"] = 0
+    if markers and n_min > 0:
+        first = assign_cell_types(pool, kmeans_classes(pool)) == "Immune"
+        positive_all = [pool[f"_m {m.key}"] > threshold(m, first, "artefact rule") for m in markers]
+        pool["Positive markers"] = np.sum(positive_all, axis=0).astype(int)
     artefact = (pool["Positive markers"] >= n_min if n_min > 0 else pd.Series(False, index=pool.index))
     if artefact.any():
         log.info("%d of %d detections are positive in %d or more subtype markers: artefacts", artefact.sum(),
@@ -223,17 +229,17 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
     immune = pool["Cell type"] == "Immune"
     functional = markers
     for m in functional:
-        pool[f"{m.name}+"] = (pool[f"_m {m.key}"] > threshold(m, immune)).astype(int)
+        pool[f"{m.name}+"] = (pool[f"_m {m.key}"] > threshold(m, immune, "immune cells")).astype(int)
     pool["Subtype"] = ""
     if functional:
         positive = pool[[f"{m.name}+" for m in functional]].to_numpy(dtype=bool)
         subtype = np.array([" ".join(f"{m.name}+" for m, on in zip(functional, row, strict=True) if on)
                             or "negative" for row in positive], dtype=object)
         pool.loc[immune, "Subtype"] = subtype[immune.to_numpy()]
-        n_types = pool.loc[immune, "Subtype"].nunique() + 1 + int(artefact.any())
-        if n_types > MAX_TYPES:
-            log.warning("%d cell types (tumor, immune subtypes, artefacts): the dashboard colours only %d apart",
-                        n_types, MAX_TYPES)
+        n_immune = pool.loc[immune, "Subtype"].nunique()
+        if n_immune > MAX_IMMUNE_TYPES:
+            log.warning("%d immune subtypes: the dashboard colours %d apart, the others in grey", n_immune,
+                        MAX_IMMUNE_TYPES)
     counts = pool["Cell type"].value_counts()
     log.info("%d cells: %d immune cells, %d tumor cells%s", len(pool), counts.get("Immune", 0),
              counts.get("Tumor", 0), f", {counts['Artefact']} artefacts" if "Artefact" in counts else "")

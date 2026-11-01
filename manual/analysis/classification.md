@@ -35,6 +35,9 @@ thresholds are automatic, or set by hand (`classification.thresholds`, or with t
   small positive population close to a large negative one, the usual case for a subtype marker.
 - **MaxEntropy** (as ClassifyCellTypes 2.8): finds the split of the histogram with the most information on both
   sides.
+- **MaxEntropy strict**: the MaxEntropy threshold, raised where needed so that it lies at least two robust standard
+  deviations above the middle of the negative cells. Fewer false positives, a few more missed positives.
+- **Otsu**: the split that best separates two populations of similar size.
 
 `Marker thresholds.tsv` says for every threshold how it was found (column `how`).
 
@@ -42,9 +45,6 @@ thresholds are automatic, or set by hand (`classification.thresholds`, or with t
 positive cells form two clear peaks, the threshold belongs in the gap between them; the automatic methods can miss it
 on either side (see the technical note). A threshold set in the gap with the slider and applied to the project
 (*Apply to the project…*) then holds for every output.
-- **MaxEntropy strict**: the MaxEntropy threshold, raised where needed so that it lies at least two robust standard
-  deviations above the middle of the negative cells. Fewer false positives, a few more missed positives.
-- **Otsu**: the split that best separates two populations of similar size.
 
 ![The subtype markers in the dashboard](../images/dash_markers.png){ width="420" }
 
@@ -71,7 +71,7 @@ on either side (see the technical note). A threshold set in the gap with the sli
 
 ??? note "Technical: Two populations, step by step"
 
-    All on the log scale *x* above (one value per cell of the population: the immune cells, or all detections for the
+    All on the log scale *x* above (one value per cell of the population: the immune cells; for the artefact rule the
     artefact rule).
 
     1. **The negative cells.** A kernel density estimate of *x* (Gaussian kernel; bandwidth
@@ -79,7 +79,7 @@ on either side (see the technical note). A threshold set in the gap with the sli
        highest peak at the mode *m* of the negative cells. Their spread is estimated from the **lower** side of the
        peak only, where positive cells do not reach: $\sigma = 1.4826 \cdot \mathrm{median}(m - x)$ over the cells
        with $x \le m$ (for a normal distribution this is its standard deviation). The **noise limit** is
-       $m + 2.5\,\sigma$; for the artefact rule $m + 3\,\sigma$, so that real cells are not made artefacts.
+       $m + 2.5\,\sigma$.
     2. **A second population.** A mixture of two normal distributions is fitted to *x* by expectation–maximization,
        started at the mode and at the largest value (deterministic). Its upper component counts as a positive
        population when it holds at least 0.5 % of the cells, its mean lies at least two pooled standard deviations
@@ -122,21 +122,29 @@ A detection that is positive in **all** subtype markers (with two or more of the
 clustering, drawn in grey, and not counted as cells in the counts and the interfaces. *Artefact: positive in at least N
 subtype markers* sets another number; 0 switches the rule off.
 
+**The images cannot tell an artefact from a real cell that is positive for every marker.** If such cells are
+expected, look at the artefacts in the dashboard (they are drawn in grey) before switching the rule off: with the rule
+off, real artefacts appear as a subtype positive for every marker, and are counted and take part in the contacts like
+cells. With **one** subtype marker the rule is off and an artefact counts as a positive immune cell (the log says
+so); check the positive cells by eye.
+
 ??? note "Technical: the artefact rule"
 
-    For this rule each subtype marker is thresholded over **all** detections (not only the immune cells, which are
-    not known yet), before the clustering. `Positive markers` in the cell table holds the count;
-    `Marker thresholds.tsv` lists both thresholds of each marker ("all cells" and "immune cells").
+    The rule needs the subtype thresholds of the immune cells, which are only known after the tumor/immune clustering,
+    which in turn should run without the artefacts. So the clustering runs twice:
 
-    These thresholds over all detections lie at the noise of the negative cells for well-separated markers, so real
-    cells can become artefacts: a cell positive for one marker that touches a cell positive for another picks up a
-    little of its neighbour's light. In the synthetic example data there were about half as many again as the
-    artefacts that were drawn. A threshold set by hand (in the gap of the histogram) also holds for this rule and
-    reduces that. Switching the rule off (0) is no cure when there are real artefacts: they then appear as a subtype
-    positive for every marker.
+    1. a first k-means of **all** detections finds the immune cells;
+    2. every subtype marker is thresholded on those immune cells (the threshold method of the project, or the
+       threshold set by hand); a detection positive in at least *N* markers by these thresholds is an artefact
+       (`Positive markers` in the cell table holds the count; `Marker thresholds.tsv`: the rows "artefact rule");
+    3. the final k-means runs on the other detections, and the subtype thresholds are computed again on its immune
+       cells (the rows "immune cells"), which may differ slightly.
 
-    **With one subtype marker the rule is off**: an artefact cannot be told apart from a positive cell, and is counted
-    as one (the log says so).
+    Until November 2026 the thresholds of the rule were computed over all detections. For well-separated markers they
+    lay at the noise of the many negative cells (tumor cells included), so a cell positive for one marker that
+    touched a cell positive for another picked up a little of its neighbour's light and became an artefact. In a test
+    with three subtype markers, 5 of 47 "artefacts" were such cells; with the immune-cell thresholds the rule found
+    exactly the 42 artefacts that were drawn.
 
     Only the subtype markers count. Counting the tumor and immune markers as well (a detection bright for both could
     be two cells drawn as one) was tried and dropped: an automatic threshold of those markers over all detections

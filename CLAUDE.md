@@ -166,6 +166,8 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - No reference channel for the interface (a cytoplasmic dye fakes enrichment); the dashboard's pair table instead.
 - Subset preference: subtypes shuffled among the immune cells **within events** with two or more immune cells,
   bootstrap 95 % interval (`interactions.subset_preference`; the page repeats it in JS).
+- After the second user test (same day): the artefact rule uses the immune-cell thresholds of a first k-means;
+  `membrane.thickness` default about 1.5 µm; `Membrane pairs.tsv` holds every pair (see SPEC.md).
 - User tests: agents follow the manual on synthetic scenarios with a hidden truth (`usertest/make_scenarios.py`,
   local, outside the repository).
 

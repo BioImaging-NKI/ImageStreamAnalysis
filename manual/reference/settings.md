@@ -73,7 +73,7 @@ The membrane profiles and the enrichment.
 | `analysis` | `false` | Membrane profiles and enrichment | the membrane profiles and the enrichment at the interface (the per-event interface table is always made) |
 | `cells` | `[]` | Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed) | the cells whose membrane is measured, a list of: a cell type ("Tumor", "Immune"), an immune subtype as in the tables ("Immune A+ B+"), or a marker ("A+": immune cells positive for A); empty = channels.cell_of_interest |
 | `partners` | `[]` | Interface with (empty = the other cell type) | the partners whose contact is the interface, as for cells; empty = the other cell type |
-| `thickness` | `3` | Membrane / interface width (px) | pixels: the width of the membrane band, and the distance at which cells touch |
+| `thickness` | (empty) | Membrane / interface width (px) | pixels: the width of the membrane band, and the distance at which cells touch; empty = about 1.5 µm (2 px at 20x, 3 at 40x, 5 at 60x) |
 | `straightening_width` | (empty) | Straightening width (px) | pixels: the width of the band across the outline that is straightened; empty = about 4.5 µm (5 px at 20x, 9 at 40x, 13 at 60x), so that the band reaches the membrane where the outline lies a little outside it |
 | `max_histogram_value` | `20.0` | Histogram maximum (SD) | the end of the histograms (SD above the mean); they start at -5 |
 | `histogram_bin_width` | `0.25` | Histogram bin width (SD) | the bin width of the histograms (SD) |
