@@ -159,6 +159,12 @@ of the same files. To join the two later: fetch the old repository as a remote a
 `git rebase --onto <old main> <snapshot commit> main` (the snapshot's tree equals the old tip, plus `.gitignore` and
 `.python-version`).
 
+Remote (2026-11-01): `origin` = BioImaging-NKI/ImageStreamAnalysis, pushed by the user's own GitHub account (in the
+remote URL; never the lab account). The port goes to a branch `python-port`; `main` (the macros) stays untouched
+until a pull request. **Not pushed yet: the user first looks for the old history** (pushing first would make grafting
+it a force-push). The release `example-data` (synthetic example export, live demo) exists. GitHub Pages still has to
+be enabled by an admin (Settings → Pages → GitHub Actions); then the manual workflow publishes on a push.
+
 ## General environment
 
 - Windows 10, PowerShell 5.1 and Git Bash. `python` on PATH is only the Microsoft Store stub, so always use `uv run`. `pixi` and Node are also installed.
