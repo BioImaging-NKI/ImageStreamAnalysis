@@ -3,6 +3,7 @@ the labels (lines 281-317)."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import subprocess
@@ -16,7 +17,7 @@ import numpy as np
 
 from . import imagej
 from .config import MarkerLocation, Settings
-from .io import EventStack, grid_columns, montage_to_stack, read_labelmap, stack_to_montage
+from .io import EventStack, grid_columns, montage_to_stack, read_labelmap, save_stack, stack_to_montage
 
 log = logging.getLogger(__name__)
 RUNNER = Path(__file__).with_name("_cellpose_runner.py")
@@ -104,9 +105,40 @@ def run_cellpose(image: np.ndarray, channels: list[int], settings: Settings) -> 
         return np.load(dst), info
 
 
-def segment(stack: EventStack, m: Markers, settings: Settings) -> tuple[np.ndarray, np.ndarray | None, dict[str, Any]]:
+LABELS_FILE, LABELS_INFO = "labelmap_cells.tif", "labelmap_cells.json"
+
+
+def cellpose_key(image: np.ndarray, channels: list[int], settings: Settings) -> str:
+    """A fingerprint of a Cellpose run: its input image and everything that changes its result."""
+    seg = settings.segmentation
+    params = {"model": seg.model, "diameter": seg.diameter, "flow_threshold": seg.flow_threshold,
+              "cellprob_threshold": seg.cellprob_threshold, "channels": channels, "shape": list(image.shape),
+              "python": str(seg.cellpose_python or "")}
+    h = hashlib.sha256(json.dumps(params, sort_keys=True).encode())
+    h.update(np.ascontiguousarray(image, dtype=np.float32).tobytes())
+    return h.hexdigest()
+
+
+def save_cellpose_result(montage: np.ndarray, info: dict[str, Any], folder: Path, pixel_size: float) -> None:
+    """labelmap_cells.tif (the Cellpose output, as the macro) and labelmap_cells.json (its fingerprint and the
+    Cellpose version, device and timing), so that the next run can reuse it."""
+    save_stack(montage[None], folder / LABELS_FILE, pixel_size)
+    (folder / LABELS_INFO).write_text(json.dumps(info, indent=1), encoding="utf-8")
+
+
+def _previous_result(folder: Path, key: str) -> dict[str, Any] | None:
+    try:
+        info: dict[str, Any] = json.loads((folder / LABELS_INFO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return info if info.get("key") == key and (folder / LABELS_FILE).is_file() else None
+
+
+def segment(stack: EventStack, m: Markers, settings: Settings,
+            previous: Path | None = None) -> tuple[np.ndarray, np.ndarray | None, dict[str, Any]]:
     """Raw labels (T, Y, X) as Cellpose made them, plus the montage to save as labelmap_cells (None when loaded
-    from disk)."""
+    from disk). With `previous` (the dataset folder) and segmentation.reuse_labels, the result of the previous run is
+    reused when its input image and Cellpose settings are the same."""
     seg = settings.segmentation
     t, _, h, w = stack.data.shape
     if seg.method == "labelmap":
@@ -117,8 +149,15 @@ def segment(stack: EventStack, m: Markers, settings: Settings) -> tuple[np.ndarr
     if seg.method != "cellpose":
         raise ValueError(f"Unknown segmentation.method '{seg.method}' (cellpose or labelmap)")
     image, channels = cellpose_input(stack, m, settings)
+    key = cellpose_key(image, channels, settings)
+    if previous is not None and seg.reuse_labels:
+        info = _previous_result(previous, key)
+        if info is not None:
+            log.info("Cellpose skipped: the input and settings are the same as in the previous run, whose labels "
+                     "(%s) are reused", LABELS_FILE)
+            return read_labelmap(previous / LABELS_FILE, t, h, w), None, info | {"reused": True}
     montage, info = run_cellpose(image, channels, settings)
-    return montage_to_stack(montage, h, w)[:t], montage, info
+    return montage_to_stack(montage, h, w)[:t], montage, info | {"key": key}
 
 
 def split_across_events(labels: np.ndarray) -> np.ndarray:

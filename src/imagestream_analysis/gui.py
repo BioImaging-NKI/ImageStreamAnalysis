@@ -31,7 +31,7 @@ import pandas as pd
 from . import __version__, ideas
 from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
-from .project import INTERACTIONS_FILE, Project, overview
+from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview
 
 log = logging.getLogger(__name__)
 STATE_DIR = Path(os.environ.get("ISA_HOME") or Path.home() / ".imagestream_analysis")  # ISA_HOME: a test instance
@@ -198,6 +198,33 @@ def served_file(url_path: str) -> Path | None:
     return target
 
 
+def apply_from_dashboard(data: dict[str, Any], job: Job) -> dict[str, Any]:
+    """The Apply button of a dashboard opened from the overview: its subtype thresholds (by marker name; None = back
+    to automatic) and membrane pair into the project, then the project is run again (Cellpose is skipped where its
+    input and settings did not change). dry_run: only how many datasets it concerns."""
+    root = SERVED.get("root")
+    if root is None or not (root / PROJECT_FILE).is_file():
+        raise ValueError("this dashboard does not belong to the project that is open on the import page")
+    p = Project.load(root / PROJECT_FILE)
+    n = len(p.samples())
+    if data.get("dry_run"):
+        return {"datasets": n, "running": job.running}
+    if job.running:
+        raise RuntimeError("a run is still going")
+    thresholds = dict(p.settings.classification.thresholds)
+    for name, value in (data.get("thresholds") or {}).items():
+        if value is None:
+            thresholds.pop(name, None)
+        else:
+            thresholds[name] = float(value)
+    p.settings.classification.thresholds = thresholds
+    if data.get("membrane"):
+        p.settings.membrane.cells = [str(c) for c in data["membrane"]["cells"]]
+        p.settings.membrane.partners = [str(c) for c in data["membrane"]["partners"]]
+    job.start(p.save())
+    return {"started": True, "datasets": n}
+
+
 def handle(api: str, data: dict[str, Any], job: Job) -> Any:
     if api == "state":
         prefs = load_prefs()
@@ -239,6 +266,8 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         return {"started": True, "problems": []}
     if api == "status":
         return job.status(int(data.get("since", 0)))
+    if api == "apply":
+        return apply_from_dashboard(data, job)
     if api == "stop":
         job.stop()
         return {"stopped": True}

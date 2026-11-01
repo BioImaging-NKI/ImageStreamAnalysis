@@ -68,6 +68,11 @@ Cellpose input, all events side by side in **one row** (Make Montage, rows=1):
 - Cellpose: model `cyto3`, diameter (`cellDiameter`), flow threshold 0.5 (constant), cellprob 0, `--use_gpu`.
 - Or `open(labelmapFile)` (`segmentation.method = "labelmap"`). The macro saves the Cellpose montage as
   `labelmap_cells.zip` only when Cellpose ran (line 284); the port saves `labelmap_cells.tif`. Both are accepted.
+- **Reuse (2026-11-01, new):** `labelmap_cells.json` next to it holds a fingerprint (sha256 of the Cellpose input
+  montage and of model, diameter, flow and cellprob thresholds, channels and the Cellpose Python) and the Cellpose
+  info. With `segmentation.reuse_labels` (default on) the next run of the dataset loads the labels instead of running
+  Cellpose when the fingerprint matches; clean-up, measurement and all later stages run again. This replaces the
+  manual labelmap round trip for re-runs (thresholds, membrane pair, clean-up settings).
 
 **Port:** Cellpose runs in a subprocess (`_cellpose_runner.py`) with the Python of any environment
 (`segmentation.cellpose_python`), Cellpose 3 or 4. With Cellpose 4 the model is `cpsam`, which takes the channels as
@@ -262,7 +267,13 @@ from the import page (served from the project folder, token-protected). No exter
 - **Subtype markers (live)**: per functional marker a histogram of log(v − min + 1) of the immune cells with the
   run's threshold (dashed) and a slider; moving it re-labels the subtypes everywhere (gallery, plots, contacts,
   membrane pairs, tables). The tumor / immune split and the artefacts stay as computed. "Copy the thresholds as
-  settings" gives `[classification] thresholds = {...}` to paste and run again (with the labelmap, no Cellpose).
+  settings" gives `[classification] thresholds = {...}` and `[membrane] cells / partners` to paste. **Apply to the
+  project** (2026-11-01; only when served by the import page, which has the token in the URL `/files/<token>/...`):
+  the moved thresholds (null = automatic again) and a changed membrane pair go into `project.toml`
+  (`gui.apply_from_dashboard`, project-wide), the project runs again (Cellpose reused), the page reloads when done.
+  The import page notices a run started this way and reads the project settings again from disk.
+- **View** (2026-11-01): channels, overlays, filter, sort, size, pair and tabs in localStorage per dashboard path
+  (the server token stripped). **Download .tsv** of the current table (all rows, filtered and sorted, 3 decimals).
 - **Interactions**: a contact matrix (cell type × the type it touches), coloured by observed / expected (diverging,
   ¼× to 4×, log scale; expected exactly as `interactions.contact_table`, so page and TSV agree) or by the fraction
   touching (sequential); a click on a square filters the gallery to the events with that contact (a chip in the

@@ -8,6 +8,9 @@ Everything is **linked**: hovering a cell in the events, a plot or a table highl
 it and shows it in the *Cell* card. *Esc* clears the selection. `dashboard.html#cell=12` or `#event=5` in the address
 selects that cell (row of the cell table) or event when the page opens.
 
+The page remembers its view (channels and their brightness, overlays, filter, sort, size, membrane pair and tabs) in
+the browser, per dashboard, and shows it again the next time it is opened.
+
 ![The dashboard](../images/dash_overview.png)
 
 ## Top: counts and filters
@@ -56,9 +59,19 @@ many immune cells are positive.
 
 ![Subtype markers](../images/dash_markers.png){ width="420" }
 
-*Copy the thresholds as settings* copies a `[classification]` line with the thresholds to the clipboard (and shows
-it): paste it into the project or settings file and run again to make them the thresholds of the tables. *Reset all*
-returns to the run's thresholds.
+To make the thresholds of the sliders those of the tables and of every other output:
+
+- **Apply to the project…** (only in a dashboard opened from the overview of the [import page](import-page.md)):
+  writes the thresholds that were moved, and the membrane pair if it was changed, into the project, and runs it
+  again. Cellpose is skipped when its input and settings did not change, so this takes seconds per dataset; the page
+  reloads when the run is done. The thresholds hold for **all datasets of the project**: the page asks first and says
+  how many.
+- **Copy as settings** copies the thresholds and the membrane pair as lines for a settings file or `project.toml` to
+  the clipboard (and shows them). This also works in a dashboard opened from disk.
+
+A threshold set this way shows *Run: manual* under its slider, with an **automatic** button: on the next *Apply* the
+threshold is computed automatically again. The import page lists the thresholds set by hand (*Analysis settings*).
+*Reset all* returns the sliders to the run's thresholds.
 
 ??? note "Technical: what the slider changes, and what not"
 
@@ -67,9 +80,7 @@ returns to the run's thresholds.
     uses thresholds over *all* detections, see [Cell types](../analysis/classification.md#artefacts)). In the run, a
     threshold set by hand (`classification.thresholds`) is used for both: for the subtypes and for the artefact rule.
 
-    To run again without segmenting again, set `segmentation.method = "labelmap"` and `segmentation.labelmap_file` to
-    the dataset's `labelmap_cells.tif` (one dataset), or keep the project as it is (Cellpose runs again; the result is
-    the same for the same settings).
+    So a threshold applied to the project can change the artefacts too, and with them the counts of the other cells.
 
 ## Cell classes
 
@@ -103,7 +114,8 @@ How contacts and chance are defined, and what they can and cannot tell, is in
 ## Membrane enrichment
 
 Shown when the membrane analysis was run. **Membrane of** and **interface with** choose the pair: a cell type, an
-immune subtype, or all immune cells positive for a marker. The page computes the enrichment for that pair at once.
+immune subtype, or all immune cells positive for a marker. The page computes the enrichment for that pair at once;
+*Apply to the project…* makes it the pair of the tables (see [Subtype markers](#subtype-markers)).
 
 ![Membrane enrichment](../images/dash_membrane.png)
 
@@ -125,4 +137,6 @@ immune subtype, or all immune cells positive for a marker. The page computes the
 ## Tables
 
 *Cells*, *Events* and *Contacts*, sortable by clicking a column header. Rows follow the filters; at most 2000 are
-shown (sort to see others). The full tables are the TSV files in the [output folder](output-folder.md).
+shown (sort to see others). **Download .tsv** saves the current table with all its rows, as filtered and sorted
+here and with the subtypes of the sliders. The tables of the run are the TSV files in the
+[output folder](output-folder.md).

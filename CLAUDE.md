@@ -54,6 +54,9 @@ A local guard backs this up:
     - Written by `pipeline.save`.
     - Self-contained and works from file://. Event images are drawn onto canvases but never read back (tainted canvases are fine).
     - Linked hover and selection; `#cell=N` / `#event=N` in the address selects on opening.
+    - Apply to the project (only when opened from the import page: the token is in the URL), Download .tsv, the view
+      remembered in localStorage (2026-11-01). Re-runs skip Cellpose when its fingerprint is unchanged
+      (`labelmap_cells.json`, `segmentation.reuse_labels`).
   - `gui.py` + `templates/gui.html`: the import and run page (`imagestream-cli gui` / `imagestream`).
     - A stdlib HTTP server on 127.0.0.1 with a token; the page is plain HTML/JS with no external resources.
     - Python, not Node: the server reads zips and starts the analysis.

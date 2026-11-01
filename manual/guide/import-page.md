@@ -61,8 +61,12 @@ Used for all datasets of the project. The most important:
   image for Cellpose is made (see [Segmentation](../analysis/segmentation.md)).
 - **Marker of interest expressed in**: the cell type that carries the marker of interest. The membrane enrichment is
   measured on these cells (see [Membrane enrichment](../analysis/membrane.md)).
-- **Python with Cellpose**, **Model**, **Cell diameter (px)**: the segmentation.
+- **Python with Cellpose**, **Model**, **Cell diameter (px)**: the segmentation. **Reuse the previous Cellpose result
+  if nothing changed** (on by default) skips Cellpose for a dataset whose Cellpose input and settings are the same as
+  in its previous run.
 - **Classify together**, **Threshold of the subtype markers**, **Artefact**: the [cell types](../analysis/classification.md).
+  **Thresholds set by hand** lists the thresholds applied from a [dashboard](dashboard.md#subtype-markers);
+  *Automatic again* removes them.
 - **Membrane profiles and enrichment**, **Membrane of**, **Interface with**: the [membrane enrichment](../analysis/membrane.md).
 
 [All settings](../reference/settings.md) lists every setting with its default.

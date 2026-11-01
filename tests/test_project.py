@@ -179,6 +179,33 @@ def test_api_scan_save_and_overview(server, ideas_zip):
     assert o["rows"][0]["cells"] == 20 and "experiment" in o["columns"]
 
 
+def test_apply_from_a_dashboard(ideas_zip, monkeypatch):
+    """Apply: moved thresholds (None = automatic again) and the membrane pair into the project, then a run."""
+    folder = ideas_zip["tmp"] / "applied"
+    project = make_project(ideas_zip, folder)
+    project.settings.classification.thresholds = {"Old": 1.0, "Kept": 2.0}
+    project.save()
+    monkeypatch.setitem(gui.SERVED, "root", folder)
+
+    class FakeJob:
+        running, started = False, None
+
+        def start(self, path):
+            self.started = path
+
+    job = FakeJob()
+    assert gui.apply_from_dashboard({"dry_run": True}, job) == {"datasets": 1, "running": False}
+    result = gui.apply_from_dashboard({"thresholds": {"A": 3.5, "Old": None},
+                                       "membrane": {"cells": ["Tumor"], "partners": ["A+"]}}, job)
+    assert result["started"] and job.started == folder / "project.toml"
+    s = Project.load(folder).settings
+    assert s.classification.thresholds == {"Kept": 2.0, "A": 3.5}
+    assert s.membrane.cells == ["Tumor"] and s.membrane.partners == ["A+"]
+    monkeypatch.setitem(gui.SERVED, "root", ideas_zip["tmp"])  # no project there
+    with pytest.raises(ValueError, match="does not belong"):
+        gui.apply_from_dashboard({"dry_run": True}, job)
+
+
 def test_object_ids_follow_the_frames():
     from imagestream_analysis.pipeline import _with_object_ids
 

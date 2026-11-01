@@ -27,7 +27,8 @@ SECTIONS = [("input", "InputSettings", "The input: the export or stack, the data
 def page_labels() -> dict[str, str]:
     """setting path -> its label on the import page"""
     text = GUI.read_text(encoding="utf-8")
-    return {m[1]: m[2] for m in re.finditer(r'\["(\w+\.\w+)", "([^"]+)", "(?:choice|int|float|text|bool|list)"', text)}
+    kinds = "choice|int|float|text|bool|list|thresholds"
+    return {m[1]: m[2] for m in re.finditer(rf'\["(\w+\.\w+)", "([^"]+)", "(?:{kinds})"', text)}
 
 
 def fields(source: str, cls: str) -> list[tuple[str, str, str]]:

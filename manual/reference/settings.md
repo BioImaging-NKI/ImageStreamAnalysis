@@ -45,6 +45,7 @@ Cellpose and the clean-up of the cells.
 | `flow_threshold` | `0.5` |  | Cellpose's flow threshold (higher: more, less certain cells) |
 | `cellprob_threshold` | `0.0` |  | Cellpose's cell probability threshold (lower: larger cells) |
 | `use_gpu` | `true` | Use the GPU | run Cellpose on the GPU |
+| `reuse_labels` | `true` | Reuse the previous Cellpose result if nothing changed | reuse the Cellpose result of the previous run of the dataset when its input image and Cellpose settings are the same (labelmap_cells.tif and .json in the dataset folder); off = always run Cellpose |
 | `montage_columns` | `0` | Montage columns (0 = square) | events per row of the montage that Cellpose segments; 0 = about square; the number of events = one row, as the Fiji macro |
 | `cellpose_python` | (empty) | Python with Cellpose | python.exe of an environment with Cellpose 3 or 4; empty = this one |
 | `erosion` | `1` | Shrink cells (px) | shrink the cells from the background by this many pixels |
@@ -59,7 +60,7 @@ Subtype thresholds, artefacts and pools.
 | Setting | Default | On the import page | Meaning |
 |---|---|---|---|
 | `threshold_method` | `'MaxEntropy'` | Threshold of the subtype markers | the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the negative cells), "Otsu", "Yen" or "RenyiEntropy" |
-| `thresholds` | `{}` |  | thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace the automatic ones |
+| `thresholds` | `{}` | Thresholds set by hand (Apply in a dashboard) | thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace the automatic ones |
 | `artefact_min_positive` | (empty) | Artefact: positive in at least N subtype markers (0 = none) | a detection positive in at least this many subtype markers is an artefact, not a cell; empty = all of them (with two or more markers); 0 = no artefacts |
 | `pool` | `'experiment'` | Classify together (one set of thresholds) | in a project: "experiment" classifies the datasets of each experiment together (one set of thresholds), "dataset" each dataset on its own |
 

@@ -33,7 +33,7 @@ from .membrane import (
     membrane_profiles,
     pair_of,
 )
-from .segmentation import clean_labels, markers, remove_labels, segment
+from .segmentation import clean_labels, markers, remove_labels, save_cellpose_result, segment
 
 log = logging.getLogger(__name__)
 
@@ -79,9 +79,9 @@ class Result:
 
 def measure(stack: EventStack, settings: Settings, out_dir: Path) -> Measured:
     m = markers(stack, settings)
-    raw, montage, info = segment(stack, m, settings)
-    if montage is not None:  # as the macro: the Cellpose output, to reload later (segmentation.labelmap_file)
-        save_stack(montage[None], out_dir / "labelmap_cells.tif", stack.pixel_size)
+    raw, montage, info = segment(stack, m, settings, previous=out_dir)
+    if montage is not None:  # the Cellpose output: reused by the next run, or loaded with segmentation.labelmap_file
+        save_cellpose_result(montage, info, out_dir, stack.pixel_size)
     seg = settings.segmentation
     labels = clean_labels(raw, seg.erosion, seg.min_cell_size, seg.max_cell_size)
     extents = stack.image_extents()

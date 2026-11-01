@@ -74,8 +74,11 @@ the screenshots, and look at every changed image.
 Small changes to the program whose screenshots are not retaken yet (the user prefers to retake them together, with
 a larger change). Retake them at the next refresh and empty this list.
 
-- 2026-11-01: the import page's analysis settings in rows of two (three where they belong together):
-  `gui_settings`.
+- 2026-11-01: the import page's analysis settings in rows of two (three where they belong together), with
+  *Reuse the previous Cellpose result* and *Thresholds set by hand*: `gui_settings`.
+- 2026-11-01: dashboard buttons *Apply to the project…* and *Copy as settings* (was *Copy the thresholds as
+  settings*), *Download .tsv* in the tables, *Apply* in the membrane card: `dash_markers`, `dash_membrane`,
+  `dash_overview` (if the tables show).
 
 ## Refresh, check, publish
 

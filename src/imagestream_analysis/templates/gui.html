@@ -70,7 +70,7 @@ td.role, th.role { text-align: center; }
 .settings-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 40px; max-width: 940px; }
 .settings-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .settings-row.wide { grid-template-columns: 1fr; }
-.settings-row label { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); }
+.settings-row > label, .settings-row > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); }
 .settings-row.wide input { flex: 1; }
 .settings-row select { max-width: 50%; }
 @media (max-width: 720px) { .settings-row, .settings-row.three { grid-template-columns: 1fr; } }
@@ -171,8 +171,23 @@ async function api(name, data = {}) {
   if (!body.ok) throw new Error(body.error);
   return body.result;
 }
-// the server stops 15 minutes after the last request: a ping every minute keeps it while the page is open
-setInterval(() => fetch("/ping").catch(() => {}), __ISA_PING__);
+// the server stops 15 minutes after the last request: a check every minute keeps it while the page is open. A run
+// started elsewhere (the Apply button of a dashboard) is shown, and its project settings are read again from disk.
+async function checkRun() {
+  let s;
+  try { s = await api("status", { since: 0 }); } catch (e) { return; }
+  if (!s.running || polling) return;
+  const folder = document.getElementById("folder").value.trim();
+  if (folder && s.folder && folder.replace(/[\\/]+$/, "") === s.folder.replace(/[\\/]+$/, "")) {
+    try { state.settings = (await api("open_project", { path: folder })).settings; renderSettings(); } catch (e) {}
+  }
+  logSince = 0;
+  const log = document.getElementById("log"); log.textContent = ""; log.hidden = false;
+  document.getElementById("stop").disabled = false;
+  polling = setInterval(poll, 1000);
+}
+setInterval(checkRun, __ISA_PING__);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkRun(); });
 async function quit() {
   if (polling && !confirm("A run is in progress. Stop it and quit?")) return;
   let saved = false;
@@ -363,11 +378,13 @@ const FIELDS = [
     [["segmentation.erosion", "Shrink cells (px)", "int"],
      ["segmentation.min_cell_size", "Min. cell size (px)", "int"],
      ["segmentation.max_cell_size", "Max. cell size (px)", "int"]],
-    [["segmentation.exclude_edge_cells", "Leave out cells cut by the image edge", "bool"]]]],
+    [["segmentation.exclude_edge_cells", "Leave out cells cut by the image edge", "bool"],
+     ["segmentation.reuse_labels", "Reuse the previous Cellpose result if nothing changed", "bool"]]]],
   ["Classification", "analysis/classification#immune-subtypes", [
     [["classification.threshold_method", "Threshold of the subtype markers", "choice", "threshold_methods"],
      ["classification.pool", "Classify together (one set of thresholds)", "choice", "pools"]],
-    [["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int", null, "all"]]]],
+    [["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int", null, "all"]],
+    [["classification.thresholds", "Thresholds set by hand (Apply in a dashboard)", "thresholds"]]]],
   ["Membranes", "analysis/membrane", [
     [["membrane.analysis", "Membrane profiles and enrichment", "bool"],
      ["membrane.thickness", "Membrane / interface width (px)", "int"]],
@@ -382,6 +399,13 @@ function getS(path) { const [a, b] = path.split("."); return state.settings[a][b
 function setS(path, v) { const [a, b] = path.split("."); state.settings[a][b] = v; }
 function settingInput(path, kind, list, placeholder) {
   const v = getS(path);
+  if (kind === "thresholds") {  // set from a dashboard; shown, and back to automatic with the button
+    const names = Object.keys(v || {});
+    if (!names.length) return el("span", {}, "none: all automatic");
+    return el("span", { class: "row" }, names.map(n => `${n} = ${+(+v[n]).toPrecision(4)}`).join(", "),
+      el("button", { onclick: e => { e.preventDefault(); setS(path, {}); renderSettings(); },
+                     title: "Remove the thresholds set by hand: the next run computes them all again" }, "Automatic again"));
+  }
   if (kind === "choice") return el("select", { onchange: e => setS(path, e.target.value) },
     (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
   if (kind === "bool") return el("input", { type: "checkbox", checked: !!v, onchange: e => setS(path, e.target.checked) });
@@ -397,9 +421,10 @@ function renderSettings() {
   for (const [title, help, rows] of FIELDS) {
     const group = el("div", { class: "settings-rows" });
     for (const fields of rows) {
-      const wide = fields.length === 1 && ["text", "list"].includes(fields[0][2]);
+      const wide = fields.length === 1 && ["text", "list", "thresholds"].includes(fields[0][2]);
       group.append(el("div", { class: "settings-row" + (wide ? " wide" : fields.length === 3 ? " three" : "") },
-        fields.map(([path, label, kind, list, placeholder]) => el("label", {}, label, settingInput(path, kind, list, placeholder)))));
+        fields.map(([path, label, kind, list, placeholder]) =>  // a div, not a label, around a button (a click on a label clicks it)
+          el(kind === "thresholds" ? "div" : "label", {}, label, settingInput(path, kind, list, placeholder)))));
     }
     box.append(el("fieldset", {}, el("legend", { "data-help": help }, title), group));
   }

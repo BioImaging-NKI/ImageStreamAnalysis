@@ -163,3 +163,31 @@ def test_several_immune_markers_are_summed(synthetic):
     s.channels.immune = [4, 3]
     two = run(s).cells
     assert np.allclose(two["Immune intensity"], one["Immune intensity"] + one["Tumor intensity"], rtol=1e-5)
+
+
+def test_cellpose_result_is_reused_when_nothing_changed(synthetic, monkeypatch):
+    """A second run with the same input and Cellpose settings reuses labelmap_cells.tif; another diameter, or
+    reuse_labels = false, runs Cellpose again."""
+    from imagestream_analysis import segmentation
+
+    calls = []
+
+    def fake_cellpose(image, channels, settings):
+        calls.append(settings.segmentation.diameter)
+        return io.stack_to_montage(synthetic["labels"], len(synthetic["labels"])), {"version": "fake"}
+
+    monkeypatch.setattr(segmentation, "run_cellpose", fake_cellpose)
+    s = settings_for(synthetic)
+    s.segmentation.method, s.segmentation.labelmap_file = "cellpose", None
+    s.segmentation.montage_columns = len(synthetic["labels"])
+    first = run(s)
+    assert calls == [30.0] and (first.out_dir / segmentation.LABELS_INFO).exists()
+    second = run(s)
+    assert calls == [30.0] and second.cells.attrs["cellpose"]["reused"]
+    assert second.cells["label"].tolist() == first.cells["label"].tolist()
+    s.segmentation.diameter = 25
+    run(s)
+    assert calls == [30.0, 25]
+    s.segmentation.reuse_labels = False
+    run(s)
+    assert calls == [30.0, 25, 25]

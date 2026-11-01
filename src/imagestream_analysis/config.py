@@ -115,6 +115,9 @@ class SegmentationSettings:
     flow_threshold: float = 0.5  # Cellpose's flow threshold (higher: more, less certain cells)
     cellprob_threshold: float = 0.0  # Cellpose's cell probability threshold (lower: larger cells)
     use_gpu: bool = True  # run Cellpose on the GPU
+    # reuse the Cellpose result of the previous run of the dataset when its input image and Cellpose settings are the
+    # same (labelmap_cells.tif and .json in the dataset folder); off = always run Cellpose
+    reuse_labels: bool = True
     # events per row of the montage that Cellpose segments; 0 = about square; the number of events = one row, as the
     # Fiji macro
     montage_columns: int = 0

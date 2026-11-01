@@ -27,7 +27,7 @@ For an IDEAS export, the tables per cell and per event end with the column `Obje
 | `Histogram_interface_stdDevs_above_mean.tsv`, `Histogram_control_stdDevs_above_mean.tsv` | the histograms |
 | `Control windows stdDevs above mean.tsv` | every random control window |
 | `membrane_profiles_normalized.tif` | the aligned profiles, one row per row of the membrane table |
-| `labelmap_cells.tif` | the labels as Cellpose made them (the montage); can be loaded again |
+| `labelmap_cells.tif`, `labelmap_cells.json` | the labels as Cellpose made them (the montage), and what produced them: reused by the next run when nothing changed (see [Segmentation](../analysis/segmentation.md#running-again-without-cellpose)) |
 | `labelmap_final.tif`, `labelmap_classes.tif` | the cleaned labels per event; the cell type per pixel (1 immune, 2 tumor, 3 artefact) |
 | `dashboard.html`, `dashboard_files/` | the [dashboard](dashboard.md) |
 | `settings.toml` | the complete settings of the run (channels by number) |

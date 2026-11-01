@@ -50,7 +50,20 @@ Every cell is measured in every loaded channel: the mean minus the channel's bac
 in pixels and µm². The normalized tumor and immune markers give `Tumor intensity` and `Immune intensity`, used for the
 classification.
 
-## Loading labels instead
+## Running again without Cellpose
 
-With `segmentation.method = "labelmap"` in a settings file, the labels of an earlier run (`labelmap_cells.tif`, or the
+Every run keeps the Cellpose result of a dataset (`labelmap_cells.tif`) with a fingerprint of what produced it
+(`labelmap_cells.json`). The next run of the dataset skips Cellpose when the fingerprint is the same, and says so in
+the log; clean-up, measurements and everything after them are done again. So changing a threshold, the membrane pair
+or the clean-up settings (shrinking, cell sizes) costs no new segmentation. *Reuse the previous Cellpose result if
+nothing changed* (`segmentation.reuse_labels`) switched off always runs Cellpose.
+
+With `segmentation.method = "labelmap"` in a settings file, the labels of another run (`labelmap_cells.tif`, or the
 macro's `labelmap_cells.zip`) are loaded instead of running Cellpose.
+
+??? note "Technical: what the fingerprint covers"
+
+    The fingerprint is a hash of the image given to Cellpose (the montage of brightfield and markers, so it covers the
+    data, the channels, the number of events, the marker location and the montage columns) and of the model, the
+    diameter, the flow and cell probability thresholds and the Python of Cellpose. The GPU setting is not part of it.
+    Results of runs before this was added have no fingerprint, so their next run uses Cellpose once more.
