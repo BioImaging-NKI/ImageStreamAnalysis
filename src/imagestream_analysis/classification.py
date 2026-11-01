@@ -127,7 +127,7 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
         values = pool.loc[population, f"_m {m.key}"].to_numpy(dtype=np.float64)
         t = float(manual) if manual is not None else log_threshold(values, settings.threshold_method)
         positive = pool[f"_m {m.key}"] > t
-        rows.append({"marker": m.name, "role": m.role,
+        rows.append({"marker": m.name, "role": "subtype" if m.role == "functional" else m.role,
                      "cells": "all cells" if population is everyone else "immune cells",
                      "method": "manual" if manual is not None else settings.threshold_method,
                      "threshold": t, "positive": int((positive & population).sum()), "of": int(population.sum())})
@@ -141,8 +141,11 @@ def classify_pool(datasets: list[tuple[pd.DataFrame, ChannelSettings]],
         n_min = len(markers) if len(markers) >= 2 else 0
     artefact = (pool["Positive markers"] >= n_min if n_min > 0 else pd.Series(False, index=pool.index))
     if artefact.any():
-        log.info("%d of %d detections are positive in %d or more functional markers: artefacts", artefact.sum(),
+        log.info("%d of %d detections are positive in %d or more subtype markers: artefacts", artefact.sum(),
                  len(pool), n_min)
+    elif len(markers) == 1 and settings.artefact_min_positive is None:
+        log.info("Artefact detection off: it needs two or more subtype markers (with one, a detection bright in "
+                 "every channel counts as a positive immune cell)")
     # 2. tumor or immune cell: k-means on the other detections
     cells_ok = pool[~artefact]
     if len(cells_ok) < N_CLUSTERS:

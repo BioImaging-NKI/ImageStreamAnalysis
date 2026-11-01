@@ -199,12 +199,23 @@ def expression_check(cells: pd.DataFrame, membranes: Profiles | None, moi_column
 
     a, b = median(wanted), median(partners)
     ratio = b / a if a > 0 else float("inf")
+    # the brightest cell type (tumor cells, or one immune subtype): measured cells far below it hardly carry the marker
+    by_type = values.reindex(labels).set_axis(type_label(cells).to_numpy()).groupby(level=0).median()
+    brightest = float(by_type.max()) if by_type.notna().any() else float("nan")
     if not np.isfinite(a) or not np.isfinite(b):
         verdict = "not checked (no cells of one of the types)"
-    elif ratio >= 1:
+    elif ratio >= EXPRESSION_SIMILAR[1]:
         verdict = (f"WARNING: the marker of interest is brighter on the partners ({' / '.join(partners)}) than on the "
                    f"measured cells ({' / '.join(wanted)}): check where it is expressed (channels.cell_of_interest, "
                    "membrane.cells). The interface would show the partners' membrane.")
+    elif np.isfinite(brightest) and brightest > 0 and a < EXPRESSION_LOW * brightest:
+        verdict = (f"NOT INFORMATIVE: the measured cells ({' / '.join(wanted)}) hardly carry the marker of interest "
+                   f"({a / brightest:.0%} of the brightest cell type, {by_type.idxmax()}); their enrichment says "
+                   "little.")
+    elif ratio >= EXPRESSION_SIMILAR[0]:
+        verdict = (f"WARNING: the marker of interest is on both cells at a similar level ({ratio:.0%}): at the "
+                   "interface two stained membranes lie side by side, which looks like enrichment. Compare with "
+                   "contacts between cells of the same type (membrane.partners).")
     elif ratio >= EXPRESSION_CAUTION:
         verdict = (f"CAUTION: the partners carry {ratio:.0%} of the measured cells' membrane intensity; part of the "
                    "signal at the interface may be theirs (membrane.inside_only limits the band to the measured cell).")
@@ -216,6 +227,8 @@ def expression_check(cells: pd.DataFrame, membranes: Profiles | None, moi_column
 
 
 EXPRESSION_CAUTION = 0.25  # partners / measured cells above this: part of the interface signal may be the partners'
+EXPRESSION_SIMILAR = (0.8, 1.25)  # partners / measured in this range: on both cells; above: brighter on the partners
+EXPRESSION_LOW = 0.25  # measured cells below this fraction of the brightest cell type: they hardly carry the marker
 
 
 def pair_of(settings: MembraneSettings, cell_of_interest: CellOfInterest) -> tuple[list[str], list[str]]:

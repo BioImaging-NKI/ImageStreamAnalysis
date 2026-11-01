@@ -133,3 +133,10 @@ def test_a_bright_partner_looks_like_enrichment_and_is_caught():
     check = expression_check(cells, p, "Mean ch2 (MOI)", ["Tumor"], ["Immune"])
     assert check["check"].startswith("WARNING") and check["partners / measured"] > 1
     assert expression_check(cells, None, "Mean ch2 (MOI)", ["Immune"], ["Tumor"])["check"].startswith("ok")
+    # on both at a similar level: membrane doubling, not 'brighter on the partners'
+    cells["Mean ch2 (MOI)"] = [100.0, 100.0, 95.0]
+    assert "similar level" in expression_check(cells, None, "Mean ch2 (MOI)", ["Tumor"], ["Immune"])["check"]
+    # measured cells that hardly carry the marker: not informative (unless the partners are brighter)
+    cells["Mean ch2 (MOI)"] = [100.0, 100.0, 4.0]
+    assert expression_check(cells, None, "Mean ch2 (MOI)", ["Immune"], ["Immune"])["check"].startswith("NOT INF")
+    assert expression_check(cells, None, "Mean ch2 (MOI)", ["Immune"], ["Tumor"])["check"].startswith("WARNING")

@@ -25,6 +25,23 @@ the path of a model of your own.
     Normalization: each marker is divided by the median, over the events, of its Otsu threshold per event (as the
     macro). Several immune markers are each normalized and then summed.
 
+## Sizes in pixels
+
+All sizes are in pixels of the export: a size in µm divided by the pixel size (1, 0.5 or 0.33 µm at 20×, 40× or 60×).
+
+| Pixel size | 15 µm cell: diameter | its area | 25 µm cell: diameter | its area |
+|---|---|---|---|---|
+| 1 µm (20×) | 15 px | about 180 px | 25 px | about 490 px |
+| 0.5 µm (40×) | 30 px | about 700 px | 50 px | about 2000 px |
+| 0.33 µm (60×) | 45 px | about 1600 px | 75 px | about 4400 px |
+
+- **Cell diameter (px)**: with two cell types of different size, start between the two, closer to the smaller one,
+  and check in the dashboard that large cells are not split and small ones not merged (or let Cellpose 3 estimate
+  it: 0).
+- **Min. / Max. cell size (px)**: areas after shrinking; keep the minimum well below the area of the smallest cells
+  (about a third of it) and the maximum above the largest.
+- **Membrane / interface width (px)**: about 1–1.5 µm; the default of 3 px suits 20× and 40×.
+
 ## Clean-up
 
 1. A cell that Cellpose drew across the border of two events in the montage is split into one cell per event.

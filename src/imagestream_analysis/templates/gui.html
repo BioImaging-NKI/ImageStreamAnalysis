@@ -157,7 +157,7 @@ const TOKEN = "__ISA_TOKEN__";
 const ROLES = [["brightfield", "BF", "Brightfield"], ["tumor", "Tumor", "Tumor marker"],
                ["immune", "Immune", "Immune-cell marker (several are summed)"],
                ["functional", "Subtype", "Immune subtype marker (positive / negative per marker)"],
-               ["marker_of_interest", "MOI", "Marker of interest (membrane enrichment)"]];
+               ["marker_of_interest", "MOI", "Marker of interest (membrane enrichment; not needed for cell types and contacts only)"]];
 const MULTI = new Set(["immune", "functional"]);
 const REQUIRED = ["brightfield", "tumor", "immune", "marker_of_interest"];
 const MAGNIFICATIONS = [["1", "20× (1 µm)"], ["0.5", "40× (0.5 µm)"], ["0.33", "60× (0.33 µm)"]];
@@ -192,7 +192,7 @@ async function quit() {
   if (polling && !confirm("A run is in progress. Stop it and quit?")) return;
   let saved = false;
   if (document.getElementById("folder").value.trim()) {
-    try { await api("save", { project: toProject() }); saved = true; } catch (e) { /* quit anyway */ }
+    try { await api("save", { project: toProject() }); saved = true; forgetDraft(); } catch (e) { /* quit anyway */ }
   }
   try { await api("quit"); } catch (e) { /* already stopped */ }
   document.querySelector("main").replaceChildren(el("section", {}, el("h2", {}, "ImageStream Analysis has stopped"),
@@ -396,7 +396,7 @@ const FIELDS = [
      ["membrane.max_histogram_value", "Histogram maximum (SD)", "float"],
      ["membrane.histogram_bin_width", "Histogram bin width (SD)", "float"]]]]];
 function getS(path) { const [a, b] = path.split("."); return state.settings[a][b]; }
-function setS(path, v) { const [a, b] = path.split("."); state.settings[a][b] = v; }
+function setS(path, v) { const [a, b] = path.split("."); state.settings[a][b] = v; if (path === "membrane.analysis") renderProblems(); }
 function settingInput(path, kind, list, placeholder) {
   const v = getS(path);
   if (kind === "thresholds") {  // set from a dashboard; shown, and back to automatic with the button
@@ -443,7 +443,8 @@ function problems() {
     for (const [r, , desc] of ROLES) {
       const v = panel()[r];
       const names = MULTI.has(r) ? (v || []) : (v == null || v === "" ? [] : [v]);
-      if (!names.length && REQUIRED.includes(r)) { p.push(`Tick a channel as ${desc.split(" (")[0].toLowerCase()} (step 2)`); continue; }
+      const needed = REQUIRED.includes(r) && (r !== "marker_of_interest" || state.settings.membrane.analysis);
+      if (!names.length && needed) { p.push(`Tick a channel as ${desc.split(" (")[0].toLowerCase()} (step 2)`); continue; }
       const missing = names.filter(n => typeof n === "string" && !has(n));
       if (missing.length) p.push(`${z.name}: no channel named ${missing.map(n => `'${n}'`).join(", ")} (${desc.split(" (")[0].toLowerCase()})`);
     }
@@ -459,6 +460,7 @@ function renderProblems() {
 async function save() {
   try {
     const r = await api("save", { project: toProject() });
+    forgetDraft();
     document.getElementById("saved").textContent = "Saved";
     setTimeout(() => document.getElementById("saved").textContent = "", 2500);
     return r;
@@ -468,6 +470,7 @@ async function run() {
   try {
     const r = await api("run", { project: toProject() });
     if (!r.started) { toast(r.problems.join("; ")); return; }
+    forgetDraft();
     logSince = 0;
     const log = document.getElementById("log"); log.textContent = ""; log.hidden = false;
     document.getElementById("stop").disabled = false;
@@ -494,6 +497,27 @@ async function poll() {
 
 // ---------- overview
 const NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 });
+// what each column of the overview means (hover texts; the same as in the manual, guide/overview.md)
+const COLUMN_HELP = {
+  "events": "events (objects) analysed", "cells": "cells after the clean-up, artefacts included",
+  "artefacts": "detections positive in too many subtype markers: not counted as cells of a type",
+  "single tumor + single immune cell": "events with exactly one tumor and one immune cell that touch",
+  "interactions": "pairs of touching cells (all types)",
+  "MOI partners / measured": "the marker check: median marker of interest on the partners divided by that on the measured cells (empty: no marker of interest)",
+  "tumor–immune contacts": "pairs of a tumor and an immune cell that touch",
+  "doublet fraction": "single tumor + single immune cell events divided by all events",
+  "immune negative": "immune cells negative for every subtype marker",
+  "membrane pair": "the membrane pair of the enrichment columns that follow (Membrane of ... with ...)",
+  "membranes": "measured cells of the membrane pair", "with interface": "of those, the cells that touch a partner",
+  "median stdDevs above mean": "median enrichment at the interface, in SD of the free membrane, of the cells with an interface (membrane pair)",
+  "median control (windows)": "the same for random windows on the free membrane of cells without an interface",
+};
+function columnHelp(c) {
+  if (COLUMN_HELP[c]) return COLUMN_HELP[c];
+  if (/^median .* membrane ratio \(doublets\)$/.test(c)) return "in single tumor + single immune cell events: mean marker of interest in the measured cell's membrane band at the interface over the rest of its band (as macro 1.8; all immune cells, whatever the membrane pair)";
+  if (/^immune .*\+/.test(c)) return "immune cells with exactly this combination of positive subtype markers (and negative for the others)";
+  return null;
+}
 async function refreshOverview() {
   const folder = document.getElementById("folder").value.trim();
   const box = document.getElementById("overview");
@@ -502,7 +526,7 @@ async function refreshOverview() {
   try { o = await api("overview", { folder }); } catch (e) { box.replaceChildren(el("p", { class: "error" }, e.message)); return; }
   if (!o.rows.length) { box.replaceChildren(el("p", { class: "hint" }, "No results yet.")); return; }
   const cols = o.columns.filter(c => !["zip", "folder", "seconds"].includes(c));
-  const table = el("table", {}, el("tr", {}, cols.map(c => el("th", { class: typeof o.rows[0][c] === "number" ? "num" : "" }, c)), el("th", {}, ""), el("th", {}, "")));
+  const table = el("table", {}, el("tr", {}, cols.map(c => el("th", { class: typeof o.rows[0][c] === "number" ? "num" : "", title: columnHelp(c) }, c)), el("th", {}, ""), el("th", {}, "")));
   const rows = [...o.rows].sort((a, b) => String(a.experiment).localeCompare(String(b.experiment)) || String(a.dataset).localeCompare(String(b.dataset)));
   for (const r of rows) {
     table.append(el("tr", {}, cols.map(c => {
@@ -523,7 +547,8 @@ function contactMatrices(rows) {
   const color = t => { t = Math.max(-1, Math.min(1, t)); const c = mix(hex(css("--div-mid")), hex(css(t < 0 ? "--div-neg" : "--div-pos")), Math.abs(t));
     return [`rgb(${c.join(",")})`, (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 > 0.55 ? "#0b0b0b" : "#ffffff"]; };
   const short = t => t === "Tumor" ? "tumor" : t === "Artefact" ? "artefact" : t.replace(/^Immune ?/, "immune ").trim();
-  const rank = t => t === "Tumor" ? "0" : t === "Artefact" ? "2" : "1" + t;
+  // the order of the dashboard: tumor, immune negative, then the subtypes by number of markers, artefacts last
+  const rank = t => t === "Tumor" ? "0" : t === "Artefact" ? "9" : t === "Immune negative" || t === "Immune" ? "1" : "2" + (t.match(/\+/g) || []).length + t;
   const NS = "http://www.w3.org/2000/svg", svgEl = (tag, a) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
   const wrap = el("div", {}, el("h4", { "data-help": "guide/overview#partner-preference-per-experiment" }, "Partner preference per experiment"),
     el("p", { class: "hint" }, "Within the exported events of three or more cells (all datasets of the experiment): contacts observed / expected when the cell types are shuffled among the cells of each event; blue: fewer than chance, red: more. Rows: cell type; columns: the type it touches. A preference among the selected multiplets, not a binding frequency: events without contacts, and those left out before the export, take no part."));
@@ -557,7 +582,7 @@ document.getElementById("browse-folder").onclick = async () => {
 };
 document.getElementById("open-project").onclick = async () => {
   const f = await api("browse", { kind: "project", initial: document.getElementById("folder").value });
-  if (f.length) { try { loadProject(await api("open_project", { path: f[0] })); } catch (e) { toast(e.message); } }
+  if (f.length) { try { loadProject(await api("open_project", { path: f[0] })); forgetDraft(); } catch (e) { toast(e.message); } }
 };
 document.getElementById("folder").onchange = () => { renderProblems(); refreshOverview(); };
 document.getElementById("save").onclick = save;
@@ -581,6 +606,21 @@ document.getElementById("theme").onclick = () => {
   root.dataset.theme = dark ? "light" : "dark"; api("prefs", { theme: root.dataset.theme });
 };
 
+// an unsaved setup survives a reload of the page: after every change by the user a draft is kept in this browser,
+// until the project is saved (Save, Run, Quit) or another one is opened
+const DRAFT_KEY = "isa-draft";
+let savedJson = "";  // the project as last saved or opened
+function forgetDraft() { savedJson = JSON.stringify(toProject()); try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+let draftTimer = null;
+for (const type of ["input", "change", "click"]) document.addEventListener(type, () => {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    if (!state.settings) return;
+    const j = JSON.stringify(toProject());
+    try { if (j === savedJson) localStorage.removeItem(DRAFT_KEY); else localStorage.setItem(DRAFT_KEY, j); } catch (e) {}
+  }, 600);
+}, true);
+
 (async () => {
   const s = await api("state");
   defaults = s.defaults; choices = { marker_locations: s.marker_locations, cells_of_interest: s.cells_of_interest,
@@ -588,6 +628,12 @@ document.getElementById("theme").onclick = () => {
   if (s.theme) document.documentElement.dataset.theme = s.theme;
   if (s.project) loadProject(s.project);
   else { state.settings = newSettings(); state.settings.membrane.analysis = false; renderAll(); }
+  savedJson = JSON.stringify(toProject());
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); } catch (e) {}
+  if (draft && draft.settings && JSON.stringify(draft) !== savedJson) {
+    loadProject(draft); toast("Your unsaved setup is back. Save (or Run) to keep it in the project.", 6000);
+  }
 })();
 </script>
 </body>

@@ -78,6 +78,21 @@ T cells in conjugates") can only be computed from an export that keeps all event
     - Small numbers make large ratios: a ratio of 2 from 2 observed and 1 expected contact means little. The tooltip
       in the dashboard and the table give the counts; look at them.
     - Artefacts take part like cells; with a stricter artefact rule they move to the cell types, and back.
+    - With no preference at all, *tumor–tumor* came out at about 1.5 in tests (larger cells, more neighbours), and real
+      preferences come out weaker than they are: in a test, a subset placed next to tumor cells far more often after a
+      treatment rose only from 1.03 to 1.11, consistently in both donors. Compare datasets (donors, conditions) with
+      each other rather than a ratio with 1.
+
+## Comparing conditions
+
+The **experiment** label does two things: datasets with the same label are classified together (one threshold per
+marker, see [pools](classification.md#several-datasets-pools)), and the overview sums them into one partner-preference
+matrix. To compare, for example, control and treated samples stained in the same way:
+
+- give them **one** experiment label, so that "positive for A" means the same in both (or set the thresholds by hand);
+- compare the conditions **per dataset**: every dataset's own table is in `interactions.tsv` (and in its own
+  `Interactions.tsv`), with the observed and expected contacts; look at the same ratio in every donor, and at the
+  counts behind it.
 
 ## Multiplets
 

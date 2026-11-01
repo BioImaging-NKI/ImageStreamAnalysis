@@ -52,8 +52,10 @@ with the membrane analysis, its membrane profile aligned on the interface.
 
 ## Subtype markers
 
-Shown when the panel has subtype markers. Per marker, a histogram of the immune cells (on log(intensity − min + 1)),
-the threshold of the run (dashed) and a slider. **Dragging the slider changes the subtypes everywhere on the page** at
+Shown when the panel has subtype markers. Per marker, a histogram of the immune cells (on a log scale:
+log(intensity − min + 1)), the threshold of the run (dashed; the numbers are background-subtracted intensities) and a
+slider. Where the histogram has two clear peaks, the threshold belongs in the gap between them (see
+[Cell types](../analysis/classification.md#immune-subtypes)). **Dragging the slider changes the subtypes everywhere on the page** at
 once: the colours, the plots, the contacts, the membrane pairs and the tables. The count next to the marker says how
 many immune cells are positive.
 
@@ -92,7 +94,8 @@ from immune cells. Clicking a type in the legend brings it forward.
 ## Marker of interest at the interface
 
 Per event, the mean of the marker of interest at the interface against the rest of the membrane, for the cell type
-that expresses it (the per-event table of the Fiji macro). Points above the dashed line: more at the interface.
+that expresses it (the per-event table of the Fiji macro). Points above the dashed line: more at the interface. Not
+shown without a marker of interest.
 
 ## Interactions
 
@@ -123,10 +126,11 @@ immune subtype, or all immune cells positive for a marker. The page computes the
   windows on cells without an interface (dashed), in standard deviations above the mean of the free membrane.
 - **Average profile**: the profiles of the cells with an interface, centred on the interface.
 - **Heatmap**: one row per cell with an interface, the strongest on top.
-- **The badge** next to the menus: whether the marker of interest is on the measured cells or also on their partners.
-  A red badge means the interface may show the partner's membrane. Read
-  [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed) before trusting a result with an orange
-  or red badge.
+- **The badge** next to the menus: whether the marker of interest is on the measured cells, also on their partners,
+  on both at a similar level, or hardly on the measured cells at all (grey: not informative). Read
+  [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed) before trusting a result with an amber,
+  red or grey badge, and [The control](../analysis/membrane.md#the-control) on what the control windows can and cannot
+  tell.
 
 ??? note "Technical: the page and the tables"
 

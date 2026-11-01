@@ -110,27 +110,33 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
     cells = add_neighbours(cells, pairs)
     classes = class_map(labels, cells)
     masks = interface_masks(classes, settings.membrane.thickness)
-    moi = stack.channel(settings.channels.marker_of_interest)
+    ch = settings.channels
+    moi = stack.channel(ch.marker_of_interest) if ch.has_marker_of_interest else None
+    if moi is None and settings.membrane.analysis:
+        raise ValueError("the membrane analysis needs a marker of interest (channels.marker_of_interest)")
     events = event_table(cells, stack.n_events, masks, moi)
     events["Artefacts"] = np.bincount(cells.loc[cells["Cell type"] == "Artefact", "frame"].to_numpy(dtype=int),
                                       minlength=stack.n_events)
     events["Interactions"] = interactions_per_event(cells, pairs, stack.n_events)
     result = Result(stack, labels, classes, cells, thresholds, pairs, contact_table(cells, pairs),
                     multiplets(cells, pairs, stack.n_events), events, doublets(events), masks, out_dir)
-    ch = settings.channels
-    if settings.membrane.analysis:
+    if settings.membrane.analysis and moi is not None:
         m = settings.membrane
         result.profiles = membrane_profiles(labels, cells, moi, stack.median(ch.marker_of_interest),
                                             m.straightening_width, m.thickness, m.inside_only)
         result.membranes = analyze_membranes(cells, result.profiles, ch.cell_of_interest, m)
+    result.cells.attrs["cellpose"] = measured.cellpose
+    if moi is None:
+        log.info("No marker of interest: cell types and contacts only")
+        return result
     wanted, partners = pair_of(settings.membrane, ch.cell_of_interest)
     moi_column = next(c for c in cells.columns if c.startswith(f"Mean ch{stack.number(ch.marker_of_interest)} ("))
     result.expression = expression_check(cells, result.profiles, moi_column, wanted, partners)
-    level = logging.WARNING if result.expression["check"].startswith(("WARNING", "CAUTION")) else logging.INFO
+    level = (logging.WARNING if result.expression["check"].startswith(("WARNING", "CAUTION", "NOT INFORMATIVE"))
+             else logging.INFO)
     log.log(level, "Marker of interest, %s against %s: medians %.4g and %.4g (%s); %s", wanted, partners,
             result.expression["median (measured cells)"], result.expression["median (partners)"],
             result.expression["measured on"], result.expression["check"])
-    result.cells.attrs["cellpose"] = measured.cellpose
     return result
 
 

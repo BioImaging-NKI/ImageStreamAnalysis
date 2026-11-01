@@ -26,6 +26,14 @@ clustering can split the other type instead.
 markers by chance. Look at the histograms in the dashboard; try *MaxEntropy strict*, set the thresholds by hand, or
 raise the number of markers in the artefact rule. See [Cell types](../analysis/classification.md#artefacts).
 
+**A rare subtype appears that should not exist** (for example *A+ C+* in a few cells). The automatic threshold of
+one of the markers probably lies in the noise of the negative cells. Look at the marker's histogram in the dashboard,
+drag the slider into the gap between the two peaks and *Apply to the project…*. See
+[Cell types](../analysis/classification.md#immune-subtypes).
+
+**I only want cell types and contacts.** Leave the *MOI* role unticked and *Membrane profiles and enrichment* off;
+the run then needs no marker of interest.
+
 **The partner preference is close to 1 everywhere.** Most contacts may be in events of two cells, which cannot show a
 preference and are left out; the dashboard says how many pairs remain. With few events of three or more cells, the
 ratios are uncertain. See [Cell contacts](../analysis/interactions.md).

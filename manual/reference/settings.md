@@ -25,7 +25,7 @@ The roles of the channels (by number or by name).
 | Setting | Default | On the import page | Meaning |
 |---|---|---|---|
 | `brightfield` | `1` |  | the brightfield channel |
-| `marker_of_interest` | `2` |  | the marker whose enrichment at the interface is measured |
+| `marker_of_interest` | `2` |  | the marker whose enrichment at the interface is measured; empty ("") = none (only cell types and contacts; the membrane analysis needs one) |
 | `tumor` | `3` |  | the tumor-cell marker |
 | `immune` | `[4]` |  | the immune-cell marker(s), a list; several are each normalized and summed (2.8: phenotypic markers) |
 | `functional` | `[]` |  | immune subtype markers, a list: positive or negative per immune cell (2.8: functional markers) |
@@ -59,7 +59,7 @@ Subtype thresholds, artefacts and pools.
 
 | Setting | Default | On the import page | Meaning |
 |---|---|---|---|
-| `threshold_method` | `'MaxEntropy'` | Threshold of the subtype markers | the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the negative cells), "Otsu", "Yen" or "RenyiEntropy" |
+| `threshold_method` | `'MaxEntropy'` | Threshold of the subtype markers | the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the negative cells) or "Otsu"; in a settings file also "Yen" or "RenyiEntropy" |
 | `thresholds` | `{}` | Thresholds set by hand (Apply in a dashboard) | thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace the automatic ones |
 | `artefact_min_positive` | (empty) | Artefact: positive in at least N subtype markers (0 = none) | a detection positive in at least this many subtype markers is an artefact, not a cell; empty = all of them (with two or more markers); 0 = no artefacts |
 | `pool` | `'experiment'` | Classify together (one set of thresholds) | in a project: "experiment" classifies the datasets of each experiment together (one set of thresholds), "dataset" each dataset on its own |

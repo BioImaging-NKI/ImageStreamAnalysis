@@ -31,6 +31,11 @@ thresholds are automatic, or set by hand (`classification.thresholds`, or with t
 
 - **MaxEntropy** (default, as ClassifyCellTypes 2.8): finds the split of the histogram with the most information on
   both sides; suited to a large negative population with a positive tail.
+
+**Check every threshold on its histogram** in the dashboard before reading subtype numbers. Where the negative and
+positive cells form two clear peaks, the threshold belongs in the gap between them; the automatic methods can miss it
+on either side (see the technical note). A threshold set in the gap with the slider and applied to the project
+(*Apply to the project…*) then holds for every output.
 - **MaxEntropy strict**: the MaxEntropy threshold, raised where needed so that it lies at least two robust standard
   deviations above the middle of the negative cells. Fewer false positives, a few more missed positives.
 - **Otsu**: the split that best separates two populations of similar size.
@@ -51,11 +56,12 @@ thresholds are automatic, or set by hand (`classification.thresholds`, or with t
     **The thresholds are computed on the immune cells only.** A subtype marker may also be expressed by tumor cells;
     thresholding it within the immune cells keeps them from shifting the threshold.
 
-    **MaxEntropy is liberal.** It cuts in the upper tail of the negative population, so some negative cells (on
-    synthetic log-normal data typically 10–20 % of them, depending on how far the populations lie apart) are called
-    positive. *MaxEntropy strict* roughly halves that for well-separated markers. `Marker thresholds.tsv` and the
-    histograms in the dashboard show where each threshold lies; check them, and set a threshold by hand where the
-    automatic one is clearly off.
+    **The automatic thresholds can be off in both directions.** MaxEntropy often cuts in the upper tail of the
+    negative population, so some negative cells are called positive (on synthetic data typically 10–20 % of them, or
+    about ten cells per marker in a dataset of a few hundred immune cells); this creates small spurious subtypes such
+    as *A+ C+*. On other data it cuts into the positive population instead (in a test at 60×, a quarter of the
+    positive cells were missed, where Otsu found them all). *MaxEntropy strict* only raises the threshold. The
+    thresholds are in `Marker thresholds.tsv`, in background-subtracted intensity (as `Mean ch<N>`).
 
 ??? note "Technical: why two steps, and not one clustering of all cells"
 
@@ -77,9 +83,15 @@ subtype markers* sets another number; 0 switches the rule off.
     not known yet), before the clustering. `Positive markers` in the cell table holds the count;
     `Marker thresholds.tsv` lists both thresholds of each marker ("all cells" and "immune cells").
 
-    Because the automatic thresholds are liberal, a few real cells are positive in several markers by chance and
-    become artefacts: in the synthetic example data, about half as many again as the artefacts that were drawn. A
-    stricter threshold, or a threshold set by hand, reduces that.
+    These thresholds over all detections lie at the noise of the negative cells for well-separated markers, so real
+    cells can become artefacts: a cell positive for one marker that touches a cell positive for another picks up a
+    little of its neighbour's light. In the synthetic example data there were about half as many again as the
+    artefacts that were drawn. A threshold set by hand (in the gap of the histogram) also holds for this rule and
+    reduces that. Switching the rule off (0) is no cure when there are real artefacts: they then appear as a subtype
+    positive for every marker.
+
+    **With one subtype marker the rule is off**: an artefact cannot be told apart from a positive cell, and is counted
+    as one (the log says so).
 
     Only the subtype markers count. Counting the tumor and immune markers as well (a detection bright for both could
     be two cells drawn as one) was tried and dropped: an automatic threshold of those markers over all detections

@@ -23,7 +23,8 @@ cell's **neighbour track**.
 ## A pair of cell types
 
 **Membrane of** and **Interface with** choose the pair. Each can be a cell type (*Tumor*, *Immune*), an immune subtype
-as named in the tables (*Immune Subtype A+*), or a marker (*Subtype A+*: every immune cell positive for it, whatever
+as named in the tables (*Immune Subtype A+*, or *Immune negative* for the immune cells negative for every subtype
+marker), or a marker (*Subtype A+*: every immune cell positive for it, whatever
 its other markers). Empty: the cells that express the marker of interest (*Marker of interest expressed in*) against
 the other type, as in the macro. In the [dashboard](../guide/dashboard.md#membrane-enrichment) the pair can be changed
 on the spot.
@@ -59,8 +60,22 @@ their average (cells with an interface only) shows the shape of the enrichment.
 
 Cells without an interface get **control windows**: *Control windows per cell* (10) windows at random positions on
 their free membrane, as long as the median interface, scored like an interface. The histogram of the controls shows
-what "enrichment" looks like by chance in this dataset; an interface histogram that lies to the right of it is real
-enrichment.
+how much a stretch of free membrane varies by chance in this dataset.
+
+**The control windows are not a control for the interface itself.** They lie on free membrane, so they cannot show
+what the contact does to the measurement regardless of the marker: two stained membranes side by side (see below), an
+outline that runs a little outside the membrane where the cell is free but not at a contact, or blur from the partner.
+In tests on synthetic data without any enrichment, such effects alone gave a ratio of about 1.3 and 1–1.5 SD, with
+very small p-values against the control windows. So:
+
+- **Compare pairs**, not an interface with the control windows: the same measured cells with partners that do carry a
+  receptor or ligand and partners that do not (for example *Immune A+* against *Immune negative*), or cells whose
+  marker you expect to be enriched against cells of the same type (*Interface with* the measured type itself).
+- A small shift (ratio below about 1.5, or 1–2 SD) is within what geometry alone can give; a large, pair-specific
+  effect is not.
+- Check in the dashboard that the outlines lie on the membrane (*Events*, overlay *outlines*).
+- The p-value of thousands of cells against thousands of windows says nothing about biological replicates: compare
+  datasets (donors, replicates) instead.
 
 ??? note "Technical: the control windows"
 
@@ -81,11 +96,18 @@ cells, and reports it in the log, `run.json`, the overview (*MOI partners / meas
 | Partners / measured | Badge | Meaning |
 |---|---|---|
 | below 25 % | ✓ green | the marker is mainly on the measured cells |
-| 25–100 % | ! amber | the partners carry part of it: part of the interface signal may be theirs |
-| 100 % or more | ! red | the marker is brighter on the partners: check *Marker of interest expressed in* and the pair |
+| 25–80 % | ! amber | the partners carry part of it: part of the interface signal may be theirs |
+| 80–125 % | ! amber | the marker is on both at a similar level: two stained membranes side by side look like enrichment; compare with contacts between cells of the same type |
+| 125 % or more | ! red | the marker is brighter on the partners: check *Marker of interest expressed in* and the pair |
+| (any) | – grey | the measured cells hardly carry the marker (below 25 % of the brightest cell type): their enrichment is not informative |
 
 If the badge is amber or red, choose the pair the other way round (if the marker is on the partners), compare the
 enrichment with that of a pair whose partners do not carry the marker, or treat the result as an upper bound.
+
+**Look at the subsets.** The default pair (all cells of the type that expresses the marker) can hide an effect that
+only one subset has: in a test, a receptor polarized strongly on *A+* immune cells gave a median of 0.2 SD over all
+immune cells. Choose each subset under *Membrane of* in the dashboard before concluding that there is no
+enrichment.
 
 ??? note "Technical: inside only, and why it is no cure"
 

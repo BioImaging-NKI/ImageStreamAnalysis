@@ -249,6 +249,28 @@ of the rings with an interface. (These are the checks of `tests/test_reference.p
   log streamed, and see the overview. Server: stdlib `ThreadingHTTPServer` on 127.0.0.1 with a per-session token;
   stops after 15 min without requests; a second start reuses the running one.
 
+## Fixes from the user test (2026-11-01)
+
+Four agents used the tool from the manual alone, on synthetic exports with a known truth (scenarios outside the
+repository). Fixed from their reports:
+- **No marker of interest needed** for cell types and contacts (`channels.marker_of_interest = ""`): the event table
+  leaves out the marker columns and gets `Tumor-immune interface` (doublets use it), no marker check, the dashboard
+  hides the marker cards; the membrane analysis then refuses to run.
+- **Marker check**: partners / measured 0.8–1.25 = "on both at a similar level" (membrane doubling; compare with
+  same-type contacts), ≥ 1.25 = brighter on the partners; measured cells below 25 % of the brightest cell type =
+  NOT INFORMATIVE (grey badge), unless the partners are brighter.
+- Overview: `membrane pair` column; subtype columns 0 instead of empty, in one order; no `inf`; hover texts.
+- Dashboard: colour slots for the immune types present (not for all 2^n combinations); no `getImageData` on a canvas
+  of width 0; role names as on the page; the subtype card says the threshold is an intensity.
+- Import page: an unsaved setup is kept as a draft in the browser until saved.
+- Log: "subtype markers" (not "functional"); with one subtype marker the artefact rule is off and the log says so.
+- Manual: the control windows are no control for the interface (compare pairs; geometry alone gave ~1.3× / 1–1.5 SD
+  in the test), thresholds can be off both ways, sizes in pixels, overview columns, comparing conditions.
+
+Open, for a decision by the user: default threshold method (gap between the peaks), a built-in reference for the
+interface (a channel or pair that should not be enriched), a per-subset enrichment summary, and a size-free null
+model with uncertainty for the partner preference.
+
 ## The dashboard (new; replaces the macro's plots and overlays) ✅
 
 `dashboard.py` + `templates/dashboard.html`: every analysed dataset gets `dashboard.html` (results embedded as JSON)

@@ -191,3 +191,19 @@ def test_cellpose_result_is_reused_when_nothing_changed(synthetic, monkeypatch):
     s.segmentation.reuse_labels = False
     run(s)
     assert calls == [30.0, 25, 25]
+
+
+def test_without_a_marker_of_interest(synthetic):
+    """Cell types and contacts only: no marker columns, no marker check; the membrane analysis then needs one."""
+    from imagestream_analysis.interfaces import MOI_COLUMNS
+
+    s = settings_for(synthetic)
+    s.channels.marker_of_interest = ""
+    s.membrane.analysis = False
+    result = run(s)
+    assert len(result.cells) == 20 and len(result.doublets) == 10
+    assert not set(MOI_COLUMNS) & set(result.events.columns) and result.expression == {}
+    assert (result.out_dir / "dashboard.html").exists()
+    s.membrane.analysis = True
+    with pytest.raises(ValueError, match="needs a marker of interest"):
+        run(s)

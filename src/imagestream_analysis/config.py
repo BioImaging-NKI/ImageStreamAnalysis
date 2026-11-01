@@ -55,7 +55,9 @@ class ChannelSettings:
     # name (of input.channel_names, or of the stack)
 
     brightfield: Channel = 1  # the brightfield channel
-    marker_of_interest: Channel = 2  # the marker whose enrichment at the interface is measured
+    # the marker whose enrichment at the interface is measured; empty ("") = none (only cell types and contacts; the
+    # membrane analysis needs one)
+    marker_of_interest: Channel = 2
     tumor: Channel = 3  # the tumor-cell marker
     # the immune-cell marker(s), a list; several are each normalized and summed (2.8: phenotypic markers)
     immune: list[Channel] = field(default_factory=lambda: [4])
@@ -79,8 +81,13 @@ class ChannelSettings:
 
     def roles(self) -> dict[str, list[Channel]]:
         """Every role with its channel(s)."""
-        return {"brightfield": [self.brightfield], "marker_of_interest": [self.marker_of_interest],
+        return {"brightfield": [self.brightfield],
+                "marker_of_interest": [self.marker_of_interest] if self.has_marker_of_interest else [],
                 "tumor": [self.tumor], "immune": list(self.immune), "functional": list(self.functional)}
+
+    @property
+    def has_marker_of_interest(self) -> bool:
+        return self.marker_of_interest not in ("", None)
 
     def resolved(self, numbers: list[int], names: list[str]) -> ChannelSettings:
         """A copy with every channel given by number: names are looked up in `names` (the channels `numbers`)."""
@@ -99,7 +106,8 @@ class ChannelSettings:
 
         out = copy.deepcopy(self)
         out.brightfield = number(self.brightfield, "brightfield")
-        out.marker_of_interest = number(self.marker_of_interest, "marker_of_interest")
+        if self.has_marker_of_interest:
+            out.marker_of_interest = number(self.marker_of_interest, "marker_of_interest")
         out.tumor = number(self.tumor, "tumor")
         out.immune = [number(c, "immune marker") for c in self.immune]
         out.functional = [number(c, "functional marker") for c in self.functional]
@@ -141,7 +149,8 @@ class Pool(StrEnum):
 @dataclass
 class ClassificationSettings:
     # the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8),
-    # "MaxEntropy strict" (at least 2 robust SDs above the negative cells), "Otsu", "Yen" or "RenyiEntropy"
+    # "MaxEntropy strict" (at least 2 robust SDs above the negative cells) or "Otsu"; in a settings file also "Yen" or
+    # "RenyiEntropy"
     threshold_method: str = "MaxEntropy"
     # thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace
     # the automatic ones

@@ -188,13 +188,16 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "files": FILES,
         "channels": channels,
         "cell_of_interest": of_interest,
+        "has_moi": settings.channels.has_marker_of_interest,
         "artefact_min_positive": settings.classification.artefact_min_positive,
         "events": {
             "object": _column(ids) if ids is not None else None,
             "t_cells": _column(ev["Immune cells"]), "tumor_cells": _column(ev["Tumor cells"]),
-            "t_interface": _column(ev["mean immune interface"]), "t_rest": _column(ev["mean immune NOT in interface"]),
-            "tu_interface": _column(ev["mean tumor interface"]), "tu_rest": _column(ev["mean tumor NOT in interface"]),
-            "t_ratio": _column(ev["Immune membrane ratio"]), "tu_ratio": _column(ev["Tumor membrane ratio"]),
+            "interface": _column(ev["Tumor-immune interface"].astype(int)),
+            **{key: _column(ev[col]) if col in ev else None
+               for key, col in [("t_interface", "mean immune interface"), ("t_rest", "mean immune NOT in interface"),
+                                ("tu_interface", "mean tumor interface"), ("tu_rest", "mean tumor NOT in interface"),
+                                ("t_ratio", "Immune membrane ratio"), ("tu_ratio", "Tumor membrane ratio")]},
             "interfaces": interfaces,
         },
         "cells": {

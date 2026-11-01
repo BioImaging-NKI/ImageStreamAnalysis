@@ -30,6 +30,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import math
 import re
 import time
 import tomllib
@@ -42,6 +43,7 @@ import pandas as pd
 
 from .config import CellOfInterest, ChannelSettings, Pool, Settings, _from_dict, _toml_value
 from .io import save_table
+from .membrane import pair_of
 
 log = logging.getLogger(__name__)
 PROJECT_FILE = "project.toml"
@@ -105,6 +107,8 @@ class Project:
             msgs.append("No datasets selected")
         if not self.settings.channels.immune:
             msgs.append("No immune-cell marker")
+        if self.settings.membrane.analysis and not self.settings.channels.has_marker_of_interest:
+            msgs.append("The membrane analysis needs a marker of interest (or switch it off)")
         for z in self.zips:
             name = Path(z.path).name
             if not z.pixel_size:
@@ -204,26 +208,37 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
         "artefacts": int((cells["Cell type"] == "Artefact").sum()),
         "single tumor + single immune cell": int(len(d)),
         "interactions": int(len(result.pairs)),
-        "MOI partners / measured": (round(float(result.expression["partners / measured"]), 3)
-                                    if result.expression else None),
+        "MOI partners / measured": _finite(result.expression.get("partners / measured")),
         "tumor–immune contacts": int(result.contacts.loc[(result.contacts["cell type"] == "Tumor")
                                                          & result.contacts["neighbour type"].str.startswith("Immune"),
                                                          "contacts"].sum()),
         "doublet fraction": round(len(d) / len(events), 4) if len(events) else None,
-        f"median {side} (doublets)": _median(d[side]) if len(d) else None,
     }
+    if side in d:
+        row[f"median {side} (doublets)"] = _median(d[side]) if len(d) else None
     for subtype, count in cells.loc[cells["Subtype"] != "", "Subtype"].value_counts().items():
         row[f"immune {subtype}"] = int(count)
     mem = result.membranes
     if mem is not None:
         t = mem.table
+        cells_of, partners = pair_of(settings.membrane, settings.channels.cell_of_interest)
         row |= {
+            "membrane pair": f"{' / '.join(cells_of)} with {' / '.join(partners)}",
             "membranes": int(len(t)),
             "with interface": int(mem.has_interface.sum()),
             "median stdDevs above mean": _median(t["stdDevs above mean"]),
             "median control (windows)": _median(pd.Series(mem.control_scores)),
         }
     return row
+
+
+def _finite(value: Any) -> float | None:
+    """A number for the overview: rounded, or None when there is none (missing, NaN or infinite)."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(v, 3) if math.isfinite(v) else None
 
 
 def _median(values: pd.Series) -> float | None:
@@ -344,7 +359,17 @@ def overview(folder: str | Path) -> pd.DataFrame:
         rows.append({"experiment": info.get("experiment", ""), "dataset": info.get("dataset", ""),
                      "zip": Path(info.get("zip", "")).name, "folder": str(f.parent.relative_to(folder))}
                     | info.get("summary", {}))
-    return pd.DataFrame(rows)
+    table = pd.DataFrame(rows)
+    # the immune subtypes: 0 where a dataset has none, in one order (negative, then by number of markers, by name)
+    subtypes = [c for c in table.columns if c.startswith("immune ") and c != "immune cells"]
+    if subtypes:
+        table[subtypes] = table[subtypes].fillna(0).astype(int)
+        ordered = sorted(subtypes, key=lambda c: (c != "immune negative", c.count("+"), c))
+        rest = [c for c in table.columns if c not in subtypes]
+        at = list(table.columns).index(subtypes[0])
+        at = len([c for c in table.columns[:at] if c not in subtypes])
+        table = table[rest[:at] + ordered + rest[at:]]
+    return table
 
 
 def write_overview(folder: str | Path) -> pd.DataFrame:

@@ -4,7 +4,8 @@ The import page (`uv run imagestream`, or `uv run imagestream-cli gui`) sets up 
 exports, the names and roles of their channels, and the analysis settings. It runs the analysis and shows the
 overview. It is a page in your browser served by the program on your own computer; nothing leaves it.
 
-The page remembers the last project. A second start opens the running page again. **Quit** (top right) saves the
+The page remembers the last saved project (*Save*, *Run* and *Quit* save it); a setup that was not saved yet comes
+back from the browser after a reload, with a message. A second start opens the running page again. **Quit** (top right) saves the
 project and stops the program; otherwise it stops by itself 15 minutes after the page was closed (never during a run).
 
 The **?** button behind a step or a group of settings, and the **? Help** button at the top, open the part of this
@@ -33,9 +34,11 @@ writes the project file without running. The results of a dataset go to `<projec
     | **Tumor** | the tumor-cell marker | one |
     | **Immune** | an immune-cell marker; several are summed | one or more |
     | **Subtype** | an immune subtype marker: positive or negative per cell | none or more |
-    | **MOI** | the marker of interest, measured along the membrane | one |
+    | **MOI** | the marker of interest, measured along the membrane | one, or none |
 
-    A channel can have two roles (for example a subtype marker that is also the marker of interest).
+    A channel can have two roles (for example a subtype marker that is also the marker of interest). Without a marker
+    of interest the analysis gives the cell types, subtypes and contacts only: leave *MOI* unticked and *Membrane
+    profiles and enrichment* off.
 
 ![Channels with their names and roles](../images/gui_channels.png)
 
@@ -61,7 +64,8 @@ Used for all datasets of the project. The most important:
   image for Cellpose is made (see [Segmentation](../analysis/segmentation.md)).
 - **Marker of interest expressed in**: the cell type that carries the marker of interest. The membrane enrichment is
   measured on these cells (see [Membrane enrichment](../analysis/membrane.md)).
-- **Python with Cellpose**, **Model**, **Cell diameter (px)**: the segmentation. **Reuse the previous Cellpose result
+- **Python with Cellpose**, **Model**, **Cell diameter (px)**: the segmentation. Sizes are in pixels: see
+  [Segmentation](../analysis/segmentation.md#sizes-in-pixels) for the conversion from µm. **Reuse the previous Cellpose result
   if nothing changed** (on by default) skips Cellpose for a dataset whose Cellpose input and settings are the same as
   in its previous run.
 - **Classify together**, **Threshold of the subtype markers**, **Artefact**: the [cell types](../analysis/classification.md).

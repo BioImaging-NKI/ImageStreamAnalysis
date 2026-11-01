@@ -170,8 +170,9 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
     <div class="card" id="cellcard"><h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p></div>
     <div class="card" id="markers-card" hidden>
       <h2 data-help="guide/dashboard#subtype-markers">Subtype markers</h2>
-      <p class="sub">The threshold of each marker on the immune cells, on log(intensity − min + 1). Drag to change the
-        subtypes everywhere on this page; the tumor / immune split and the artefacts stay as computed.</p>
+      <p class="sub">The threshold of each marker on the immune cells: a histogram on a log scale, the threshold in
+        background-subtracted intensity. Drag to change the subtypes everywhere on this page; the tumor / immune split
+        and the artefacts stay as computed.</p>
       <div id="markers"></div>
       <div class="tabs" style="margin-top:8px"><button class="apply">Apply to the project…</button>
         <button id="export">Copy as settings</button><button id="reset-all">Reset all</button></div>
@@ -184,7 +185,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
       <div class="legend" id="classes-legend"></div>
       <div class="plot"><canvas id="classes" height="300"></canvas></div>
     </div>
-    <div class="card">
+    <div class="card" id="iface-card">
       <h2 id="iface-title" data-help="guide/dashboard#marker-of-interest-at-the-interface">Marker of interest at the interface</h2>
       <p class="sub" id="iface-sub"></p>
       <div class="plot"><canvas id="iface" height="280"></canvas></div>
@@ -270,17 +271,21 @@ function subtypeOf(i) {
   const pos = MK.filter(m => m.thr != null && C.type[i] === "Immune" && m.values[i] != null && m.values[i] > m.thr).map(m => m.name + "+");
   return pos.length ? pos.join(" ") : "negative";
 }
-function recomputeTypes() { for (let i = 0; i < NC; i++) TYPE[i] = C.type[i] === "Immune" && MK.length ? "Immune " + subtypeOf(i) : C.type[i]; }
+function recomputeTypes() { for (let i = 0; i < NC; i++) TYPE[i] = C.type[i] === "Immune" && MK.length ? "Immune " + subtypeOf(i) : C.type[i];
+  assignSlots(); }
 // the possible immune types, in a fixed order (by the combination of positive markers), so colours follow the entity
 const IMMUNE_TYPES = MK.length ? Array.from({ length: 2 ** MK.length }, (_, b) => {
   const pos = MK.filter((m, k) => b & (1 << k)).map(m => m.name + "+"); return "Immune " + (pos.length ? pos.join(" ") : "negative"); })
   : ["Immune"];
 const IMMUNE_SLOTS = ["--s1", "--s4", "--s5", "--s6", "--s7", "--s8"];
+// a slot per immune type present, in the fixed order of IMMUNE_TYPES; a type that appears later (a slider moved) gets
+// the next free slot and keeps it, so colours follow the entity; beyond six: grey
+const slotOf = new Map();
+function assignSlots() { for (const t of IMMUNE_TYPES) if (!slotOf.has(t) && TYPE.includes(t) && slotOf.size < IMMUNE_SLOTS.length) slotOf.set(t, IMMUNE_SLOTS[slotOf.size]); }
 function colorVar(t) {
   if (t === "Tumor") return "--s2";
   if (t === "Artefact") return "--muted";
-  const k = IMMUNE_TYPES.indexOf(t);
-  return k >= 0 && k < IMMUNE_SLOTS.length ? IMMUNE_SLOTS[k] : "--other";
+  return slotOf.get(t) || "--other";
 }
 const typeColor = t => css(colorVar(t));
 const ORDER = ["Tumor", ...IMMUNE_TYPES, "Artefact"];
@@ -298,14 +303,16 @@ for (let k = 0; k < PAIRS.length; k += 2) { const a = PAIRS[k], b = PAIRS[k + 1]
 const centroid = C.outline.map(o => { let x = 0, y = 0; const n = o.length / 2; for (let k = 0; k < o.length; k += 2) { x += o[k]; y += o[k + 1]; } return n ? [x / n / 2, y / n / 2] : [0, 0]; });
 let M = null, memOfCell = new Int32Array(NC).fill(-1);
 const eventEnrichment = new Float64Array(NE).fill(NaN);
-const iInterface = OF_INTEREST === "Tumor" ? E.tu_interface : E.t_interface;
-const iRest = OF_INTEREST === "Tumor" ? E.tu_rest : E.t_rest;
-const iRatio = OF_INTEREST === "Tumor" ? E.tu_ratio : E.t_ratio;
-const isDoublet = e => E.t_cells[e] === 1 && E.tumor_cells[e] === 1 && E.t_interface[e] != null;
+const NONE = new Array(NE).fill(null);  // the marker-of-interest columns without a marker of interest (D.has_moi false)
+const iInterface = (OF_INTEREST === "Tumor" ? E.tu_interface : E.t_interface) || NONE;
+const iRest = (OF_INTEREST === "Tumor" ? E.tu_rest : E.t_rest) || NONE;
+const iRatio = (OF_INTEREST === "Tumor" ? E.tu_ratio : E.t_ratio) || NONE;
+const isDoublet = e => E.t_cells[e] === 1 && E.tumor_cells[e] === 1 && !!E.interface[e];
 const hasContact = (e, [a, b]) => pairsOfEvent[e].some(([x, y]) => (TYPE[x] === a && TYPE[y] === b) || (TYPE[x] === b && TYPE[y] === a));
 const FILTERS = { all: () => true, both: e => E.t_cells[e] > 0 && E.tumor_cells[e] > 0, doublets: isDoublet,
                   interface: e => E.interfaces[e].length > 0, touching: e => pairsOfEvent[e].length > 0 };
-const SORTS = [["event", "event order"], ["ratio", "membrane ratio of the " + (OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell")]];
+const SORTS = [["event", "event order"]];
+if (D.has_moi) SORTS.push(["ratio", "membrane ratio of the " + (OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell")]);
 if (MP) SORTS.push(["sd", "enrichment (SD above mean)"]);
 SORTS.push(["contacts", "number of contacts"]);
 if (E.object) SORTS.splice(1, 0, ["object", "object number"]);
@@ -502,7 +509,7 @@ function cellTip(i) {
 }
 function eventTip(e) {
   return [[`#${e + 1}`, E.object ? `object ${E.object[e]}` : "event"], [`${E.t_cells[e]} immune · ${E.tumor_cells[e]} tumor`, "cells"],
-          [String(pairsOfEvent[e].length), "pairs of touching cells"], [fmt(iRatio[e]), "membrane ratio"]];
+          [String(pairsOfEvent[e].length), "pairs of touching cells"], ...(D.has_moi ? [[fmt(iRatio[e]), "membrane ratio"]] : [])];
 }
 
 // ---------- plots (canvas with an overlay for hover/selection)
@@ -551,7 +558,7 @@ function scatter(name, canvasId, pts, opts) {
     const dim = opts.front && p.group !== opts.front;
     ctx.beginPath(); ctx.arc(p.px, p.py, 3.2, 0, 2 * Math.PI); ctx.fillStyle = p.color; ctx.globalAlpha = dim ? 0.12 : 0.8; ctx.fill(); ctx.globalAlpha = 1;
     if (!dim) { ctx.strokeStyle = surface; ctx.lineWidth = 0.75; ctx.stroke(); } }
-  const base = ctx.getImageData(0, 0, cv.width, cv.height);
+  const base = cv.width && cv.height ? ctx.getImageData(0, 0, cv.width, cv.height) : null;  // 0 before the first layout
   plots[name] = { pts, cv, ctx, base, kind: opts.kind };
   if (!cv._wired) {
     cv._wired = true;
@@ -586,11 +593,12 @@ function drawPlots() {
   for (const t of ORDER.filter(t => counts.has(t))) { const s = document.createElement("span"); s.className = "item" + (state.focus && state.focus !== t ? " faded" : "");
     const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = `var(${colorVar(t)})`;
     s.append(dot, `${shortType(t)} (${counts.get(t).toLocaleString()})`); s.onclick = () => { state.focus = state.focus === t ? null : t; drawPlots(); }; lg.append(s); }
-  const evPts = shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--s2" : "--s1") }));
+  document.getElementById("iface-card").hidden = !D.has_moi;
+  const evPts = !D.has_moi ? [] : shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--s2" : "--s1") }));
   const who = OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell";
   document.getElementById("iface-sub").textContent = `Per event: mean of the marker of interest in the ${who} membrane at the interface against the rest of its membrane (${evPts.length.toLocaleString()} events; dashed: equal)`;
   const all = evPts.flatMap(p => [p.x, p.y]); const d = extent(all, false); d[0] = Math.min(0, d[0]);
-  scatter("iface", "iface", evPts, { kind: "event", xd: d, yd: d, identity: true, xlabel: "rest of the membrane", ylabel: "at the interface" });
+  if (D.has_moi) scatter("iface", "iface", evPts, { kind: "event", xd: d, yd: d, identity: true, xlabel: "rest of the membrane", ylabel: "at the interface" });
   drawContacts();
   drawOverlay();
   if (M) drawMembranes();
@@ -765,7 +773,7 @@ function renderMarkers() {
     slider.value = logv(m.thr);
     let pending = false;
     slider.oninput = () => { m.thr = Math.exp(+slider.value) - 1 + lo; place(); if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; typesChanged(); }); } };
-    const note = document.createElement("div"); note.className = "note"; note.textContent = `log(intensity − min + 1) of the immune cells. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)` + (m.threshold_all != null ? `; over all detections, for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
+    const note = document.createElement("div"); note.className = "note"; note.textContent = `Immune cells, on log(intensity − min + 1); thresholds in intensity. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)` + (m.threshold_all != null ? `; over all detections, for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
     div.append(slider, note);
     if (m.method === "manual") {  // set by hand (Apply, or a settings file): Apply can make it automatic again
       const auto = document.createElement("button"); auto.className = "auto"; auto.textContent = "automatic";
@@ -883,8 +891,14 @@ function expressionCheck(cellsSel, partnerSel) {  // as membrane.expression_chec
   const a = [], b = [];
   for (let k = 0; k < MP.cell.length; k++) { const c = MP.cell[k]; if (matches(c, cellsSel)) a.push(free(k)); if (matches(c, partnerSel)) b.push(free(k)); }
   const ma = median(a.filter(isFinite)), mb = median(b.filter(isFinite)), ratio = ma > 0 ? mb / ma : Infinity;
-  const level = !isFinite(ma) || !isFinite(mb) ? "none" : ratio >= 1 ? "critical" : ratio >= 0.25 ? "warning" : "good";
-  return { ma, mb, ratio, level };
+  const byType = new Map();  // the brightest cell type: measured cells far below it hardly carry the marker
+  for (let k = 0; k < MP.cell.length; k++) { const t = TYPE[MP.cell[k]], v = free(k);
+    if (t !== "Artefact" && isFinite(v)) { if (!byType.has(t)) byType.set(t, []); byType.get(t).push(v); } }
+  let brightest = NaN, brightestType = "";
+  for (const [t, v] of byType) { const m = median(v); if (!(m <= brightest)) { brightest = m; brightestType = t; } }
+  const level = !isFinite(ma) || !isFinite(mb) ? "none" : ratio >= 1.25 ? "critical" : brightest > 0 && ma < 0.25 * brightest ? "low"
+    : ratio >= 0.8 ? "similar" : ratio >= 0.25 ? "warning" : "good";
+  return { ma, mb, ratio, level, brightest, brightestType };
 }
 function drawMembranes() {
   document.getElementById("membrane-card").hidden = false;
@@ -896,10 +910,13 @@ function drawMembranes() {
   const x = M.expression, badge = document.getElementById("expression-badge"); badge.replaceChildren();
   if (x.level !== "none") {
     const b = document.createElement("span"); b.className = "badge"; const ic = document.createElement("span"); ic.className = "icon";
-    ic.style.background = `var(--${x.level === "warning" ? "warning" : x.level})`; ic.style.color = x.level === "warning" ? "#0b0b0b" : "#fff";
-    ic.textContent = x.level === "good" ? "✓" : "!";
-    const words = x.level === "good" ? "marker mainly on the measured cells" : x.level === "warning" ? "partners carry part of the marker" : "marker brighter on the partners";
-    b.append(ic, `${words}: partners / measured ${pct(x.ratio)}`);
+    const amber = x.level === "warning" || x.level === "similar";
+    ic.style.background = x.level === "low" ? "var(--muted)" : `var(--${amber ? "warning" : x.level})`; ic.style.color = amber ? "#0b0b0b" : "#fff";
+    ic.textContent = x.level === "good" ? "✓" : x.level === "low" ? "–" : "!";
+    const words = { good: "marker mainly on the measured cells", warning: "partners carry part of the marker",
+      similar: "marker on both cells: compare with same-type contacts", critical: "marker brighter on the partners" }[x.level];
+    if (x.level === "low") b.append(ic, `the measured cells hardly carry the marker (${pct(x.ma / x.brightest)} of ${shortType(x.brightestType)}): not informative`);
+    else b.append(ic, `${words}: partners / measured ${pct(x.ratio)}`);
     b.title = `Median free-membrane intensity of the marker of interest: measured cells ${fmt(x.ma, 1)}, partners ${fmt(x.mb, 1)}. ` +
       "If the partners carry the marker too, their membrane lies against the measured one at the interface and looks like enrichment.";
     badge.append(b);
@@ -943,7 +960,7 @@ function drawHeat(rows) {
     if (isNaN(v)) { img.data[o + 3] = 0; continue; } img.data.set([...divergingRgb(v / HEAT_RANGE), 255], o); } });
   const tmp = document.createElement("canvas"); tmp.width = cols; tmp.height = heatRows.length; tmp.getContext("2d").putImageData(img, 0, 0);
   ctx.imageSmoothingEnabled = false; ctx.drawImage(tmp, 0, 0, w, h);
-  heatBase = ctx.getImageData(0, 0, cv.width, cv.height);
+  heatBase = cv.width && cv.height ? ctx.getImageData(0, 0, cv.width, cv.height) : null;
   const lg = document.getElementById("heat-legend"); lg.replaceChildren();
   const bar = document.createElement("span"); bar.style.cssText = `display:inline-block;width:120px;height:8px;border-radius:2px;vertical-align:middle;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))`;
   const a = document.createElement("span"); a.className = "note"; a.textContent = `−${HEAT_RANGE} `; const b = document.createElement("span"); b.className = "note"; b.textContent = ` +${HEAT_RANGE} SD (position 0 – ${fmt((cols - 1) * D.pixel_size, 0)} µm, interface at ${fmt(20 * D.pixel_size, 0)} µm)`;
@@ -1003,7 +1020,8 @@ if (MP) CELL_COLS.push(["sd", "SD above mean", i => M && memOfCell[i] >= 0 ? M.s
 const EVENT_COLS = [["event", "event", e => e + 1], ["object", "object", e => E.object ? E.object[e] : null], ["t", "immune cells", e => E.t_cells[e]], ["tu", "tumor cells", e => E.tumor_cells[e]],
   ["pairs", "touching pairs", e => pairsOfEvent[e].length],
   ["ti", "immune interface", e => E.t_interface[e]], ["tr", "immune rest", e => E.t_rest[e]], ["ui", "tumor interface", e => E.tu_interface[e]], ["ur", "tumor rest", e => E.tu_rest[e]],
-  ["tratio", "immune ratio", e => E.t_ratio[e]], ["uratio", "tumor ratio", e => E.tu_ratio[e]]];
+  ["tratio", "immune ratio", e => E.t_ratio[e]], ["uratio", "tumor ratio", e => E.tu_ratio[e]]]
+  .filter(c => D.has_moi || !["ti", "tr", "ui", "ur", "tratio", "uratio"].includes(c[0]));
 const CONTACT_COLS = [["a", "cell type", r => shortType(r.a)], ["b", "neighbour type", r => shortType(r.b)], ["cells", "cells", r => r.cells], ["o", "contacts", r => r.o],
   ["touch", "cells touching", r => r.touch], ["frac", "fraction touching", r => r.frac], ["o3", "contacts (3+ cells)", r => r.o3],
   ["e", "expected (3+ cells)", r => r.e], ["oe", "observed / expected", r => r.oe]];
@@ -1078,7 +1096,8 @@ function renderControls() {
   for (const ch of D.channels) {
     const wrap = document.createElement("div"); wrap.className = "chan";
     const lab = document.createElement("label");
-    lab.title = `Ch${ch.number}${ch.role ? " (" + ch.role.replace(/_/g, " ") + ")" : ""}. Double-click: show only this channel`;
+    const ROLE_NAMES = { brightfield: "brightfield", tumor: "tumor marker", immune: "immune marker", functional: "subtype marker", marker_of_interest: "marker of interest" };
+    lab.title = `Ch${ch.number}${ch.role ? " (" + (ROLE_NAMES[ch.role] || ch.role) + ")" : ""}. Double-click: show only this channel`;
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = ch.on; ch.box = cb;
     const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = LUT[ch.lut];
     const name = document.createElement("span"); name.className = "name"; name.textContent = ch.name;
