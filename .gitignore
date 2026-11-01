@@ -13,3 +13,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+
+# the manual: the built site and the live demo (a release asset)
+site/
+manual/demo/

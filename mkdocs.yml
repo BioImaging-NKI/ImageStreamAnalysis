@@ -1,0 +1,92 @@
+# The user manual: https://bioimaging-nki.github.io/ImageStreamAnalysis/
+# Preview:  mkdocs serve        Build:  mkdocs build --strict  (into site/)
+# Screenshots and the settings reference are made by the scripts in tools/manual (see tools/manual/MAINTAINING.md).
+site_name: ImageStream Analysis manual
+site_description: User manual of ImageStream Analysis for Python, cell classification, cell contacts and membrane enrichment at cell interfaces in imaging flow cytometry
+site_url: https://bioimaging-nki.github.io/ImageStreamAnalysis/
+repo_url: https://github.com/BioImaging-NKI/ImageStreamAnalysis
+repo_name: ImageStreamAnalysis
+edit_uri: edit/python-port/manual/
+docs_dir: manual
+copyright: ImageStream Analysis · Netherlands Cancer Institute · GPL-3.0-or-later
+
+theme:
+  name: material
+  font: false  # system fonts: no requests to Google
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.tooltips
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: start/install.md
+      - Your first analysis: start/first-analysis.md
+      - Try it in your browser: start/demo.md
+  - User guide:
+      - The import page: guide/import-page.md
+      - The dashboard: guide/dashboard.md
+      - The project overview: guide/overview.md
+      - The output folder: guide/output-folder.md
+  - How the analysis works:
+      - Input: analysis/input.md
+      - Segmentation: analysis/segmentation.md
+      - Cell types: analysis/classification.md
+      - Cell contacts: analysis/interactions.md
+      - Membrane enrichment: analysis/membrane.md
+  - Reference:
+      - All settings: reference/settings.md
+      - Settings files and the command line: reference/command-line.md
+      - From the Fiji macros: reference/fiji.md
+  - Help:
+      - Questions and problems: help/faq.md
+      - Glossary: help/glossary.md
+
+plugins:
+  - search
+  - glightbox:
+      zoomable: true
+      skip_classes: [no-lightbox]
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.arithmatex: { generic: true }
+  - pymdownx.details
+  - pymdownx.keys
+  - pymdownx.snippets: { auto_append: [manual/includes/abbreviations.md] }
+  - pymdownx.superfences
+  - pymdownx.tabbed: { alternate_style: true }
+
+extra_css: [assets/manual.css]
+extra_javascript:
+  - assets/mathjax-config.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js
+
+not_in_nav: |
+  /includes/*

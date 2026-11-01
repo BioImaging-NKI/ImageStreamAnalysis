@@ -1,0 +1,54 @@
+# The user manual on GitHub Pages (https://bioimaging-nki.github.io/ImageStreamAnalysis/), built from manual/ with MkDocs.
+# The live demo (manual/demo, not in git) comes from manual-demo.zip in the 'example-data' release
+# (tools/manual/make_demo.py); without it the site is built without the demo.
+# Pages must be enabled once by an admin: Settings > Pages > Source: GitHub Actions.
+name: Manual
+
+on:
+  push:
+    branches: [main, python-port]
+    paths: ["manual/**", "mkdocs.yml", ".github/workflows/manual.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # the versions the manual is built and checked with locally (pyproject.toml, dev group)
+      - run: pip install "mkdocs==1.6.1" "mkdocs-material==9.7.7" "mkdocs-glightbox==0.5.2" "selectolax==1.0.0" "pymdown-extensions==12.3" "markdown==3.11.1"
+      - name: Live demo from the example-data release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release download example-data --pattern manual-demo.zip --dir /tmp; then
+            mkdir -p manual/demo && unzip -q /tmp/manual-demo.zip -d manual/demo
+          else
+            echo "::warning::manual-demo.zip not found in the example-data release: the site is built without the live demo"
+          fi
+      - run: mkdocs build --strict
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

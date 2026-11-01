@@ -24,6 +24,8 @@ uv sync
 Cellpose can run from another environment (recommended, see `segmentation.cellpose_python` in the settings), or be
 installed here with `uv sync --extra cellpose3` or `uv sync --extra cellpose4`.
 
+The user manual: <https://bioimaging-nki.github.io/ImageStreamAnalysis/> (sources in `manual/`).
+
 ## Usage
 
 The input is an IDEAS export (a zip with one folder per dataset), or an ImageJ hyperstack made by

@@ -37,32 +37,35 @@ Channel = int | str  # a channel number (1-based), or a channel name
 
 @dataclass
 class InputSettings:
-    # an IDEAS export (.zip, one folder per dataset) or an ImageJ hyperstack from ImageStreamCombiner (.tif, TCYX,
-    # one frame per event)
+    # an IDEAS export (.zip, one folder per dataset) or an ImageJ hyperstack from ImageStreamCombiner (.tif, one
+    # frame per event)
     image: Path = Path()
-    output: Path = Path("output")  # results go to <output>/<dataset or image stem>/
-    max_events: int | None = None  # analyze only the first N events (macro: limitNrCells); None = all
-    # IDEAS zip only: the dataset (folder in the zip; "" = the only one), the channels to load (IDEAS channel
-    # numbers; the ones with a role are always loaded), their names (same order as `channels`) and the pixel size
-    dataset: str = ""
+    output: Path = Path("output")  # the results go to a folder named after the dataset (or stack) in this folder
+    max_events: int | None = None  # analyse only the first N events (by object number); empty = all
+    dataset: str = ""  # IDEAS zip: the dataset (folder in the zip); empty = the only one
+    # IDEAS zip: the channels to load (IDEAS numbers Ch<N>); the channels with a role are always loaded
     channels: list[int] = field(default_factory=list)
-    channel_names: list[str] = field(default_factory=list)
-    pixel_size: float | None = None  # µm; required for an IDEAS zip (the files do not hold it)
+    channel_names: list[str] = field(default_factory=list)  # IDEAS zip: their names, in the same order as channels
+    pixel_size: float | None = None  # µm per pixel; required for an IDEAS zip (its files do not hold it)
 
 
 @dataclass
 class ChannelSettings:
-    # channel numbers (the IDEAS channel Ch<N> for a zip, the position in the stack for a Combiner .tif) or names
-    brightfield: Channel = 1
-    marker_of_interest: Channel = 2
-    tumor: Channel = 3
-    # markers of the immune cells (ClassifyCellTypes 2.8: phenotypic markers); each is normalized, and their sum is
-    # the immune-cell marker of the segmentation and the tumor / immune classification (macro v1.8: one T-cell marker)
+    # a channel is a number (the IDEAS channel Ch<N> for a zip, the position in the stack for a Combiner .tif) or a
+    # name (of input.channel_names, or of the stack)
+
+    brightfield: Channel = 1  # the brightfield channel
+    marker_of_interest: Channel = 2  # the marker whose enrichment at the interface is measured
+    tumor: Channel = 3  # the tumor-cell marker
+    # the immune-cell marker(s), a list; several are each normalized and summed (2.8: phenotypic markers)
     immune: list[Channel] = field(default_factory=lambda: [4])
-    # markers of immune subtypes (2.8: functional markers), each with a positive / negative threshold
+    # immune subtype markers, a list: positive or negative per immune cell (2.8: functional markers)
     functional: list[Channel] = field(default_factory=list)
-    marker_location: MarkerLocation = MarkerLocation.NUCLEAR  # of the tumor and immune-cell markers
-    cell_of_interest: CellOfInterest = CellOfInterest.IMMUNE_CELL  # the cell type that expresses the marker of interest
+    # where the tumor and immune markers stain: "nuclear" (nucleus or cytoplasm) or "membrane"; sets the image for
+    # Cellpose
+    marker_location: MarkerLocation = MarkerLocation.NUCLEAR
+    # the cell type that expresses the marker of interest: "Tumor cell" or "Immune cell"
+    cell_of_interest: CellOfInterest = CellOfInterest.IMMUNE_CELL
 
     @staticmethod
     def migrate(data: dict[str, Any]) -> dict[str, Any]:
@@ -105,22 +108,21 @@ class ChannelSettings:
 
 @dataclass
 class SegmentationSettings:
-    method: str = "cellpose"  # "cellpose" or "labelmap" (load labelmap_file)
-    labelmap_file: Path | None = None  # a labelmap_cells.zip/.tif of an earlier run (montage or stack)
-    model: str = "cyto3"  # Cellpose 3: cyto3, cyto2, nuclei, ...; Cellpose 4: cpsam; or a path to a model
-    diameter: float = 30.0  # pixels; 0 = let Cellpose estimate it (Cellpose 3 only)
-    flow_threshold: float = 0.5
-    cellprob_threshold: float = 0.0
-    use_gpu: bool = True
-    # Cellpose segments one montage of all events (so that it looks like a microscopy image): a grid with this many
-    # events per row. 0 = about square (default, SPEC I2); the number of events = one row, as the Fiji macro.
+    method: str = "cellpose"  # "cellpose", or "labelmap": load the labels of labelmap_file instead
+    labelmap_file: Path | None = None  # labelmap_cells.tif (or the macro's .zip) of an earlier run
+    model: str = "cyto3"  # Cellpose 3: cyto3, cyto2, nuclei, ...; Cellpose 4: cpsam; or the path of a model
+    diameter: float = 30.0  # the typical cell diameter in pixels; 0 = Cellpose estimates it (Cellpose 3 only)
+    flow_threshold: float = 0.5  # Cellpose's flow threshold (higher: more, less certain cells)
+    cellprob_threshold: float = 0.0  # Cellpose's cell probability threshold (lower: larger cells)
+    use_gpu: bool = True  # run Cellpose on the GPU
+    # events per row of the montage that Cellpose segments; 0 = about square; the number of events = one row, as the
+    # Fiji macro
     montage_columns: int = 0
-    # Python of an environment with Cellpose (3 or 4); None = this environment
-    cellpose_python: Path | None = None
-    erosion: int = 1  # shrink the cells from the background with this many pixels
-    min_cell_size: int = 100  # pixels (after erosion)
-    max_cell_size: int = 10000
-    # cells cut by the edge of their event image are always flagged (column Edge); true = leave them out
+    cellpose_python: Path | None = None  # python.exe of an environment with Cellpose 3 or 4; empty = this one
+    erosion: int = 1  # shrink the cells from the background by this many pixels
+    min_cell_size: int = 100  # smaller cells (in pixels, after shrinking) are removed
+    max_cell_size: int = 10000  # larger cells (in pixels, after shrinking) are removed
+    # leave out cells cut by the edge of their event image (they are always marked: column Edge)
     exclude_edge_cells: bool = False
 
 
@@ -135,40 +137,37 @@ class Pool(StrEnum):
 
 @dataclass
 class ClassificationSettings:
-    # Thresholds of the functional markers: on log(intensity - min + 1) of the background-subtracted cell means (as
-    # ClassifyCellTypes 2.8), with an ImageJ auto-threshold method: "MaxEntropy" (2.8), "Otsu", "Yen" or
-    # "RenyiEntropy"; "<method> strict" raises it to at least 2 robust SDs above the negative cells
+    # the automatic threshold of the subtype markers, on log(intensity - min + 1): "MaxEntropy" (as 2.8),
+    # "MaxEntropy strict" (at least 2 robust SDs above the negative cells), "Otsu", "Yen" or "RenyiEntropy"
     threshold_method: str = "MaxEntropy"
-    # a threshold set by hand: marker name -> background-subtracted intensity; overrides the automatic one
+    # thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace
+    # the automatic ones
     thresholds: dict[str, float] = field(default_factory=dict)
-    # a detection positive in at least this many functional markers (thresholded on all detections) is not a cell
-    # but an artefact; it is left out of the tumor / immune clustering. None (default) = all functional markers, when
-    # there are two or more (with one, its positive cells are real cells); 0 = no artefacts
+    # a detection positive in at least this many subtype markers is an artefact, not a cell; empty = all of them
+    # (with two or more markers); 0 = no artefacts
     artefact_min_positive: int | None = None
-    # in a project: classify the datasets of each experiment together (one set of thresholds, comparable
-    # subtypes), or each dataset on its own
+    # in a project: "experiment" classifies the datasets of each experiment together (one set of thresholds),
+    # "dataset" each dataset on its own
     pool: Pool = Pool.EXPERIMENT
 
 
 @dataclass
 class MembraneSettings:
-    # straightened membrane profiles and the enrichment at the interface (optional: not every ImageStream analysis
-    # needs it); the per-event interface table is always made
+    # the membrane profiles and the enrichment at the interface (the per-event interface table is always made)
     analysis: bool = False
-    # the pair: the cells whose membrane is measured, and the partners whose contact is the interface. Each a list
-    # of: a cell type ("Tumor", "Immune"), an immune subtype as in the tables ("Immune A+ B+") or a marker ("A+":
-    # immune cells positive for A). Empty: channels.cell_of_interest against the other cell type
+    # the cells whose membrane is measured, a list of: a cell type ("Tumor", "Immune"), an immune subtype as in the
+    # tables ("Immune A+ B+"), or a marker ("A+": immune cells positive for A); empty = channels.cell_of_interest
     cells: list[str] = field(default_factory=list)
+    # the partners whose contact is the interface, as for cells; empty = the other cell type
     partners: list[str] = field(default_factory=list)
-    thickness: int = 3  # pixels: width of the membrane band, and reach of the interface
-    straightening_width: int = 5  # pixels: line width for straightening the membranes
-    max_histogram_value: float = 20.0  # standard deviations above background; the minimum is -5
-    histogram_bin_width: float = 0.25
-    # cells without interface: this many random control windows each (as long as the median interface)
+    thickness: int = 3  # pixels: the width of the membrane band, and the distance at which cells touch
+    straightening_width: int = 5  # pixels: the width of the band across the outline that is straightened
+    max_histogram_value: float = 20.0  # the end of the histograms (SD above the mean); they start at -5
+    histogram_bin_width: float = 0.25  # the bin width of the histograms (SD)
+    # random control windows per cell without an interface, each as long as the median interface
     control_repeats: int = 10
-    # straighten only inside the measured cell: at an interface, half the band (macro) lies in the partner cell,
-    # whose membrane then counts as this cell's if it carries the marker too. A sensitivity test, not a separation:
-    # touching membranes are far closer than the resolution, so every pixel there mixes both
+    # take the profile only from the part of the band inside the measured cell (a sensitivity test, not a separation:
+    # touching membranes are far closer than the resolution, so every pixel there mixes both)
     inside_only: bool = False
 
 

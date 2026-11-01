@@ -354,10 +354,17 @@ flagged on thresholds over all cells, before the k-means, which then runs withou
 - Cell table: `Neighbours`, `Touching (labels)`, `Neighbour types` (each partner's type: Tumor, Artefact, Immune or
   "Immune <subtype>"). Event table: `Artefacts`, `Interactions` (pairs), at the end, after the macro's columns.
 - `Interactions.tsv` (replaces the notebook): per cell type and neighbour type, the cells of the type, the contacts
-  (each pair counts from both sides), the cells touching at least one such neighbour, and that fraction.
+  (each pair counts from both sides), the cells touching at least one such neighbour, and that fraction (all
+  events); and the **partner preference**: `contacts (3+ cells)` against `expected (3+ cells)` and their ratio.
   `Multiplets.tsv`: the number of events with n cells and with n interactions.
-- Project: `interactions.tsv` with the tables of all datasets and their sum per experiment (dataset "(all)"); the
-  overview gets `interactions` and `tumor–immune contacts`. A chart of it comes with the dashboard work.
+- **Partner preference (decided with the user, 2026-11-01).** Expected = the mean over all ways of shuffling the cell
+  types among the cells of each event (exact; same in the page). Only events of three or more cells: in an event of
+  two touching cells the pair can only be what it is, observed = expected by construction, and such events pulled
+  every ratio towards 1 (on the test data about half of all contacts). Events without contacts, and the events left
+  out in IDEAS, take no part: it is a preference among the exported multiplets, not a binding frequency (that needs
+  an export with the singlets). Called so in the page, the overview and the manual.
+- Project: `interactions.tsv` with the tables of all datasets and their sum per experiment (dataset "(all)"; the
+  ratio from the summed counts); the overview gets `interactions` and `tumor–immune contacts`.
 
 ## 11. Settings and outputs
 

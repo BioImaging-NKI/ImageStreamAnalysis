@@ -63,6 +63,10 @@ A local guard backs this up:
 - `tests/`: `conftest.py` (synthetic touching-cell events), `test_imagej.py`, `test_pipeline.py`, and `test_reference.py`.
   - `test_reference.py` compares with the Fiji output of the (confidential) test data; it reads `data/reference_test.toml` (or the file in `ISA_REFERENCE`) and is skipped without it.
 - `data/`, `output/` and `CLAUDE.local.md` are gitignored.
+- `manual/` + `mkdocs.yml`: the user manual (MkDocs Material, public), published by `.github/workflows/manual.yml` to
+  https://bioimaging-nki.github.io/ImageStreamAnalysis/ once Pages is enabled. **Read `tools/manual/MAINTAINING.md`
+  before changing the program's pages or outputs**, and check the manual in the same piece of work (update-manual
+  skill). Synthetic example only (`tools/manual/make_example_data.py`); `reference/settings.md` is generated.
 
 ### Commands
 

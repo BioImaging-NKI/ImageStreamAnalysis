@@ -1,0 +1,6 @@
+/* Technical sections: folded, quieter than the text */
+.md-typeset details.note { border-color: var(--md-default-fg-color--lighter); }
+.md-typeset details.note > summary { background-color: var(--md-default-fg-color--lightest); }
+.md-typeset details.note > summary::before { background-color: var(--md-default-fg-color--light); }
+/* screenshots: a thin frame */
+.md-typeset img { border: 1px solid var(--md-default-fg-color--lightest); border-radius: 4px; }

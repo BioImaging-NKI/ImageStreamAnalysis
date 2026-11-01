@@ -70,7 +70,8 @@ def place(rng: np.random.Generator, kinds: list[str]) -> list[dict]:
     return cells
 
 
-def draw_event(rng: np.random.Generator, cells: list[dict], brightness: float) -> tuple[dict[int, np.ndarray], np.ndarray]:
+def draw_event(rng: np.random.Generator, cells: list[dict],
+               brightness: float) -> tuple[dict[int, np.ndarray], np.ndarray]:
     margin = rng.integers(7, 15)
     ys = [c["cy"] for c in cells]
     xs = [c["cx"] for c in cells]

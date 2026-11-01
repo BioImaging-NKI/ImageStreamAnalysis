@@ -477,10 +477,13 @@ function contactMatrices(rows) {
   const grid = el("div", { style: "display:flex;flex-wrap:wrap;gap:18px" });
   for (const exp of [...new Set(rows.map(r => r.experiment))].sort()) {
     const sub = rows.filter(r => r.experiment === exp), types = [...new Set(sub.flatMap(r => [r["cell type"], r["neighbour type"]]))].sort((a, b) => rank(a).localeCompare(rank(b)));
-    const lab = 22 + 6.4 * Math.max(...types.map(t => short(t).length)), cell = 40, top = 30, W = lab + cell * types.length + 4, H = top + cell * types.length + 4;
+    const col = t => short(t).replace(/^immune /, ""), slant = 6.4 * 0.64 * Math.max(...types.map(t => col(t).length));
+    const lab = 22 + 6.4 * Math.max(...types.map(t => short(t).length)), cell = 40, top = Math.round(14 + slant);
+    const W = Math.round(lab + cell * types.length + 4 + slant), H = top + cell * types.length + 4;
     const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, style: "font:11px system-ui,sans-serif" });
     types.forEach((t, k) => { const a = svgEl("text", { x: 4, y: top + k * cell + cell / 2 + 4, fill: "currentColor" }); a.textContent = short(t); svg.append(a);
-      const b = svgEl("text", { x: lab + k * cell + cell / 2, y: top - 8, "text-anchor": "middle", fill: "currentColor" }); b.textContent = short(t).replace(/^immune /, ""); svg.append(b); });
+      const x = lab + k * cell + cell / 2;  // column labels slanted at 40°, so long names do not overlap
+      const b = svgEl("text", { x, y: top - 6, fill: "currentColor", transform: `rotate(-40 ${x} ${top - 6})` }); b.textContent = col(t); svg.append(b); });
     types.forEach((ta, i) => types.forEach((tb, j) => {
       const r = sub.find(x => x["cell type"] === ta && x["neighbour type"] === tb); if (!r) return;
       const oe = r["observed / expected"], [fill, ink] = oe ? color(Math.log2(Math.max(oe, 0.01)) / 2) : [css("--chip"), css("--text")];

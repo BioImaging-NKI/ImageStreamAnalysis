@@ -611,14 +611,16 @@ function drawContacts() {
   // matrix
   const svg = document.getElementById("matrix"); svg.replaceChildren();
   const lab = labelWidth(S.types.map(shortType)), avail = Math.max(280, svg.parentElement.clientWidth || 420);
-  const cell = Math.max(30, Math.min(64, Math.floor((avail - lab - 10) / Math.max(K, 1)))), top = 44, H = top + cell * K + 6;
-  fitSvg(svg, H, Math.min(avail, lab + cell * K + 10));
+  const cell = Math.max(30, Math.min(64, Math.floor((avail - lab - 10) / Math.max(K, 1))));
+  const colName = t => shortType(t).replace(/^immune /, ""), slant = Math.max(...S.types.map(t => colName(t).length)) * 6.4 * 0.64;
+  const top = Math.round(26 + slant), H = top + cell * K + 6;  // column labels slanted at 40°, so long names do not overlap
+  fitSvg(svg, H, Math.min(avail, lab + cell * K + 10 + slant));
   S.types.forEach((t, k) => {
     svg.append(svgEl("circle", { cx: 8, cy: top + k * cell + cell / 2, r: 4, fill: `var(${colorVar(t)})` }));
     svgText(svg, 16, top + k * cell + cell / 2 + 4, shortType(t), { class: "ink" });
     const x = lab + k * cell + cell / 2;
-    svg.append(svgEl("circle", { cx: x, cy: top - 30, r: 4, fill: `var(${colorVar(t)})` }));
-    svgText(svg, x, top - 8, shortType(t).replace(/^immune /, ""), { "text-anchor": "middle", class: "ink" });
+    svg.append(svgEl("circle", { cx: x, cy: top - 8, r: 4, fill: `var(${colorVar(t)})` }));
+    svgText(svg, x + 4, top - 16, colName(t), { class: "ink", transform: `rotate(-40 ${x + 4} ${top - 16})` });
   });
   for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) {
     const o = S.obs3[a][b], e = S.exp[a][b], frac = S.nCells[a] ? S.touch[a][b].size / S.nCells[a] : 0;
@@ -918,7 +920,8 @@ function renderCard() {
   const dl = document.createElement("dl");
   const rows = [["object", E.object ? E.object[e] : "–"], ["label", C.label[i]], ["area", fmt(C.area[i], 0) + " px"], ["immune marker", fmt(C.t_int[i])], ["tumor marker", fmt(C.tu_int[i])],
                 ["marker ratio", fmt(C.ratio[i])], [`cells in the event`, `${E.t_cells[e]} immune, ${E.tumor_cells[e]} tumor`]];
-  for (const m of MK) rows.push([m.name, `${fmt(m.values[i], 1)} (${m.values[i] > m.thr ? "positive" : "negative"}; threshold ${fmt(m.thr, 1)})`]);
+  for (const m of MK) rows.push([m.name, C.type[i] === "Immune" ? `${fmt(m.values[i], 1)} (${m.values[i] > m.thr ? "positive" : "negative"}; threshold ${fmt(m.thr, 1)})`
+                                                          : fmt(m.values[i], 1)]);  // only immune cells have a subtype
   rows.push(["touching", neighbours[i].length ? neighbours[i].map(j => `${shortType(TYPE[j])} (${C.label[j]})`).join(", ") : "none"]);
   if (M && k >= 0) rows.push(["membrane length", fmt(M.length[k], 0) + " px"], ["interface", M.interface_length[k] ? fmt(M.interface_length[k], 0) + " px" : "none"],
                         M.sd[k] != null ? ["SD above mean", fmt(M.sd[k], 2)] : ["control (mean of windows)", fmt(M.control[k], 2)],
