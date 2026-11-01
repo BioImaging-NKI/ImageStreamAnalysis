@@ -1,7 +1,7 @@
 # From the Fiji macros
 
-ImageStream Analysis for Python ports two Fiji macros of
-[BioImaging-NKI/ImageStreamAnalysis](https://github.com/BioImaging-NKI/ImageStreamAnalysis):
+ImageStream Analysis for Python ports two Fiji macros, kept in the folder
+[`legacy/`](https://github.com/BioImaging-NKI/ImageStreamAnalysis/tree/main/legacy) of the repository:
 
 - **`Analyze_ImageStream_stack_2celltypes_+_membrane_intensity_analysis_1.8.ijm`**: tumor and T cells by k-means, the
   per-event interface measurements, and the membrane enrichment;

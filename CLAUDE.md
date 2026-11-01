@@ -6,8 +6,8 @@ Notes for Claude Code when working in this repository. Last updated 2026-10-22.
 
 This folder is a **Python port of Fiji macro v1.8**, modelled on FAST-HIPPOS-Python (see "Design inspiration" below).
 
-- Not a clone of upstream: the upstream macros stay in https://github.com/BioImaging-NKI/ImageStreamAnalysis.
-- **No remote yet: do not push** until the user asks.
+- Lives on `main` of BioImaging-NKI/ImageStreamAnalysis since 2026-11-01; the original macros and notebook are in
+  `legacy/` (merged from the old `main`, last macro commit `cffe8fb`). Push only when the user says so.
 
 ### Confidential research information: never commit it
 
@@ -176,19 +176,15 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 
 ### Git
 
-The history of the first machine is not here (2026-10-31): the repository was started again with a snapshot commit
-of the same files. To join the two later: fetch the old repository as a remote and
-`git rebase --onto <old main> <snapshot commit> main` (the snapshot's tree equals the old tip, plus `.gitignore` and
-`.python-version`).
+The history of the first machine was not kept: this repository started again with a snapshot commit (2026-10-31),
+and the user decided (2026-11-01) not to graft the old history.
 
-Remote (2026-11-01): `origin` = BioImaging-NKI/ImageStreamAnalysis, pushed by the user's own GitHub account (in the
-remote URL; never the lab account). **Not pushed yet: the user first looks for the old history** (pushing first would
-make grafting it a force-push). **Decided by the user (2026-11-01): eventually everything goes to `main`**, with the
-macros and the other old items of upstream `main` (macros 1.5/1.8, ClassifyCellTypes 2.8, the notebook) moved to a
-`legacy/` folder. Order: graft the old history (if found), then merge upstream `main` with
-`--allow-unrelated-histories`, `git mv` its files into `legacy/` (keep our README and LICENSE), check, push to `main`
-(no force-push of `main`). The release `example-data` (synthetic example export, live demo) exists. GitHub Pages still has to
-be enabled by an admin (Settings → Pages → GitHub Actions); then the manual workflow publishes on a push.
+Remote: `origin` = BioImaging-NKI/ImageStreamAnalysis, pushed by the user's own GitHub account (in the remote URL;
+never the lab account). Everything is on `main` (first pushed 2026-11-01): the old `main` (macros 1.5/1.8,
+ClassifyCellTypes 2.8, the notebook) was merged with `--allow-unrelated-histories` and moved to `legacy/`. No
+force-push of `main`. The release `example-data` holds the synthetic example export and the live demo; upload the demo
+before a push that needs it. GitHub Pages has to be enabled once by an admin (Settings → Pages → GitHub Actions); then
+the manual workflow publishes on every push.
 
 ## General environment
 

@@ -36,8 +36,8 @@ writes for every dataset an interactive dashboard and tables, and for the projec
 
 ## Background
 
-ImageStream Analysis for Python is a port of the Fiji macros of
-[BioImaging-NKI/ImageStreamAnalysis](https://github.com/BioImaging-NKI/ImageStreamAnalysis): the two-cell-type
+ImageStream Analysis for Python is a port of the Fiji macros that this repository started with (kept in
+[`legacy/`](https://github.com/BioImaging-NKI/ImageStreamAnalysis/tree/main/legacy)): the two-cell-type
 analysis with membrane enrichment (v1.8) and the classification of immune subtypes (ClassifyCellTypes 2.8). Where the
 port differs from the macros, and why, is listed in [From the Fiji macros](reference/fiji.md).
 

@@ -4,11 +4,11 @@ Analysis of tumor–immune cell interactions in imaging flow cytometry (ImageStr
 in every event image, classification into tumor cells and immune cells, and quantification of the enrichment of a marker
 of interest at the interface between the cells.
 
-This is the Python version of the Fiji macro
-`Analyze_ImageStream_stack_2celltypes_+_membrane_intensity_analysis_1.8.ijm`
-([BioImaging-NKI/ImageStreamAnalysis](https://github.com/BioImaging-NKI/ImageStreamAnalysis)), which is kept in
-[`reference/fiji_v1.8`](reference/fiji_v1.8). Its behaviour, and every deliberate difference from it, is described in
-[`docs/SPEC.md`](docs/SPEC.md).
+This is the Python version of the Fiji macros of this repository: the membrane analysis of
+`Analyze_ImageStream_stack_2celltypes_+_membrane_intensity_analysis_1.8.ijm` merged with the immune subtypes and cell
+contacts of `ClassifyCellTypes_2_8.ijm`. The macros and the notebook are kept in [`legacy/`](legacy/) (macro v1.8 also
+in [`reference/fiji_v1.8`](reference/fiji_v1.8), for the comparison). Their behaviour, and every deliberate difference
+from them, is described in [`docs/SPEC.md`](docs/SPEC.md).
 
 > **Status: early development.** The analysis of macro v1.8 is ported, including the membrane profiles
 > (optional), with an interactive dashboard per dataset.
