@@ -5,7 +5,8 @@ all datasets and see the overview of the results. The project is saved as `proje
 run as a subprocess (`imagestream-cli run-project`), whose log is streamed to the page.
 
 The server only listens on 127.0.0.1 and every API call must carry a random per-session token, so other web pages
-in the browser cannot use it. It stops after IDLE_TIMEOUT without requests (and no run).
+in the browser cannot use it. The page pings it every minute; it stops IDLE_TIMEOUT after the last ping or request
+(so 15 minutes after the page was closed; never during a run), or at once with the page's Quit button.
 """
 
 from __future__ import annotations
@@ -36,7 +37,8 @@ log = logging.getLogger(__name__)
 STATE_DIR = Path(os.environ.get("ISA_HOME") or Path.home() / ".imagestream_analysis")  # ISA_HOME: a test instance
 INSTANCE = STATE_DIR / "gui_instance.json"  # port of a running page server, so that a second start reuses it
 PREFS = STATE_DIR / "gui_prefs.json"  # last project folder, light / dark
-IDLE_TIMEOUT = 15 * 60  # s
+IDLE_TIMEOUT = 15 * 60  # s after the last request; the page pings every PING s
+PING = 60  # s
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -265,7 +267,8 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
 
 def page(token: str) -> bytes:
     html = page_template("gui.html")
-    return html.replace("__ISA_TOKEN__", token).replace("__ISA_VERSION__", __version__).encode("utf-8")
+    return (html.replace("__ISA_TOKEN__", token).replace("__ISA_VERSION__", __version__)
+            .replace("__ISA_PING__", str(PING * 1000)).encode("utf-8"))
 
 
 def make_handler(token: str, job: Job, last_seen: list[float]) -> type[BaseHTTPRequestHandler]:
@@ -301,6 +304,11 @@ def make_handler(token: str, job: Job, last_seen: list[float]) -> type[BaseHTTPR
             last_seen[0] = time.monotonic()
             if not self.path.startswith("/api/") or self.headers.get("X-Token") != token:
                 self._send(403, b"forbidden", "text/plain")
+                return
+            if self.path == "/api/quit":  # the Quit button: stop a run, answer, then stop the server
+                job.stop()
+                self._send(200, b'{"ok": true, "result": null}', "application/json")
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             try:
                 length = int(self.headers.get("Content-Length", 0))
@@ -346,7 +354,7 @@ def serve(port: int = 0, open_browser: bool = True) -> None:
                 return
 
     threading.Thread(target=watchdog, daemon=True).start()
-    print(f"ImageStream analysis: {url} (stops after {IDLE_TIMEOUT // 60} min without use)")
+    print(f"ImageStream analysis: {url} (stops {IDLE_TIMEOUT // 60} min after the page was closed, or with Quit)")
     if open_browser:
         webbrowser.open(url)
     try:

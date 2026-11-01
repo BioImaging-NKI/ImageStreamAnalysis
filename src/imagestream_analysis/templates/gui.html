@@ -91,6 +91,7 @@ progress { width: 260px; }
   <span class="spacer"></span>
   <button id="helpBtn" title="The manual of this page. ? or F1 over a step: the part about that step">? Help</button>
   <button id="theme" title="Light / dark">◐</button>
+  <button id="quit" title="Save the project and stop ImageStream Analysis (it also stops by itself 15 minutes after this page was closed)">Quit</button>
 </header>
 <main>
   <section>
@@ -169,6 +170,20 @@ async function api(name, data = {}) {
   const body = await r.json();
   if (!body.ok) throw new Error(body.error);
   return body.result;
+}
+// the server stops 15 minutes after the last request: a ping every minute keeps it while the page is open
+setInterval(() => fetch("/ping").catch(() => {}), __ISA_PING__);
+async function quit() {
+  if (polling && !confirm("A run is in progress. Stop it and quit?")) return;
+  let saved = false;
+  if (document.getElementById("folder").value.trim()) {
+    try { await api("save", { project: toProject() }); saved = true; } catch (e) { /* quit anyway */ }
+  }
+  try { await api("quit"); } catch (e) { /* already stopped */ }
+  document.querySelector("main").replaceChildren(el("section", {}, el("h2", {}, "ImageStream Analysis has stopped"),
+    el("p", { class: "hint" }, (saved ? "The project was saved. " : "") + "You can close this tab; start the program again to continue.")));
+  for (const b of document.querySelectorAll("header button")) b.disabled = true;
+  window.close();  // works only for a tab the program opened itself
 }
 function toast(msg, ms = 4000) {
   const t = document.getElementById("toast"); t.textContent = msg; t.style.display = "block";
@@ -521,6 +536,7 @@ document.getElementById("open-project").onclick = async () => {
 };
 document.getElementById("folder").onchange = () => { renderProblems(); refreshOverview(); };
 document.getElementById("save").onclick = save;
+document.getElementById("quit").onclick = quit;
 document.getElementById("add-zip").onclick = async () => {
   for (const p of await api("browse", { kind: "zip", initial: state.zips[0]?.path.replace(/[\\/][^\\/]*$/, "") || "" })) await addZip(p);
 };

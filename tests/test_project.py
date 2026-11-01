@@ -141,6 +141,25 @@ def test_page_and_token(server):
     assert err.value.code == 403
 
 
+def test_ping_keeps_alive_and_quit_stops(tmp_path, monkeypatch):
+    """The page's ping counts as use (the server stops IDLE_TIMEOUT after the last one); Quit stops the server."""
+    monkeypatch.setattr(gui, "STATE_DIR", tmp_path / "state")
+    last_seen = [0.0]
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), gui.make_handler("t", gui.Job(), last_seen))
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    with urllib.request.urlopen(url + "/ping") as r:
+        assert r.read() == b"imagestream-analysis"
+    assert last_seen[0] > 0
+    with urllib.request.urlopen(url + "/") as r:
+        assert 'id="quit"' in r.read().decode()
+    assert call((url, "t"), "quit")["ok"]
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    srv.server_close()
+
+
 def test_api_scan_save_and_overview(server, ideas_zip):
     state = call(server, "state")["result"]
     assert "brightfield" in state["roles"] and state["defaults"]["segmentation"]["model"] == "cyto3"
