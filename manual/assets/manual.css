@@ -4,3 +4,21 @@
 .md-typeset details.note > summary::before { background-color: var(--md-default-fg-color--light); }
 /* screenshots: a thin frame */
 .md-typeset img { border: 1px solid var(--md-default-fg-color--lightest); border-radius: 4px; }
+
+/* the front page: the process in six steps (index.md), numbered, with arrows when they fit in rows of three */
+.md-typeset .isa-flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4rem; margin: 1.6em 0;
+  counter-reset: isa-step; }
+.md-typeset a.isa-step { position: relative; display: flex; flex-direction: column; gap: .25rem; padding: .7rem .8rem;
+  border: 1px solid var(--md-default-fg-color--lightest); border-radius: 8px; color: var(--md-default-fg-color);
+  counter-increment: isa-step; transition: border-color .15s; }
+.md-typeset a.isa-step:hover { border-color: var(--md-accent-fg-color); }
+.md-typeset a.isa-step svg { width: 100%; max-height: 5.2rem; margin-bottom: .2rem; }
+.md-typeset a.isa-step strong::before { content: counter(isa-step) ". "; color: var(--md-typeset-a-color); }
+.md-typeset a.isa-step span { font-size: .68rem; line-height: 1.4; color: var(--md-default-fg-color--light); }
+.md-typeset a.isa-step:not(:nth-child(3n))::after { content: "›"; position: absolute; right: -1.05rem; top: 2.3rem;
+  font-size: 1.3rem; color: var(--md-default-fg-color--lighter); }
+@media (max-width: 44em) {
+  .md-typeset .isa-flow { grid-template-columns: repeat(2, 1fr); }
+  .md-typeset a.isa-step::after { display: none; }
+}
+@media (max-width: 26em) { .md-typeset .isa-flow { grid-template-columns: 1fr; } }
