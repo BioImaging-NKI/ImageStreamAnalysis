@@ -66,10 +66,14 @@ td.role, th.role { text-align: center; }
 .problems { color: var(--warn); margin: 6px 0; padding-left: 18px; }
 .error { color: var(--error); }
 .ok { color: var(--ok); }
-.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
-.settings-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); }
-.settings-grid label.wide { grid-column: 1 / -1; }
-.settings-grid label.wide input { flex: 1; }
+.settings-rows { display: grid; gap: 6px; }
+.settings-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 40px; max-width: 940px; }
+.settings-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.settings-row.wide { grid-template-columns: 1fr; }
+.settings-row label { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); }
+.settings-row.wide input { flex: 1; }
+.settings-row select { max-width: 50%; }
+@media (max-width: 720px) { .settings-row, .settings-row.three { grid-template-columns: 1fr; } }
 fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; padding: 8px 12px; }
 legend { color: var(--muted); padding: 0 4px; }
 pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 260px;
@@ -328,56 +332,61 @@ function copySetup(src) {
 }
 
 // ---------- settings
+// the settings per group, in rows: at most two per row, three where they belong together; a text or list field
+// alone in its row takes the whole width
 const FIELDS = [
   ["Cells", "analysis/classification#tumor-or-immune-cell", [
-    ["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"],
-    ["channels.cell_of_interest", "Marker of interest expressed in", "choice", "cells_of_interest"],
-    ["input.max_events", "Only the first N events (empty = all)", "int", null, "all"]]],
+    [["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"],
+     ["channels.cell_of_interest", "Marker of interest expressed in", "choice", "cells_of_interest"]],
+    [["input.max_events", "Only the first N events (empty = all)", "int", null, "all"]]]],
   ["Segmentation (Cellpose)", "analysis/segmentation", [
-    ["segmentation.cellpose_python", "Python with Cellpose", "text", null, "this environment"],
-    ["segmentation.model", "Model (cyto3, cpsam, or a path)", "text"],
-    ["segmentation.diameter", "Cell diameter (px)", "float"],
-    ["segmentation.montage_columns", "Montage columns (0 = square)", "int"],
-    ["segmentation.erosion", "Shrink cells (px)", "int"],
-    ["segmentation.min_cell_size", "Min. cell size (px)", "int"],
-    ["segmentation.max_cell_size", "Max. cell size (px)", "int"],
-    ["segmentation.use_gpu", "Use the GPU", "bool"],
-    ["segmentation.exclude_edge_cells", "Leave out cells cut by the image edge", "bool"]]],
+    [["segmentation.cellpose_python", "Python with Cellpose", "text", null, "this environment"]],
+    [["segmentation.model", "Model (cyto3, cpsam, or a path)", "text"],
+     ["segmentation.diameter", "Cell diameter (px)", "float"]],
+    [["segmentation.use_gpu", "Use the GPU", "bool"],
+     ["segmentation.montage_columns", "Montage columns (0 = square)", "int"]],
+    [["segmentation.erosion", "Shrink cells (px)", "int"],
+     ["segmentation.min_cell_size", "Min. cell size (px)", "int"],
+     ["segmentation.max_cell_size", "Max. cell size (px)", "int"]],
+    [["segmentation.exclude_edge_cells", "Leave out cells cut by the image edge", "bool"]]]],
   ["Classification", "analysis/classification#immune-subtypes", [
-    ["classification.pool", "Classify together (one set of thresholds)", "choice", "pools"],
-    ["classification.threshold_method", "Threshold of the subtype markers", "choice", "threshold_methods"],
-    ["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int", null, "all"]]],
+    [["classification.threshold_method", "Threshold of the subtype markers", "choice", "threshold_methods"],
+     ["classification.pool", "Classify together (one set of thresholds)", "choice", "pools"]],
+    [["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int", null, "all"]]]],
   ["Membranes", "analysis/membrane", [
-    ["membrane.thickness", "Membrane / interface width (px)", "int"],
-    ["membrane.analysis", "Membrane profiles and enrichment", "bool"],
-    ["membrane.cells", "Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed)", "list", null, "where the marker is expressed"],
-    ["membrane.partners", "Interface with (empty = the other cell type)", "list", null, "the other cell type"],
-    ["membrane.inside_only", "Straighten inside the measured cell only", "bool"],
-    ["membrane.straightening_width", "Straightening width (px)", "int"],
-    ["membrane.control_repeats", "Control windows per cell", "int"],
-    ["membrane.max_histogram_value", "Histogram maximum (SD)", "float"],
-    ["membrane.histogram_bin_width", "Histogram bin width (SD)", "float"]]]];
+    [["membrane.analysis", "Membrane profiles and enrichment", "bool"],
+     ["membrane.thickness", "Membrane / interface width (px)", "int"]],
+    [["membrane.cells", "Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed)", "list", null, "where the marker is expressed"]],
+    [["membrane.partners", "Interface with (empty = the other cell type)", "list", null, "the other cell type"]],
+    [["membrane.straightening_width", "Straightening width (px)", "int"],
+     ["membrane.inside_only", "Straighten inside the measured cell only", "bool"]],
+    [["membrane.control_repeats", "Control windows per cell", "int"],
+     ["membrane.max_histogram_value", "Histogram maximum (SD)", "float"],
+     ["membrane.histogram_bin_width", "Histogram bin width (SD)", "float"]]]]];
 function getS(path) { const [a, b] = path.split("."); return state.settings[a][b]; }
 function setS(path, v) { const [a, b] = path.split("."); state.settings[a][b] = v; }
+function settingInput(path, kind, list, placeholder) {
+  const v = getS(path);
+  if (kind === "choice") return el("select", { onchange: e => setS(path, e.target.value) },
+    (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
+  if (kind === "bool") return el("input", { type: "checkbox", checked: !!v, onchange: e => setS(path, e.target.checked) });
+  if (kind === "list") return el("input", { type: "text", value: (v || []).join(", "), placeholder: placeholder || "",
+    onchange: e => setS(path, e.target.value.split(",").map(t => t.trim()).filter(t => t)) });
+  if (kind === "text") return el("input", { type: "text", value: v ?? "", placeholder: placeholder || "",
+    onchange: e => setS(path, e.target.value.trim() || null) });
+  return el("input", { type: "number", step: kind === "int" ? "1" : "any", value: v ?? "", placeholder: placeholder || "",
+    onchange: e => { const t = e.target.value.trim(); setS(path, t === "" ? null : (kind === "int" ? parseInt(t) : parseFloat(t))); } });
+}
 function renderSettings() {
   const box = document.getElementById("settings"); box.replaceChildren();
-  for (const [title, help, fields] of FIELDS) {
-    const grid = el("div", { class: "settings-grid" });
-    for (const [path, label, kind, list, placeholder] of fields) {
-      const v = getS(path);
-      let input;
-      if (kind === "choice") input = el("select", { onchange: e => setS(path, e.target.value) },
-        (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
-      else if (kind === "bool") input = el("input", { type: "checkbox", checked: !!v, onchange: e => setS(path, e.target.checked) });
-      else if (kind === "list") input = el("input", { type: "text", value: (v || []).join(", "), placeholder: placeholder || "",
-        onchange: e => setS(path, e.target.value.split(",").map(t => t.trim()).filter(t => t)) });
-      else if (kind === "text") input = el("input", { type: "text", value: v ?? "", placeholder: placeholder || "",
-        onchange: e => setS(path, e.target.value.trim() || null) });
-      else input = el("input", { type: "number", step: kind === "int" ? "1" : "any", value: v ?? "", placeholder: placeholder || "",
-        onchange: e => { const t = e.target.value.trim(); setS(path, t === "" ? null : (kind === "int" ? parseInt(t) : parseFloat(t))); } });
-      grid.append(el("label", { class: (kind === "text" && path.endsWith("python")) || kind === "list" ? "wide" : "" }, label, input));
+  for (const [title, help, rows] of FIELDS) {
+    const group = el("div", { class: "settings-rows" });
+    for (const fields of rows) {
+      const wide = fields.length === 1 && ["text", "list"].includes(fields[0][2]);
+      group.append(el("div", { class: "settings-row" + (wide ? " wide" : fields.length === 3 ? " three" : "") },
+        fields.map(([path, label, kind, list, placeholder]) => el("label", {}, label, settingInput(path, kind, list, placeholder)))));
     }
-    box.append(el("fieldset", {}, el("legend", { "data-help": help }, title), grid));
+    box.append(el("fieldset", {}, el("legend", { "data-help": help }, title), group));
   }
 }
 

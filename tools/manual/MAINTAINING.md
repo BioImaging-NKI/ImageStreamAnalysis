@@ -69,6 +69,14 @@ page runs in that process with a state folder of its own; the user's settings ar
 After a change to a page of the program: remake the example project (its dashboards are written by the program), then
 the screenshots, and look at every changed image.
 
+## Waiting for the next refresh
+
+Small changes to the program whose screenshots are not retaken yet (the user prefers to retake them together, with
+a larger change). Retake them at the next refresh and empty this list.
+
+- 2026-11-01: the import page's analysis settings in rows of two (three where they belong together):
+  `gui_settings`.
+
 ## Refresh, check, publish
 
 1. `python tools/manual/make_example_project.py` (if the analysis or the dashboard changed)
