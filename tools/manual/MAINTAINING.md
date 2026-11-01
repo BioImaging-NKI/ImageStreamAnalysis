@@ -31,7 +31,10 @@ Every analysis topic has foldable `??? note "Technical: …"` sections for the r
 the comparison with chance only in events of three or more cells; what the selection in IDEAS means; where the marker
 of interest is expressed). New intricacies go there, not into the main text.
 
-Generated, never edit by hand: `manual/reference/settings.md` (`python tools/manual/gen_reference.py`, from the
+Generated, never edit by hand: `src/imagestream_analysis/templates/help.json`, the context help of the import page and
+the dashboard (`python tools/manual/make_help.py`, after every change to the guide, analysis, reference or help pages;
+`tests/test_help.py` fails when it is stale or a ? button (`data-help` in the templates) points at a heading that
+is gone: rename a heading together with its targets). `manual/reference/settings.md` (`python tools/manual/gen_reference.py`, from the
 comments of the settings in `config.py` and the labels in FIELDS of `gui.html`). `tests/test_manual.py` fails when it
 is stale, when a setting has no comment, or when the site does not build in strict mode.
 
@@ -59,6 +62,7 @@ page runs in that process with a state folder of its own; the user's settings ar
 | `gui_overview` | step 5, with the partner-preference matrix | first-analysis, overview |
 | `dash_overview` | the top of the dashboard | first-analysis, dashboard |
 | `dash_markers`, `dash_classes`, `dash_cell` | right-hand cards | dashboard, classification |
+| `dash_help` | the context help panel, opened from the ? of *Subtype markers* | dashboard |
 | `dash_interactions`, `dash_contact_filter` | interactions; the gallery filtered on a contact | dashboard, interactions |
 | `dash_membrane` | membrane enrichment | dashboard, membrane |
 
@@ -69,7 +73,7 @@ the screenshots, and look at every changed image.
 
 1. `python tools/manual/make_example_project.py` (if the analysis or the dashboard changed)
 2. `python tools/manual/screenshots.py`
-3. `python tools/manual/gen_reference.py`
+3. `python tools/manual/gen_reference.py` and `python tools/manual/make_help.py`
 4. `python tools/manual/make_demo.py` (the live demo: `data/manual/manual-demo.zip`, and `manual/demo/` locally)
 5. `python -m pytest tests/test_manual.py` and `mkdocs serve` to look at the pages
 6. Publishing (with the user's OK): upload the demo first, then push:

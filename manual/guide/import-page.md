@@ -7,6 +7,9 @@ overview. It is a page in your browser served by the program on your own compute
 The page remembers the last project. A second start opens the running page again; the program stops by itself 15
 minutes after the page was closed.
 
+The **?** button behind a step or a group of settings, and the **? Help** button at the top, open the part of this
+manual about it in a panel at the side; <kbd>F1</kbd> or <kbd>?</kbd> does the same for the step under the mouse.
+
 ## 1. Project
 
 The output folder of the project. *Browse…* chooses it, *Open project…* opens an existing `project.toml`, *Save*

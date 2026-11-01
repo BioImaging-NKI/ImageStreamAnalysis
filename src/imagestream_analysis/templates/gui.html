@@ -77,18 +77,20 @@ pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 6
 progress { width: 260px; }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; display: none; max-width: 90vw; z-index: 3; }
+/*__ISA_HELP_CSS__*/
 @media (max-width: 640px) { main { padding: 8px; } header { padding: 10px; } }
 </style>
 </head>
-<body>
+<body data-help-home="guide/import-page">
 <header>
   <h1>ImageStream Analysis</h1><span class="version">v__ISA_VERSION__</span>
   <span class="spacer"></span>
+  <button id="helpBtn" title="The manual of this page. ? or F1 over a step: the part about that step">? Help</button>
   <button id="theme" title="Light / dark">◐</button>
 </header>
 <main>
   <section>
-    <h2><span class="step">1</span>Project</h2>
+    <h2 data-help="guide/import-page#1-project"><span class="step">1</span>Project</h2>
     <p class="hint">All results and the project file (<code>project.toml</code>) go to this folder.</p>
     <div class="row">
       <input type="text" id="folder" class="wide" placeholder="Output folder of the project">
@@ -100,7 +102,7 @@ progress { width: 260px; }
   </section>
 
   <section>
-    <h2><span class="step">2</span>IDEAS exports</h2>
+    <h2 data-help="guide/import-page#2-ideas-exports"><span class="step">2</span>IDEAS exports</h2>
     <p class="hint">Add the zip files exported from IDEAS (one folder per dataset). For each zip, set the pixel size
       and give the channels that are needed a name. Roles go with the marker name and hold for every zip that has a
       channel of that name. Datasets with the same experiment label are grouped in the overview.</p>
@@ -113,13 +115,13 @@ progress { width: 260px; }
   </section>
 
   <section>
-    <h2><span class="step">3</span>Analysis settings</h2>
+    <h2 data-help="guide/import-page#3-analysis-settings"><span class="step">3</span>Analysis settings</h2>
     <p class="hint">Used for all datasets.</p>
     <div id="settings"></div>
   </section>
 
   <section>
-    <h2><span class="step">4</span>Run</h2>
+    <h2 data-help="guide/import-page#4-run"><span class="step">4</span>Run</h2>
     <ul id="problems" class="problems"></ul>
     <div class="row">
       <button id="run" class="primary">Run all datasets</button>
@@ -131,7 +133,7 @@ progress { width: 260px; }
   </section>
 
   <section>
-    <h2><span class="step">5</span>Overview</h2>
+    <h2 data-help="guide/import-page#5-overview"><span class="step">5</span>Overview</h2>
     <div class="row">
       <button id="refresh">Refresh</button>
       <button id="open-folder">Open folder</button>
@@ -140,6 +142,8 @@ progress { width: 260px; }
   </section>
 </main>
 <div id="toast"></div>
+<script id="isa-help" type="application/json">__ISA_HELP__</script>
+<script>/*__ISA_HELP_JS__*/</script>
 
 <script>
 "use strict";
@@ -280,7 +284,7 @@ function renderZip(z) {
   card.append(row);
 
   // datasets
-  card.append(el("h4", {}, "Datasets"));
+  card.append(el("h4", { "data-help": "analysis/input#ideas-exports" }, "Datasets"));
   const dt = el("table", {}, el("tr", {}, el("th", {}, "Use"), el("th", {}, "Dataset"), el("th", { class: "num" }, "Objects"),
     el("th", { class: "num" }, "Complete"), el("th", {}, "Experiment")));
   for (const d of z.datasets) {
@@ -293,7 +297,7 @@ function renderZip(z) {
   card.append(el("div", { class: "scroll" }, dt));
 
   // channels
-  card.append(el("h4", {}, "Channels (examples from the first dataset)"));
+  card.append(el("h4", { "data-help": "analysis/input#channels-roles-and-pixel-size" }, "Channels (examples from the first dataset)"));
   const channels = [...new Set(info.datasets.flatMap(d => d.channels))].sort((a, b) => a - b);
   const ct = el("table", {}, el("tr", {}, el("th", {}, "Channel"), el("th", {}, "Examples"), el("th", {}, "Name"),
     ROLES.map(([, col, desc]) => el("th", { class: "role", title: desc }, col))));
@@ -325,11 +329,11 @@ function copySetup(src) {
 
 // ---------- settings
 const FIELDS = [
-  ["Cells", [
+  ["Cells", "analysis/classification#tumor-or-immune-cell", [
     ["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"],
     ["channels.cell_of_interest", "Marker of interest expressed in", "choice", "cells_of_interest"],
     ["input.max_events", "Only the first N events (empty = all)", "int", null, "all"]]],
-  ["Segmentation (Cellpose)", [
+  ["Segmentation (Cellpose)", "analysis/segmentation", [
     ["segmentation.cellpose_python", "Python with Cellpose", "text", null, "this environment"],
     ["segmentation.model", "Model (cyto3, cpsam, or a path)", "text"],
     ["segmentation.diameter", "Cell diameter (px)", "float"],
@@ -339,11 +343,11 @@ const FIELDS = [
     ["segmentation.max_cell_size", "Max. cell size (px)", "int"],
     ["segmentation.use_gpu", "Use the GPU", "bool"],
     ["segmentation.exclude_edge_cells", "Leave out cells cut by the image edge", "bool"]]],
-  ["Classification", [
+  ["Classification", "analysis/classification#immune-subtypes", [
     ["classification.pool", "Classify together (one set of thresholds)", "choice", "pools"],
     ["classification.threshold_method", "Threshold of the subtype markers", "choice", "threshold_methods"],
-    ["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int", null, "all of them"]]],
-  ["Membranes", [
+    ["classification.artefact_min_positive", "Artefact: positive in at least N subtype markers (0 = none)", "int", null, "all"]]],
+  ["Membranes", "analysis/membrane", [
     ["membrane.thickness", "Membrane / interface width (px)", "int"],
     ["membrane.analysis", "Membrane profiles and enrichment", "bool"],
     ["membrane.cells", "Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed)", "list", null, "where the marker is expressed"],
@@ -357,7 +361,7 @@ function getS(path) { const [a, b] = path.split("."); return state.settings[a][b
 function setS(path, v) { const [a, b] = path.split("."); state.settings[a][b] = v; }
 function renderSettings() {
   const box = document.getElementById("settings"); box.replaceChildren();
-  for (const [title, fields] of FIELDS) {
+  for (const [title, help, fields] of FIELDS) {
     const grid = el("div", { class: "settings-grid" });
     for (const [path, label, kind, list, placeholder] of fields) {
       const v = getS(path);
@@ -373,7 +377,7 @@ function renderSettings() {
         onchange: e => { const t = e.target.value.trim(); setS(path, t === "" ? null : (kind === "int" ? parseInt(t) : parseFloat(t))); } });
       grid.append(el("label", { class: (kind === "text" && path.endsWith("python")) || kind === "list" ? "wide" : "" }, label, input));
     }
-    box.append(el("fieldset", {}, el("legend", {}, title), grid));
+    box.append(el("fieldset", {}, el("legend", { "data-help": help }, title), grid));
   }
 }
 
@@ -472,7 +476,7 @@ function contactMatrices(rows) {
   const short = t => t === "Tumor" ? "tumor" : t === "Artefact" ? "artefact" : t.replace(/^Immune ?/, "immune ").trim();
   const rank = t => t === "Tumor" ? "0" : t === "Artefact" ? "2" : "1" + t;
   const NS = "http://www.w3.org/2000/svg", svgEl = (tag, a) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
-  const wrap = el("div", {}, el("h4", {}, "Partner preference per experiment"),
+  const wrap = el("div", {}, el("h4", { "data-help": "guide/overview#partner-preference-per-experiment" }, "Partner preference per experiment"),
     el("p", { class: "hint" }, "Within the exported events of three or more cells (all datasets of the experiment): contacts observed / expected when the cell types are shuffled among the cells of each event; blue: fewer than chance, red: more. Rows: cell type; columns: the type it touches. A preference among the selected multiplets, not a binding frequency: events without contacts, and those left out before the export, take no part."));
   const grid = el("div", { style: "display:flex;flex-wrap:wrap;gap:18px" });
   for (const exp of [...new Set(rows.map(r => r.experiment))].sort()) {
@@ -529,7 +533,8 @@ document.getElementById("theme").onclick = () => {
 
 (async () => {
   const s = await api("state");
-  defaults = s.defaults; choices = { marker_locations: s.marker_locations, cells_of_interest: s.cells_of_interest };
+  defaults = s.defaults; choices = { marker_locations: s.marker_locations, cells_of_interest: s.cells_of_interest,
+             threshold_methods: s.threshold_methods, pools: s.pools };
   if (s.theme) document.documentElement.dataset.theme = s.theme;
   if (s.project) loadProject(s.project);
   else { state.settings = newSettings(); state.settings.membrane.analysis = false; renderAll(); }

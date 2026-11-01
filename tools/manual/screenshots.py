@@ -59,7 +59,9 @@ def import_page_shots(page: Page, url: str, want: set[str]) -> None:
     # a public manual shows no folder of this computer
     page.evaluate("""() => {
         for (const e of document.querySelectorAll('.zip .path')) e.textContent = 'D:\\\\data\\\\example_export.zip';
-        document.getElementById('folder').value = 'D:\\\\data\\\\example project'; }""")
+        document.getElementById('folder').value = 'D:\\\\data\\\\example project';
+        for (const i of document.querySelectorAll('#settings input[type=text]'))
+            if (/python/i.test(i.value)) i.value = 'D:\\\\Cellpose\\\\.venv\\\\Scripts\\\\python.exe'; }""")
     zips = page.locator("section", has=page.locator("h2", has_text="IDEAS exports"))
     save(zips, "gui_exports", want)
     channels = page.locator(".zip table").nth(1)
@@ -75,6 +77,11 @@ def dashboard_shots(page: Page, url: str, token: str, want: set[str]) -> None:
     page.add_style_tag(content="header, .filters { position: static !important; }")  # not over the cards in a shot
     save(page, "dash_overview", want, clip={"x": 0, "y": 0, "width": VIEW["width"], "height": 760})
     save(page.locator("#markers-card"), "dash_markers", want)
+    page.click("#markers-card h2 .hq")  # the context help of a card
+    page.wait_for_timeout(500)
+    save(page, "dash_help", want, clip={"x": VIEW["width"] - 900, "y": 0, "width": 900, "height": 560})
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
     save(page.locator(".card", has=page.locator("#classes")), "dash_classes", want)
     save(page.locator("#contacts-card"), "dash_interactions", want)
     page.locator("#membrane-card").scroll_into_view_if_needed()

@@ -18,13 +18,26 @@ cells with an interface. The filter row below applies to every view:
 - **Events**: all, those with immune and tumor cells, one tumor + one immune cell, those with an interface, those with
   touching cells. A contact chosen in the [interaction matrix](#interactions) adds a chip here (✕ clears it).
 - **Sort**: the order of the events.
-- **Size**, **outlines**, **interfaces**, **contacts** (a line between the centres of touching cells).
-- **Channels**: on/off and brightness per channel. Brightfield starts at half brightness, under the fluorescence.
+- **Size**: the size of the event images.
+
+The **?** button behind a heading, and the **? Help** button at the top, open the part of this manual about it in a
+panel at the side; <kbd>F1</kbd> or <kbd>?</kbd> does the same for the card under the mouse. The panel works offline.
+
+![The help of the subtype markers, next to the card](../images/dash_help.png){ width="600" }
 
 ## Events
 
 The events as a gallery, with the cells outlined in the colour of their type and the interfaces in aqua. Only the
 visible events are drawn, so large datasets stay fast.
+
+## Channels and overlays
+
+The column left of the gallery switches what is drawn in the event images:
+
+- **Channels**: one row per channel, with a tick box and its brightness. Double-click a channel's name to show only
+  that channel. Brightfield starts at half brightness, under the fluorescence.
+- **Overlays**: the **outlines** of the cells (in the colour of their type), the **interfaces** and the **contacts**:
+  a white line, with a dark edge, between the centres of every two cells that touch.
 
 ## Cell
 

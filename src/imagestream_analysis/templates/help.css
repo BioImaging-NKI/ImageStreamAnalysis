@@ -1,0 +1,43 @@
+/* context help (help.js): the ? buttons and the manual in a side panel, in the colours of the page (import page or dashboard) */
+:root { --hp-bg: var(--panel, var(--surface)); --hp-bg2: var(--chip); --hp-text: var(--text, var(--ink)); --hp-line: var(--line, var(--grid));
+  --hp-accent: var(--accent, var(--s1)); }
+.hq { border: 1px solid var(--hp-line); background: var(--hp-bg2); color: var(--muted); border-radius: 50%; width: 17px; height: 17px;
+  font: 600 10.5px/15px system-ui, "Segoe UI", sans-serif; padding: 0; cursor: pointer; flex: none; text-align: center;
+  margin: 0 2px; vertical-align: 1px; text-transform: none; letter-spacing: 0; }
+.hq:hover:not(:disabled) { color: #fff; background: var(--hp-accent); border-color: var(--hp-accent); }
+#helpPanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); z-index: 100; background: var(--hp-bg);
+  color: var(--hp-text); border-left: 1px solid var(--hp-line); box-shadow: -6px 0 18px rgba(0,0,0,.18); display: flex;
+  flex-direction: column; transform: translateX(105%); transition: transform .18s ease; visibility: hidden; }
+#helpPanel.open { transform: none; visibility: visible; }
+#helpPanel .hp-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--hp-line); font-size: 14px; }
+#helpPanel .hp-head select { min-width: 0; max-width: 220px; font-size: 12.5px; }
+#helpPanel .hp-head .hp-sp { flex: 1; }
+#helpPanel .hp-head a { font-size: 12px; white-space: nowrap; }
+#helpPanel .hp-body { overflow-y: auto; padding: 2px 16px 40vh; font-size: 12.5px; line-height: 1.5; }
+#helpPanel a { color: var(--hp-accent); cursor: pointer; text-decoration: none; }
+#helpPanel a:hover { text-decoration: underline; }
+#helpPanel h1 { font-size: 16px; margin: 12px 0 6px; }
+#helpPanel h2 { font-size: 14px; margin: 6px 0 4px; }
+#helpPanel h3 { font-size: 13px; margin: 6px 0 3px; }
+#helpPanel .hp-toc { display: flex; flex-wrap: wrap; gap: 3px 12px; padding: 4px 0 10px; border-bottom: 1px solid var(--hp-line); }
+#helpPanel section { padding: 2px 8px 6px; margin: 8px -8px 0; border-radius: 6px; transition: background .4s; }
+#helpPanel section.cur { background: color-mix(in srgb, var(--hp-accent) 11%, transparent); }
+#helpPanel p { margin: 5px 0; }
+#helpPanel ul, #helpPanel ol { margin: 4px 0; padding-left: 20px; }
+#helpPanel li { margin: 2px 0; }
+#helpPanel code { font: 11px ui-monospace, Consolas, monospace; background: var(--hp-bg2); border: 1px solid var(--hp-line);
+  padding: 0 3px; border-radius: 3px; }
+#helpPanel kbd { font: 10.5px ui-monospace, Consolas, monospace; border: 1px solid var(--hp-line); border-bottom-width: 2px;
+  border-radius: 3px; padding: 0 4px; background: var(--hp-bg2); }
+#helpPanel abbr { text-decoration: underline dotted; cursor: help; }
+#helpPanel table { border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+#helpPanel th, #helpPanel td { border: 1px solid var(--hp-line); padding: 3px 6px; text-align: left; vertical-align: top; }
+#helpPanel th { background: var(--hp-bg2); }
+#helpPanel .admonition, #helpPanel details { border-left: 3px solid var(--hp-accent); background: var(--hp-bg2); border-radius: 4px;
+  padding: 4px 10px; margin: 8px 0; }
+#helpPanel .admonition.warning { border-left-color: #e3a33a; }
+#helpPanel .admonition-title { font-weight: 600; margin: 2px 0; }
+#helpPanel summary { cursor: pointer; font-weight: 600; }
+#helpPanel dt { font-weight: 600; margin-top: 6px; } #helpPanel dd { margin-left: 16px; }
+#helpPanel .math.display { display: block; text-align: center; margin: 6px 0; }
+#helpPanel .math { font-family: "Cambria Math", Cambria, serif; font-size: 13.5px; }

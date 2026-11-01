@@ -57,6 +57,9 @@ A local guard backs this up:
   - `gui.py` + `templates/gui.html`: the import and run page (`imagestream-cli gui` / `imagestream`).
     - A stdlib HTTP server on 127.0.0.1 with a token; the page is plain HTML/JS with no external resources.
     - Python, not Node: the server reads zips and starts the analysis.
+  - Context help on both pages (2026-11-01, copied from FAST-HIPPOS): `templates/help.js` + `help.css` + `help.json`,
+    filled in by `dashboard.page_template`. `help.json` is generated from the manual (`tools/manual/make_help.py`); ? buttons
+    come from `data-help="<page>#<anchor>"` on headings. `tests/test_help.py` fails when it is stale or a target is gone.
   - `cli.py`: the `imagestream-cli` entry point.
 - `reference/fiji_v1.8/`: the macro, copied from upstream commit `cffe8fb`. Only v1.8 matters.
 - `docs/SPEC.md`: the behaviour of the macro with line numbers, port status per step (✅/🟡/⬜), and the issue list I1–I14. **Update it with every port change**, and record deviations there with their reason.

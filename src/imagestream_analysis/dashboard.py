@@ -241,6 +241,15 @@ def markers_data(result: Result, settings: Settings) -> list[dict[str, Any]]:
     return out
 
 
+def page_template(name: str) -> str:
+    """A page of templates/ with the context help filled in: help.css, help.js and help.json (made from the manual by
+    tools/manual/make_help.py), at the placeholders /*__ISA_HELP_CSS__*/, /*__ISA_HELP_JS__*/ and __ISA_HELP__."""
+    def read(name: str) -> str:
+        return resources.files("imagestream_analysis").joinpath("templates", name).read_text(encoding="utf-8")
+    return (read(name).replace("/*__ISA_HELP_CSS__*/", read("help.css")).replace("/*__ISA_HELP_JS__*/", read("help.js"))
+            .replace("__ISA_HELP__", read("help.json").replace("</", "<\\/")))
+
+
 def write_dashboard(result: Result, settings: Settings) -> Path:
     out = result.out_dir
     folder = out / FILES
@@ -249,7 +258,7 @@ def write_dashboard(result: Result, settings: Settings) -> Path:
     folder.mkdir(parents=True)
     channels = write_sheets(result, settings, folder)
     data = build_data(result, settings, channels)
-    template = resources.files("imagestream_analysis").joinpath("templates", "dashboard.html").read_text("utf-8")
+    template = page_template("dashboard.html")
     payload = json.dumps(_clean(data), separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     path = out / "dashboard.html"
     path.write_text(template.replace("__ISA_VERSION__", __version__).replace('"__ISA_DATA__"', payload),

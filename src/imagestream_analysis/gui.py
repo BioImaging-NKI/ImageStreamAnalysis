@@ -22,7 +22,6 @@ import time
 import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +29,7 @@ import pandas as pd
 
 from . import __version__, ideas
 from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
+from .dashboard import page_template
 from .project import INTERACTIONS_FILE, Project, overview
 
 log = logging.getLogger(__name__)
@@ -264,7 +264,7 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
 
 
 def page(token: str) -> bytes:
-    html = resources.files("imagestream_analysis").joinpath("templates", "gui.html").read_text(encoding="utf-8")
+    html = page_template("gui.html")
     return html.replace("__ISA_TOKEN__", token).replace("__ISA_VERSION__", __version__).encode("utf-8")
 
 
