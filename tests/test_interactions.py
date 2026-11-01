@@ -57,15 +57,26 @@ def test_pipeline_writes_the_interactions(synthetic):
 
 
 def test_expected_contacts_keep_the_total_and_follow_the_composition():
-    """Event 0: tumor 1 touches immune 2; event 1: tumor 3, tumor 4, immune 5, with 3–4 and 4–5 touching."""
+    """Event 0: tumor 1 touches immune 2 (two cells: no information, left out of the chance comparison); event 1:
+    tumor 3, tumor 4, immune 5, with 3–4 and 4–5 touching."""
     cells = pd.DataFrame({"label": [1, 2, 3, 4, 5], "frame": [0, 0, 1, 1, 1],
                           "Cell type": ["Tumor", "Immune", "Tumor", "Tumor", "Immune"], "Subtype": [""] * 5})
     pairs = np.array([[1, 2], [3, 4], [4, 5]])
     t = contact_table(cells, pairs).set_index(["cell type", "neighbour type"])
-    assert t["contacts"].sum() == pytest.approx(t["expected"].sum()) == 6  # 3 pairs, each from both sides
-    # event 0 (1 pair, one tumor and one immune): certainly tumor–immune; event 1 (2 pairs; 2 tumor, 1 immune):
-    # a pair is tumor–immune with probability 2*2*1/(3*2) = 2/3, tumor–tumor with 2*1/(3*2) = 1/3
-    assert t.loc[("Tumor", "Immune"), "expected"] == pytest.approx(1 + 2 * 2 / 3)
-    assert t.loc[("Tumor", "Tumor"), "expected"] == pytest.approx(2 * 2 * 1 / 3)  # counted from both sides
-    assert t.loc[("Tumor", "Immune"), "observed / expected"] == pytest.approx(2 / (1 + 4 / 3))
+    assert t["contacts"].sum() == 6  # 3 pairs, each from both sides, in all events
+    assert t["contacts (3+ cells)"].sum() == pytest.approx(t["expected (3+ cells)"].sum()) == 4  # event 1 only
+    # event 1 (2 pairs; 2 tumor, 1 immune): a pair is tumor–immune with probability 2*2*1/(3*2) = 2/3, tumor–tumor
+    # with 2*1/(3*2) = 1/3
+    assert t.loc[("Tumor", "Immune"), "contacts"] == 2 and t.loc[("Tumor", "Immune"), "contacts (3+ cells)"] == 1
+    assert t.loc[("Tumor", "Immune"), "expected (3+ cells)"] == pytest.approx(2 * 2 / 3)
+    assert t.loc[("Tumor", "Tumor"), "expected (3+ cells)"] == pytest.approx(2 * 2 * 1 / 3)  # from both sides
+    assert t.loc[("Tumor", "Immune"), "observed / expected"] == pytest.approx(1 / (4 / 3))
     assert ("Immune", "Immune") not in t.index  # one immune cell per event: impossible
+
+
+def test_two_cell_events_alone_give_no_preference():
+    cells = pd.DataFrame({"label": [1, 2, 3, 4], "frame": [0, 0, 1, 1], "Cell type": ["Tumor", "Immune"] * 2,
+                          "Subtype": [""] * 4})
+    t = contact_table(cells, np.array([[1, 2], [3, 4]]))
+    assert (t["contacts"] == 2).all() and (t["contacts (3+ cells)"] == 0).all()
+    assert t["observed / expected"].isna().all()

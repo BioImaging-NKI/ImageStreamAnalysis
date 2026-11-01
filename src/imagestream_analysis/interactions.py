@@ -50,11 +50,21 @@ def add_neighbours(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
     return out
 
 
+MIN_CELLS_FOR_CHANCE = 3  # events with fewer cells cannot show a partner preference (see contact_table)
+
+
 def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
     """Per cell type and neighbour type: the cells of the type, the contacts (every pair counts from both sides:
-    A–B and B–A), how many cells of the type touch at least one of that neighbour type, and the contacts expected by
-    chance: the mean over all ways of shuffling the cell types among the cells of each event (the composition of
-    every event is kept). Observed / expected > 1: the types touch more often than their numbers explain.
+    A–B and B–A), and how many cells of the type touch at least one of that neighbour type (all events); and the
+    partner preference: the contacts in events of at least MIN_CELLS_FOR_CHANCE cells against the contacts expected
+    there by chance, the mean over all ways of shuffling the cell types among the cells of each event (the cells of
+    every event and its number of contacts are kept). Observed / expected > 1: within the events, these types touch
+    more often than random pairing of the cells would give.
+
+    Events of two cells are left out of that comparison: two touching cells can only form the pair they form, so
+    there observed = expected by construction, and they would pull every ratio towards 1. Events without contacts
+    take no part (nor do the events left out before the export): this is a preference among the selected multiplets,
+    not a binding frequency.
 
     Expected, exactly: in an event of n cells with c_A cells of type A, a touching pair is of types A and B with
     probability 2 c_A c_B / (n (n - 1)) (A != B), counted once from each side; A–A pairs with probability
@@ -67,6 +77,8 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
     row_of = {int(lab): r for r, lab in enumerate(cells["label"].astype(int))}
     frames = cells["frame"].to_numpy(dtype=np.int64)
     observed = np.zeros((k, k))
+    observed_3 = np.zeros((k, k))  # in events of at least MIN_CELLS_FOR_CHANCE cells
+    event_size = np.bincount(frames, minlength=int(frames.max(initial=-1)) + 1)
     touching: list[list[set[int]]] = [[set() for _ in range(k)] for _ in range(k)]
     pairs_per_event: dict[int, int] = {}
     for a, b in pairs:
@@ -74,6 +86,9 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
         ta, tb = type_idx[ra], type_idx[rb]
         observed[ta, tb] += 1
         observed[tb, ta] += 1
+        if event_size[frames[ra]] >= MIN_CELLS_FOR_CHANCE:
+            observed_3[ta, tb] += 1
+            observed_3[tb, ta] += 1
         touching[ta][tb].add(ra)
         touching[tb][ta].add(rb)
         pairs_per_event[int(frames[ra])] = pairs_per_event.get(int(frames[ra]), 0) + 1
@@ -81,7 +96,7 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
     for event, n_pairs in pairs_per_event.items():
         c = np.bincount(type_idx[frames == event], minlength=k).astype(float)
         n = c.sum()
-        if n < 2:
+        if n < MIN_CELLS_FOR_CHANCE:
             continue
         p = np.outer(c, c) - np.diag(c)  # c_A c_B, and c_A (c_A - 1) on the diagonal
         expected += n_pairs * 2 * p / (n * (n - 1))
@@ -93,10 +108,11 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
                 rows.append({"cell type": names[i], "neighbour type": names[j], "cells": int(n_cells[i]),
                              "contacts": int(observed[i, j]), "cells touching": len(touching[i][j]),
                              "fraction touching": len(touching[i][j]) / n_cells[i],
-                             "expected": expected[i, j],
-                             "observed / expected": observed[i, j] / expected[i, j] if expected[i, j] > 0 else np.nan})
-    columns = ["cell type", "neighbour type", "cells", "contacts", "cells touching", "fraction touching", "expected",
-               "observed / expected"]
+                             "contacts (3+ cells)": int(observed_3[i, j]), "expected (3+ cells)": expected[i, j],
+                             "observed / expected": (observed_3[i, j] / expected[i, j] if expected[i, j] > 0
+                                                     else np.nan)})
+    columns = ["cell type", "neighbour type", "cells", "contacts", "cells touching", "fraction touching",
+               "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
     return pd.DataFrame(rows, columns=columns)
 
 

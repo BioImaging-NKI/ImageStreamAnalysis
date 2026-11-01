@@ -34,11 +34,18 @@ cellpose4 = ["cellpose>=4"]
 [dependency-groups]
 dev = [
     "bumpver>=2024.1130",
+    "markdown==3.11.1",
+    "mkdocs==1.6.1",
+    "mkdocs-glightbox==0.5.2",
+    "mkdocs-material==9.7.7",
     "mypy>=1.13",
     "pandas-stubs>=2.2",
+    "playwright>=1.47",
+    "pymdown-extensions==12.3",
     "pytest>=8",
     "ruff>=0.6",
     "scipy-stubs>=1.14",
+    "selectolax==1.0.0",
 ]
 
 [build-system]

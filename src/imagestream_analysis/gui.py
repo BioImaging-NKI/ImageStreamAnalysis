@@ -33,7 +33,7 @@ from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLo
 from .project import INTERACTIONS_FILE, Project, overview
 
 log = logging.getLogger(__name__)
-STATE_DIR = Path.home() / ".imagestream_analysis"
+STATE_DIR = Path(os.environ.get("ISA_HOME") or Path.home() / ".imagestream_analysis")  # ISA_HOME: a test instance
 INSTANCE = STATE_DIR / "gui_instance.json"  # port of a running page server, so that a second start reuses it
 PREFS = STATE_DIR / "gui_prefs.json"  # last project folder, light / dark
 IDLE_TIMEOUT = 15 * 60  # s
