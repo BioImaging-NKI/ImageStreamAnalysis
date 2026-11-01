@@ -160,9 +160,12 @@ of the same files. To join the two later: fetch the old repository as a remote a
 `.python-version`).
 
 Remote (2026-11-01): `origin` = BioImaging-NKI/ImageStreamAnalysis, pushed by the user's own GitHub account (in the
-remote URL; never the lab account). The port goes to a branch `python-port`; `main` (the macros) stays untouched
-until a pull request. **Not pushed yet: the user first looks for the old history** (pushing first would make grafting
-it a force-push). The release `example-data` (synthetic example export, live demo) exists. GitHub Pages still has to
+remote URL; never the lab account). **Not pushed yet: the user first looks for the old history** (pushing first would
+make grafting it a force-push). **Decided by the user (2026-11-01): eventually everything goes to `main`**, with the
+macros and the other old items of upstream `main` (macros 1.5/1.8, ClassifyCellTypes 2.8, the notebook) moved to a
+`legacy/` folder. Order: graft the old history (if found), then merge upstream `main` with
+`--allow-unrelated-histories`, `git mv` its files into `legacy/` (keep our README and LICENSE), check, push to `main`
+(no force-push of `main`). The release `example-data` (synthetic example export, live demo) exists. GitHub Pages still has to
 be enabled by an admin (Settings → Pages → GitHub Actions); then the manual workflow publishes on a push.
 
 ## General environment

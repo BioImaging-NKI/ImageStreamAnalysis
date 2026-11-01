@@ -6,7 +6,7 @@ site_description: User manual of ImageStream Analysis for Python, cell classific
 site_url: https://bioimaging-nki.github.io/ImageStreamAnalysis/
 repo_url: https://github.com/BioImaging-NKI/ImageStreamAnalysis
 repo_name: ImageStreamAnalysis
-edit_uri: edit/python-port/manual/
+edit_uri: edit/main/manual/
 docs_dir: manual
 copyright: ImageStream Analysis · Netherlands Cancer Institute · GPL-3.0-or-later
 
