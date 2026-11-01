@@ -75,7 +75,8 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); 
 .tile { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
 .tile canvas { background: #000; border-radius: 3px; outline: 2px solid transparent; }
 .tile.selected canvas { outline-color: var(--ink); }
-.tile span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 4px 0; }
 .legend .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
 .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
@@ -141,7 +142,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
   </select></label>
   <span id="contact-chip" style="display:contents"></span>
   <label>Sort <select id="f-sort"></select></label>
-  <label>Size <input type="range" id="f-zoom" min="0.5" max="2.5" step="0.25" value="1"></label>
+  <label title="The size of the events; also Ctrl+scroll over the gallery">Size <input type="range" id="f-zoom" min="0.5" max="2.5" step="0.25" value="1"></label>
 </div>
 <main>
   <div class="card">
@@ -407,8 +408,8 @@ function renderVisible() {
     const t = document.createElement("div"); t.className = "tile" + (e === state.event ? " selected" : "");
     t.style.left = (k % cols) * (w + gap) + 4 + "px"; t.style.top = Math.floor(k / cols) * (h + gap) + 4 + "px";
     const cv = document.createElement("canvas"); cv.width = w; cv.height = h - 16; cv.style.width = w + "px";
-    const label = document.createElement("span");
-    label.textContent = `#${e + 1}` + (E.object ? ` · obj ${E.object[e]}` : "");
+    const label = document.createElement("span"), full = `#${e + 1}` + (E.object ? ` · obj ${E.object[e]}` : "");
+    label.textContent = w < 100 ? `#${e + 1}` : full; label.title = full;  // small tiles: the event number only
     t.append(cv, label); inner.append(t); tiles.set(e, t);
     drawEvent(cv, e, state.zoom);
     cv.addEventListener("pointermove", ev => {
@@ -423,6 +424,19 @@ function renderVisible() {
   }
 }
 gallery.addEventListener("scroll", () => requestAnimationFrame(renderVisible));
+// Ctrl+scroll over the gallery: the size of the events, keeping the event under the mouse in place
+gallery.addEventListener("wheel", ev => {
+  if (!ev.ctrlKey) return;
+  ev.preventDefault();
+  const slider = document.getElementById("f-zoom");
+  const zoom = Math.min(+slider.max, Math.max(+slider.min, state.zoom + (ev.deltaY < 0 ? 1 : -1) * +slider.step));
+  if (zoom === state.zoom) return;
+  const box = gallery.getBoundingClientRect(), x = ev.clientX - box.left - 4, y = ev.clientY - box.top, before = layout;
+  const pos = (gallery.scrollTop + y) / (before.h + before.gap), row = Math.floor(pos);
+  const k = Math.min(shown.length - 1, row * before.cols + Math.min(before.cols - 1, Math.floor(Math.max(0, x) / (before.w + before.gap))));
+  state.zoom = zoom; slider.value = String(zoom); relayout();
+  gallery.scrollTop = (Math.floor(Math.max(0, k) / layout.cols) + pos - row) * (layout.h + layout.gap) - y;
+}, { passive: false });
 new ResizeObserver(() => { relayout(); drawPlots(); }).observe(gallery);
 function redrawEvent(e) { const t = tiles.get(e); if (t) drawEvent(t.querySelector("canvas"), e, state.zoom); }
 function redrawEventsOfSheet(s) { for (const e of tiles.keys()) if (Math.floor(e / PER_SHEET) === s) redrawEvent(e); if (state.selected >= 0) renderCard(); }

@@ -18,7 +18,8 @@ cells with an interface. The filter row below applies to every view:
 - **Events**: all, those with immune and tumor cells, one tumor + one immune cell, those with an interface, those with
   touching cells. A contact chosen in the [interaction matrix](#interactions) adds a chip here (✕ clears it).
 - **Sort**: the order of the events.
-- **Size**: the size of the event images.
+- **Size**: the size of the event images; also <kbd>Ctrl</kbd>+scroll over the gallery. Small events show only
+  their number (hover for the IDEAS object number).
 
 The **?** button behind a heading, and the **? Help** button at the top, open the part of this manual about it in a
 panel at the side; <kbd>F1</kbd> or <kbd>?</kbd> does the same for the card under the mouse. The panel works offline.
