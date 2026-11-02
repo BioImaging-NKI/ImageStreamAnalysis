@@ -2,23 +2,27 @@
 
 The import page sets up a **project**. A project consists of one or more IDEAS exports, the names and roles of their
 channels, and the analysis settings. From this page you also run the analysis and view the overview of the results.
-Start it with `uv run imagestream` or `uv run imagestream-cli gui`. The page opens in your browser, but it is served by
+Start it with `uv run imagestream` or `uv run imagestream-cli gui`. The page opens in your browser at once, with a
+spinner while the program loads its analysis modules (up to about 20 s on a first start). It is served by
 the program on your own computer, so no data leave your computer.
 
-The page remembers the last saved project. *Save*, *Run* and *Quit* all save the project. If you reload the page
+The page remembers the last saved project. *Save settings*, *Run* and *Quit* all save the project. If you reload the page
 before saving, the browser restores the unsaved setup and shows a message about it. If you start the program a second
 time, it opens the page that is already running. **Quit** (top right) saves the project and stops the program. If you
 don't quit, the program stops by itself 15 minutes after the page was closed, but never during a run.
 
-The **?** button next to a step or a group of settings, and the **? Help** button at the top, open the matching part
+The **?** button next to a step or a group of settings, and the **Help** button at the top, open the matching part
 of this manual in a panel at the side. Pressing <kbd>F1</kbd> or <kbd>?</kbd> does the same for the step under the
 mouse pointer.
 
 ## 1. Project
 
-Choose the output folder of the project here. Click *Browse…* to choose a folder, or *Open project…* to open an
-existing `project.toml`. *Save* writes the project file without running the analysis. The results of each dataset go
+Choose the output folder of the project here, or click *Browse…* to choose a folder. The results of each dataset go
 to `<project>/<experiment>/<dataset>/`.
+
+The top bar has *Load settings…*, which opens an existing `project.toml`, and *Save settings*, which writes the
+project file (`project.toml` in the output folder) without running the analysis. A second *Save settings* button
+sits at the bottom of the page, so that you don't have to scroll back up after changing the settings.
 
 ## 2. IDEAS exports
 
@@ -76,7 +80,12 @@ These settings apply to all datasets of the project. The most important ones are
   stain, which determines how the image for Cellpose is made (see [Segmentation](../analysis/segmentation.md)).
 - **Marker of interest expressed in**: the cell type that carries the marker of interest. The membrane enrichment is
   measured on these cells (see [Membrane enrichment](../analysis/membrane.md)).
-- **Python with Cellpose**, **Model** and **Cell diameter (px)** control the segmentation. Sizes are given in pixels;
+- **Python with Cellpose**, **Model** and **Cell diameter (px)** control the segmentation. *Python with Cellpose* can
+  be the `python.exe` of an environment or the folder of that environment (a venv, conda or pixi environment, or a
+  project folder with `.venv` or `.pixi` in it). A chip in the heading of *Segmentation (Cellpose)* shows what the
+  program found there: in green the Cellpose version and the name of the GPU, or a warning when Cellpose is missing
+  or no GPU was found (Cellpose then runs on the processor, which is much slower). The check runs in the
+  background each time the page opens. Sizes are given in pixels;
   see [Segmentation](../analysis/segmentation.md#sizes-in-pixels) for how to convert them from µm. **Reuse the previous
   Cellpose result if nothing changed** (on by default) skips Cellpose for a dataset when its Cellpose input and
   settings are the same as in its previous run.
@@ -98,7 +107,8 @@ the same in every dataset of that experiment. With **dataset**, each dataset is 
 ## 4. Run
 
 The list above *Run all datasets* names anything that is still missing, such as an output folder, a pixel size, or a
-channel for a role. The button works only when this list is empty. The run first saves the project. The log shows the
+channel for a role. For the immune-cell markers, one ticked *Immune* channel in each export is enough: the markers are
+summed, so an export may lack a marker that another export has. The button works only when this list is empty. The run first saves the project. The log shows the
 progress of the run, and *Stop* ends it. If a dataset fails, the error is logged and the other datasets are still
 analyzed.
 

@@ -7,7 +7,8 @@ channel for one of the roles in one of the exports. A role is a tick box next to
 export has a different name (for example because of a typing difference), it does not get the role.
 
 **"Cellpose failed".** The log shows Cellpose's own error message. Check *Python with Cellpose*: it must point to the
-`python.exe` of an environment in which Cellpose is installed. If *Use the GPU* is off, Cellpose runs on the processor,
+`python.exe`, or the folder, of an environment in which Cellpose is installed. The chip next to *Segmentation
+(Cellpose)* on the import page shows whether Cellpose and a GPU were found there. If *Use the GPU* is off, Cellpose runs on the processor,
 which is much slower.
 
 **An export has objects without all channels.** IDEAS can export objects with missing channels. These objects are

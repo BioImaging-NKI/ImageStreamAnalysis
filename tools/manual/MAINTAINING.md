@@ -77,7 +77,7 @@ the screenshots, and look at every changed image.
 Small changes to the program whose screenshots are not retaken yet (the user prefers to retake them together, with
 a larger change). Retake them at the next refresh and empty this list.
 
-- `gui_exports`, `gui_channels`: *Copy setup to all* moved from the title bar of an export to below its channel table, shown only with two or more exports (2026-11-02).
+(Nothing waiting: refreshed 2026-11-02.)
 
 ## Refresh, check, publish
 

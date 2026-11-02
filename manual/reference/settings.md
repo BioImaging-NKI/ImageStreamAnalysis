@@ -47,7 +47,7 @@ Cellpose, and the clean-up of the cells it finds.
 | `use_gpu` | `true` | Use the GPU | Run Cellpose on the GPU. |
 | `reuse_labels` | `true` | Reuse the previous Cellpose result if nothing changed | Reuse the Cellpose result of the previous run of the dataset if its input image and Cellpose settings have not changed (labelmap_cells.tif and its .json file in the dataset folder). When off, Cellpose always runs. |
 | `montage_columns` | `0` | Montage columns (0 = square) | The number of events per row in the montage that Cellpose segments. 0 makes the montage about square. Setting it to the number of events gives a single row, as in the Fiji macro. |
-| `cellpose_python` | (empty) | Python with Cellpose | The python.exe of an environment with Cellpose 3 or 4. Empty means the environment of this program. |
+| `cellpose_python` | (empty) | Python with Cellpose | The python.exe of an environment with Cellpose 3 or 4, or the folder of that environment (a venv, conda or pixi environment, or a project folder with .venv or .pixi). Empty means the environment of this program. |
 | `erosion` | `1` | Shrink cells (px) | Shrink the cells by this many pixels at their border with the background. |
 | `min_cell_size` | `100` | Min. cell size (px) | Cells smaller than this (in pixels, after shrinking) are removed. |
 | `max_cell_size` | `10000` | Max. cell size (px) | Cells larger than this (in pixels, after shrinking) are removed. |
@@ -75,7 +75,7 @@ The membrane profiles and the enrichment at the interface.
 | `partners` | `[]` | Interface with (empty = the other cell type) | The partners whose contact forms the interface, written as for cells. Empty means the other cell type. |
 | `thickness` | (empty) | Membrane / interface width (px) | In pixels: the width of the membrane band, which is also the distance at which cells count as touching. Empty means about 1.5 µm (2 px at 20x, 3 px at 40x, 5 px at 60x). |
 | `straightening_width` | (empty) | Straightening width (px) | In pixels: the width of the band across the outline that is straightened. Empty means about 4.5 µm (5 px at 20x, 9 px at 40x, 13 px at 60x). This width lets the band reach the membrane where the outline lies a little outside it. |
-| `max_histogram_value` | `20.0` | Histogram maximum (SD) | The upper end of the histograms, in SD above the mean. The histograms start at -5. |
-| `histogram_bin_width` | `0.25` | Histogram bin width (SD) | The bin width of the histograms, in SD. |
+| `max_histogram_value` | (empty) | Histogram maximum (SD) | The upper end of the histograms, in SD above the mean. The histograms start at -5. Empty means automatic: the 99th percentile of the interface values or of the control windows, whichever is higher (at least 5), rounded up to a whole number of bins. Values above the upper end are not counted. |
+| `histogram_bin_width` | (empty) | Histogram bin width (SD) | The bin width of the histograms, in SD. Empty means automatic: the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, ... that gives at most 60 bins (usually 25 to 60). |
 | `control_repeats` | `10` | Control windows per cell | The number of random control windows per cell without an interface. Each window is as long as the median interface. |
 | `inside_only` | `false` | Straighten inside the measured cell only | Take the profile only from the part of the band that lies inside the measured cell. This is a sensitivity test, not a way to separate the two membranes: touching membranes are much closer together than the resolution, so every pixel at the interface contains signal from both. |

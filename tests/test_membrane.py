@@ -6,9 +6,11 @@ from scipy import ndimage as ndi
 from imagestream_analysis.config import CellOfInterest, MembraneSettings
 from imagestream_analysis.membrane import (
     INTERFACE_OFFSET,
+    _nice_step,
     _runs,
     analyze_membranes,
     expression_check,
+    histogram_scale,
     membrane_profiles,
     outline,
     select,
@@ -140,3 +142,41 @@ def test_a_bright_partner_looks_like_enrichment_and_is_caught():
     cells["Mean ch2 (MOI)"] = [100.0, 100.0, 4.0]
     assert expression_check(cells, None, "Mean ch2 (MOI)", ["Immune"], ["Immune"])["check"].startswith("NOT INF")
     assert expression_check(cells, None, "Mean ch2 (MOI)", ["Immune"], ["Tumor"])["check"].startswith("WARNING")
+
+
+def test_nice_step():
+    assert [_nice_step(x) for x in (0.05, 0.1, 0.15, 0.22, 0.3, 0.6, 1.0, 1.5, 3, 7, 12, 30)] == \
+        [0.1, 0.1, 0.2, 0.25, 0.5, 1, 1, 2.5, 5, 10, 25, 50]
+
+
+def test_histogram_scale_automatic():
+    rng = np.random.default_rng(1)
+    control = rng.normal(0, 1, 1000)
+    interface = np.concatenate([rng.normal(3, 2, 200), [500.0], [np.nan]])  # one extreme cell, one without a value
+    top, width, n = histogram_scale(interface, control)
+    p99 = np.percentile(interface[np.isfinite(interface)], 99)
+    assert p99 <= top < p99 + width + 1e-9 and top < 50  # the extreme cell does not set the scale
+    assert width in (0.1, 0.2, 0.25, 0.5, 1.0) and 24 <= n <= 60
+    assert n * width == pytest.approx(top + 5)  # whole bins from -5
+    # at least 5 SD; without any value the macro's 20
+    assert histogram_scale(np.zeros(5), np.zeros(5))[0] == 5
+    assert histogram_scale(np.zeros(0), np.array([np.nan]))[0] == 20
+
+
+def test_histogram_scale_explicit_values_are_honoured():
+    values = np.linspace(-1, 40, 50)
+    assert histogram_scale(values, values, 20.0, 0.25) == (20.0, 0.25, 100)  # the macro's defaults: 100 bins
+    top, width, n = histogram_scale(values, values, 10.0, None)
+    assert top == 10 and width == 0.25 and n == 60
+    top, width, n = histogram_scale(values, values, None, 1.0)
+    assert width == 1 and top == pytest.approx(np.ceil(np.percentile(values, 99))) and n == top + 5
+
+
+def test_histogram_tables_follow_the_settings():
+    labels, cells, moi = make_cells()
+    res = analyze_membranes(cells, profiles(labels, cells, moi), CellOfInterest.TUMOR_CELL,
+                            MembraneSettings(control_repeats=10, max_histogram_value=20.0, histogram_bin_width=0.25))
+    assert len(res.histogram_interface) == 100 and res.histogram_interface["bin_start"].iloc[0] == -5
+    auto = analyze_membranes(cells, profiles(labels, cells, moi), CellOfInterest.TUMOR_CELL,
+                             MembraneSettings(control_repeats=10))
+    assert len(auto.histogram_interface) <= 60 and auto.histogram_interface["counts"].sum() == 1

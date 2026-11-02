@@ -125,6 +125,11 @@ tbody tr { cursor: pointer; }
   box-shadow: 0 4px 14px rgba(0,0,0,.25); white-space: pre-wrap; }
 #applybar button { margin-left: 10px; background: transparent; color: inherit; border-color: currentColor; }
 .marker .auto { font-size: 11.5px; padding: 0 6px; margin-left: 6px; }
+.histctl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12px; color: var(--ink-2); margin: 4px 0 2px; }
+.histctl .grp { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.histctl button { font-size: 12px; padding: 0 7px; line-height: 18px; }
+.histctl .v { min-width: 3.4em; text-align: center; font-variant-numeric: tabular-nums; color: var(--ink); }
+.histctl #hist-auto.on { border-color: var(--ink); font-weight: 600; }
 pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
 /*__ISA_HELP_CSS__*/
 </style>
@@ -231,7 +236,14 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
         <div class="legend"><span><span class="key" style="border-color:var(--s3)"></span>interface</span>
           <span><span class="key" style="border-color:var(--muted);border-top-style:dashed"></span>control (random windows)</span></div>
         <div class="plot"><svg id="hist" viewBox="0 0 420 240"></svg></div>
-        <p class="note">Standard deviations above the mean of the membrane that touches no cell; fraction of cells per bin.</p>
+        <div class="histctl" id="hist-ctl">
+          <span class="grp" title="The upper end of the histogram (it starts at −5 SD); values above it are not counted">maximum
+            <button id="hmax-dn" title="Lower maximum">−</button><span class="v" id="hmax"></span><button id="hmax-up" title="Higher maximum">+</button></span>
+          <span class="grp" title="The width of the bins">bin width
+            <button id="hbin-dn" title="Narrower bins">−</button><span class="v" id="hbin"></span><button id="hbin-up" title="Wider bins">+</button></span>
+          <button id="hist-auto" title="The automatic scale: up to the 99th percentile of the interface or the control values, at most 60 bins">auto</button>
+        </div>
+        <p class="note" id="hist-note">Standard deviations above the mean of the membrane that touches no cell; fraction of cells per bin.</p>
       </div>
       <div>
         <div class="legend"><span class="note">Average profile of the cells with an interface, centred at the interface</span></div>
@@ -932,6 +944,49 @@ function longestRun(f) {  // the longest run of true in a circular array: [start
     if (f[j]) { if (start < 0) { start = j; len = 0; } len++; if (len > best[1]) best = [start, len]; } else start = -1; }
   return best;
 }
+// the histogram scale, as membrane.histogram_scale: null = automatic (99th percentile of the interface or the control
+// values, whichever is higher, at least 5; the smallest nice bin width giving at most 60 bins)
+const HIST_PCT = 99, HIST_MIN_TOP = 5, HIST_MAX_BINS = 60, HIST_FALLBACK_TOP = 20;
+const HIST_TOPS = [0, 1, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300, 500];
+const HIST_WIDTHS = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, 25];
+const histView = { max: MP ? MP.max_histogram_value || null : null, bin: MP ? MP.bin_width || null : null };
+function niceStep(raw) {
+  if (raw <= 0.1) return 0.1;
+  for (const s of [0.2, 0.25, 0.5]) if (raw <= s + 1e-12) return s;
+  for (let unit = 1; ; unit *= 10) for (const m of [1, 2.5, 5]) if (raw <= m * unit + 1e-12) return m * unit;
+}
+function percentile(a, q) {  // numpy's default (linear interpolation)
+  const s = [...a].sort((x, y) => x - y), pos = q / 100 * (s.length - 1), lo = Math.floor(pos), hi = Math.min(lo + 1, s.length - 1);
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+function histScale(iface, ctrl, maxValue, binWidth) {
+  let top;
+  if (maxValue) top = maxValue;
+  else { const p = [iface, ctrl].map(v => v.filter(x => x != null && isFinite(x))).filter(v => v.length).map(v => percentile(v, HIST_PCT));
+    top = p.length ? Math.max(HIST_MIN_TOP, ...p) : HIST_FALLBACK_TOP; }
+  const width = binWidth || niceStep((top - HIST_MIN) / HIST_MAX_BINS);
+  if (!maxValue) top = Math.round((HIST_MIN + Math.ceil((top - HIST_MIN) / width - 1e-9) * width) * 1e10) / 1e10;
+  return { top, width, nb: Math.max(1, roundEven((top - HIST_MIN) / width)) };
+}
+function binHist() {  // the histograms of M at the scale of histView
+  const { top, width, nb } = histScale(M.sd, M.control_scores, histView.max, histView.bin), bw = (top - HIST_MIN) / nb;
+  let above = 0;
+  const hist = (vals, count) => { const h = new Array(nb).fill(0); for (const v of vals) { if (v == null || !isFinite(v)) continue;
+    if (v > top) { if (count) above++; continue; } if (v < HIST_MIN) continue; h[Math.min(nb - 1, Math.floor((v - HIST_MIN) / bw))]++; } return h; };
+  M.hist_bin_start = Array.from({ length: nb }, (_, k) => HIST_MIN + k * bw); M.bin_width = bw; M.hist_top = top; M.hist_width = width;
+  M.hist_interface = hist(M.sd, true); M.hist_above = above; M.hist_control = hist(M.control_scores, false);
+}
+function histStep(key, dir) {  // − / + on the maximum or the bin width: the next value of the ladder
+  const cur = key === "max" ? M.hist_top : M.hist_width, ladder = key === "max" ? HIST_TOPS : HIST_WIDTHS;
+  const next = dir > 0 ? ladder.find(v => v > cur + 1e-9) : [...ladder].reverse().find(v => v < cur - 1e-9);
+  if (next == null) return;
+  const top = key === "max" ? next : M.hist_top, width = key === "bin" ? next : M.hist_width;
+  if ((top - HIST_MIN) / width > 500) return;  // too many bins
+  histView[key] = next; binHist(); drawMembranes();
+}
+for (const [id, key, dir] of [["hmax-dn", "max", -1], ["hmax-up", "max", 1], ["hbin-dn", "bin", -1], ["hbin-up", "bin", 1]])
+  document.getElementById(id).onclick = () => histStep(key, dir);
+document.getElementById("hist-auto").onclick = () => { histView.max = histView.bin = null; binHist(); drawMembranes(); };
 function computeM() {
   if (!MP) return;
   if (!PROF) decodeMembranes();
@@ -963,12 +1018,9 @@ function computeM() {
   const has = out.cell.map((_, k) => out.interface_length[k] > 0), lens = out.length.filter((_, k) => has[k]);
   const length = lens.length > 1 ? Math.min(Math.round(mean(lens) + sdev(lens)), out.width) : 0;
   out.average = Array.from({ length }, (_, j) => { const v = out.aligned.filter((_, k) => has[k]).map(a => a[j]).filter(x => x != null && isFinite(x)); return v.length ? mean(v) : null; });
-  const nb = Math.round((MP.max_histogram_value - HIST_MIN) / MP.bin_width), bw = (MP.max_histogram_value - HIST_MIN) / nb;
-  const hist = vals => { const h = new Array(nb).fill(0); for (const v of vals) { if (v == null || !isFinite(v) || v < HIST_MIN || v > MP.max_histogram_value) continue; h[Math.min(nb - 1, Math.floor((v - HIST_MIN) / bw))]++; } return h; };
-  out.hist_bin_start = Array.from({ length: nb }, (_, k) => HIST_MIN + k * bw); out.bin_width = bw;
-  out.hist_interface = hist(out.sd); out.hist_control = hist(out.control_scores);
   out.expression = expressionCheck(cellsSel, partnerSel);
   M = out;
+  binHist();
   memOfCell = new Int32Array(NC).fill(-1); M.cell.forEach((c, k) => memOfCell[c] = k);
   eventEnrichment.fill(NaN); M.sd.forEach((v, k) => { if (v != null) { const e = C.event[M.cell[k]]; if (!(eventEnrichment[e] >= v)) eventEnrichment[e] = v; } });
 }
@@ -1056,6 +1108,13 @@ function drawMembranes() {
   svg.append(svgEl("path", { d: step(fc), fill: "none", stroke: "var(--muted)", "stroke-width": 2, "stroke-dasharray": "5 3" }));
   svg.append(svgEl("path", { d: step(fi), fill: "none", stroke: "var(--s3)", "stroke-width": 2 }));
   svg.append(svgEl("line", { x1: sx(0), x2: sx(0), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "2 3" }));
+  const auto = histView.max == null && histView.bin == null;
+  document.getElementById("hmax").textContent = fmt(M.hist_top, M.hist_top % 1 ? 1 : 0) + " SD";
+  document.getElementById("hbin").textContent = String(+M.hist_width.toFixed(3)) + " SD";
+  document.getElementById("hist-auto").classList.toggle("on", auto);
+  document.getElementById("hist-note").textContent = "Standard deviations above the mean of the membrane that touches no cell; fraction of cells per bin" +
+    `, ${M.hist_bin_start.length} bins from −5 SD` + (auto ? " (automatic scale)" : "") +
+    (M.hist_above ? `. ${M.hist_above.toLocaleString()} ${M.hist_above === 1 ? "cell lies" : "cells lie"} above the maximum and ${M.hist_above === 1 ? "is" : "are"} not counted.` : ".");
   const ps = document.getElementById("profile"); ps.replaceChildren();
   const avg = M.average, px = D.pixel_size, n = avg.length;
   const vals = avg.filter(v => v != null), lo = Math.min(0, ...vals), hi = Math.max(1, ...vals) * 1.1;
@@ -1299,7 +1358,7 @@ for (const b of document.querySelectorAll("button.apply")) {
 const VIEW_KEY = "isa-view:" + location.pathname.replace(/^\/files\/[^/]+\//, "/files/");
 function saveView() {
   const v = { filter: state.filter, sort: state.sort, zoom: state.zoom, outlines: state.outlines, interfaces: state.interfaces,
-              contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair },
+              contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair }, hist: { ...histView },
               channels: D.channels.map(c => ({ name: c.name, on: c.on, gain: c.gain ?? 1 })) };
   try { localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (e) {}
 }
@@ -1308,6 +1367,8 @@ try { VIEW = JSON.parse(localStorage.getItem(VIEW_KEY) || "null"); } catch (e) {
 if (VIEW) {
   for (const k of ["filter", "sort", "zoom", "outlines", "interfaces", "contacts"]) if (VIEW[k] != null) state[k] = VIEW[k];
   for (const c of VIEW.channels || []) { const ch = D.channels.find(x => x.name === c.name); if (ch) { ch.on = c.on; ch.gain = c.gain; } }
+  if (VIEW.hist && typeof VIEW.hist === "object") for (const k of ["max", "bin"]) {  // the histogram scale (null = automatic)
+    const v = VIEW.hist[k]; if (v === null || (typeof v === "number" && isFinite(v) && (k === "max" ? v > HIST_MIN : v > 0))) histView[k] = v; }
 }
 addEventListener("pagehide", saveView);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveView(); });

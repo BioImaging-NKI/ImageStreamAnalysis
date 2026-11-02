@@ -55,7 +55,9 @@ def import_page_shots(page: Page, url: str, want: set[str]) -> None:
     page.goto(url + "/")
     page.wait_for_selector(".zip img.thumb")
     page.wait_for_selector("#overview table")
+    page.wait_for_selector("#cp-status .chip.ok, #cp-status .chip.warn", timeout=120_000)  # the Cellpose check
     page.wait_for_timeout(500)
+    page.add_style_tag(content="header { position: static !important; }")  # not over a section in a shot
     # a public manual shows no folder of this computer
     page.evaluate("""() => {
         for (const e of document.querySelectorAll('.zip .path')) e.textContent = 'D:\\\\data\\\\example_export.zip';

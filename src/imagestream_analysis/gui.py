@@ -5,8 +5,8 @@ all datasets and see the overview of the results. The project is saved as `proje
 run as a subprocess (`imagestream-cli run-project`), whose log is streamed to the page.
 
 The server only listens on 127.0.0.1 and every API call must carry a random per-session token, so other web pages
-in the browser cannot use it. The page pings it every minute; it stops IDLE_TIMEOUT after the last ping or request
-(so 15 minutes after the page was closed; never during a run), or at once with the page's Quit button.
+in the browser cannot use it. The page pings it every minute; it stops IDLE_TIMEOUT (launcher.py) after the last ping
+or request (so 15 minutes after the page was closed; never during a run), or at once with the page's Quit button.
 """
 
 from __future__ import annotations
@@ -15,14 +15,11 @@ import json
 import logging
 import mimetypes
 import os
-import secrets
 import subprocess
 import sys
 import threading
 import time
-import urllib.request
-import webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
@@ -32,13 +29,11 @@ from . import __version__, ideas
 from .comparison import compare, write_comparison
 from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
+from .launcher import STATE_DIR
 from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview
 
 log = logging.getLogger(__name__)
-STATE_DIR = Path(os.environ.get("ISA_HOME") or Path.home() / ".imagestream_analysis")  # ISA_HOME: a test instance
-INSTANCE = STATE_DIR / "gui_instance.json"  # port of a running page server, so that a second start reuses it
 PREFS = STATE_DIR / "gui_prefs.json"  # last project folder, light / dark
-IDLE_TIMEOUT = 15 * 60  # s after the last request; the page pings every PING s
 PING = 60  # s
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -229,6 +224,57 @@ def apply_from_dashboard(data: dict[str, Any], job: Job) -> dict[str, Any]:
     return {"started": True, "datasets": n}
 
 
+CELLPOSE_CACHE = "cellpose_check.json"  # in STATE_DIR: the last result per Python
+_CELLPOSE_PROBE = (
+    "import json\n"
+    "info = {}\n"
+    "try:\n"
+    "    from importlib.metadata import version\n"
+    "    info['cellpose'] = version('cellpose')\n"
+    "    import torch\n"
+    "    info['torch'] = torch.__version__\n"
+    "    info['gpu'] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None\n"
+    "except Exception as e:\n"
+    "    info['error'] = f'{type(e).__name__}: {e}'\n"
+    "print(json.dumps(info))\n"
+)
+
+
+def check_cellpose(setting: str | None, fresh: bool = False) -> dict[str, Any]:
+    """The Cellpose version and GPU of the environment in 'Python with Cellpose' (empty: this one), as in
+    FAST-HIPPOS. Starting that Python and importing PyTorch takes seconds, so the last result is returned at once
+    (with "cached": true) unless fresh is set; the page then asks again with fresh=True in the background."""
+    from .segmentation import cellpose_python
+
+    try:
+        exe = cellpose_python(setting)
+    except ValueError as e:
+        return {"error": str(e)}
+    cache_file = STATE_DIR / CELLPOSE_CACHE
+    try:
+        cache: dict[str, Any] = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    if not fresh and exe in cache:
+        cached: dict[str, Any] = cache[exe] | {"cached": True}
+        return cached
+    try:
+        r = subprocess.run([exe, "-I", "-c", _CELLPOSE_PROBE], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=180, check=False, creationflags=NO_WINDOW)
+        lines = r.stdout.strip().splitlines()
+        result: dict[str, Any] = json.loads(lines[-1]) if lines else {"error": r.stderr[-500:]}
+    except Exception as e:  # noqa: BLE001 - shown on the page
+        result = {"error": f"{type(e).__name__}: {e}"}
+    result["python"] = exe
+    cache[exe] = result
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(cache, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+    return result
+
+
 def handle(api: str, data: dict[str, Any], job: Job) -> Any:
     if api == "state":
         prefs = load_prefs()
@@ -250,6 +296,8 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         return browse(str(data.get("kind", "zip")), str(data.get("initial", "")))
     if api == "scan":
         return scan_zip(str(data["path"]))
+    if api == "cellpose":
+        return check_cellpose(data.get("python") or None, bool(data.get("fresh")))
     if api == "open_project":
         p = Project.load(str(data["path"]))
         save_prefs({"project": str(p.folder)})
@@ -376,52 +424,8 @@ def make_handler(token: str, job: Job, last_seen: list[float]) -> type[BaseHTTPR
     return Handler
 
 
-def _running_instance() -> str | None:
-    try:
-        url = json.loads(INSTANCE.read_text(encoding="utf-8"))["url"]
-        with urllib.request.urlopen(url.rstrip("/") + "/ping", timeout=1) as r:
-            return str(url) if r.read() == b"imagestream-analysis" else None
-    except Exception:  # noqa: BLE001 - no (live) instance
-        return None
-
-
-def serve(port: int = 0, open_browser: bool = True) -> None:
-    url = _running_instance()
-    if url and port == 0:  # a page server is running: show it again instead of starting a second one
-        if open_browser:
-            webbrowser.open(url)
-        print(f"Already running: {url}")
-        return
-    token = secrets.token_urlsafe(24)
-    job = Job()
-    last_seen = [time.monotonic()]
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(token, job, last_seen))
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    INSTANCE.write_text(json.dumps({"url": url}), encoding="utf-8")
-
-    def watchdog() -> None:
-        while True:
-            time.sleep(30)
-            if not job.running and time.monotonic() - last_seen[0] > IDLE_TIMEOUT:
-                server.shutdown()
-                return
-
-    threading.Thread(target=watchdog, daemon=True).start()
-    print(f"ImageStream analysis: {url} (stops {IDLE_TIMEOUT // 60} min after the page was closed, or with Quit)")
-    if open_browser:
-        webbrowser.open(url)
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
-        try:
-            if json.loads(INSTANCE.read_text(encoding="utf-8")).get("url") == url:
-                INSTANCE.unlink()
-        except (OSError, ValueError):
-            pass
-
-
 def main_gui() -> int:
-    serve()
-    return 0
+    """The entry point of installs made before launcher.py (until the next uv sync rewrites imagestream.exe)."""
+    from .launcher import main_gui as start
+
+    return start()

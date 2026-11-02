@@ -142,7 +142,12 @@ that is used for the tables (see [Subtype markers](#subtype-markers)).
 
 - **Histogram**: the enrichment at the interface (aqua) of every cell with an interface, compared with random control
   windows on cells without an interface (dashed). The enrichment is expressed in standard deviations above the mean of
-  the free membrane, that is, the membrane that touches no other cell.
+  the free membrane, that is, the membrane that touches no other cell. The histograms start at −5 SD. By default the
+  scale is automatic: the maximum is the 99th percentile of the interface values or of the control windows, whichever
+  is higher, so that one extreme cell does not squeeze the rest into a few bins. The bin width is chosen to give at
+  most 60 bins. Use the **−** and **+** buttons under the plot to change the *maximum* or the *bin width*, and
+  **auto** to return to the automatic scale. The page redraws the histograms immediately and remembers the scale.
+  Values above the maximum are not counted; the note under the plot says how many cells that concerns.
 - **Average profile**: the average membrane profile of the cells with an interface, centered on the interface.
 - **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top.
 - **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the

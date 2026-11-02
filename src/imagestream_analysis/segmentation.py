@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -82,9 +83,29 @@ def cellpose_input(stack: EventStack, m: Markers, settings: Settings) -> tuple[n
     return stack_to_montage(nuclei + bf_norm, columns).astype(np.float32), [0, 0]
 
 
+def cellpose_python(setting: Path | str | None) -> str:
+    """The Python executable for Cellpose: the setting (an executable, or the folder of an environment: a venv,
+    conda or pixi environment, or a project folder with .venv or .pixi), or else this Python."""
+    if not setting or not str(setting).strip():
+        return sys.executable
+    path = Path(str(setting).strip().strip('"'))
+    if path.is_file():
+        return str(path)
+    if path.is_dir():
+        for sub in ("Scripts/python.exe", "python.exe", "bin/python", ".venv/Scripts/python.exe", ".venv/bin/python",
+                    ".pixi/envs/default/python.exe", ".pixi/envs/default/bin/python"):
+            if (path / sub).is_file():
+                return str(path / sub)
+        raise ValueError(f"Python with Cellpose: no python executable found in the folder {path}")
+    found = shutil.which(str(path))  # a command on the PATH
+    if found:
+        return found
+    raise ValueError(f"Python with Cellpose: {path} does not exist")
+
+
 def run_cellpose(image: np.ndarray, channels: list[int], settings: Settings) -> tuple[np.ndarray, dict[str, Any]]:
     seg = settings.segmentation
-    python = str(seg.cellpose_python) if seg.cellpose_python else sys.executable
+    python = cellpose_python(seg.cellpose_python)
     params = {"model": seg.model, "diameter": seg.diameter, "flow_threshold": seg.flow_threshold,
               "cellprob_threshold": seg.cellprob_threshold, "use_gpu": seg.use_gpu, "channels": channels}
     with tempfile.TemporaryDirectory(prefix="isa_cellpose_") as tmp:
@@ -95,6 +116,9 @@ def run_cellpose(image: np.ndarray, channels: list[int], settings: Settings) -> 
         proc = subprocess.run([python, "-I", str(RUNNER), str(src), str(dst), json.dumps(params)],
                               check=False, capture_output=True, text=True,
                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if proc.returncode != 0 and "No module named 'cellpose'" in proc.stderr:
+            raise RuntimeError(f"Cellpose is not installed in {python}. Set 'Python with Cellpose' to the Python (or "
+                               "the environment folder) of an environment that has Cellpose.")
         if proc.returncode != 0:
             raise RuntimeError(f"Cellpose failed (exit code {proc.returncode}):\n{proc.stderr[-3000:]}")
         info = {}

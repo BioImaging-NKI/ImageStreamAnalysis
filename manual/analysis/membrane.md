@@ -95,6 +95,14 @@ Cells without an interface get **control windows**: *Control windows per cell* (
 on their free membrane. Each window is as long as the median interface and is scored like an interface. The histogram
 of the controls shows how much a stretch of free membrane varies by chance in this dataset.
 
+Both histograms (in the dashboard and in the files `Histogram_interface_stdDevs_above_mean.tsv` and
+`Histogram_control_stdDevs_above_mean.tsv`) start at −5 SD and share one scale. If *Histogram maximum* and
+*Histogram bin width* are left empty, the scale is automatic. The maximum is the 99th percentile of the interface
+values or of the control windows, whichever is higher, but at least 5 SD, and it is rounded up to a whole number of
+bins. The bin width is the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, and so on, that gives at most 60 bins.
+Values above the maximum are not counted. You can change the scale in the dashboard without running the analysis
+again.
+
 **The control windows are not a control for the interface itself.** Because they lie on free membrane, they cannot
 show what the contact does to the measurement, independently of the marker. A contact can change the measurement in
 several ways: two stained membranes lie side by side (see below), the outline runs a little outside the membrane where

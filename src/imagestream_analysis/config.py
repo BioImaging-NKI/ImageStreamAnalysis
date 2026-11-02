@@ -117,7 +117,12 @@ class ChannelSettings:
         if self.has_marker_of_interest:
             out.marker_of_interest = number(self.marker_of_interest, "marker_of_interest")
         out.tumor = number(self.tumor, "tumor")
-        out.immune = [number(c, "immune marker") for c in self.immune]
+        # The immune markers are summed: a zip needs at least one of them, not all (another zip of the project may
+        # name its immune marker differently).
+        present = [c for c in self.immune if isinstance(c, int) or c in names]
+        if self.immune and not present:
+            number(self.immune[0], "immune marker")  # raises: no channel with this name
+        out.immune = [number(c, "immune marker") for c in present]
         out.functional = [number(c, "functional marker") for c in self.functional]
         return out
 
@@ -143,7 +148,8 @@ class SegmentationSettings:
     # The number of events per row in the montage that Cellpose segments. 0 makes the montage about square. Setting
     # it to the number of events gives a single row, as in the Fiji macro.
     montage_columns: int = 0
-    # The python.exe of an environment with Cellpose 3 or 4. Empty means the environment of this program.
+    # The python.exe of an environment with Cellpose 3 or 4, or the folder of that environment (a venv, conda or
+    # pixi environment, or a project folder with .venv or .pixi). Empty means the environment of this program.
     cellpose_python: Path | None = None
     erosion: int = 1  # Shrink the cells by this many pixels at their border with the background.
     # Cells smaller than this (in pixels, after shrinking) are removed.
@@ -218,9 +224,13 @@ class MembraneSettings:
     # 20x, 9 px at 40x, 13 px at 60x). This width lets the band reach the membrane where the outline lies a little
     # outside it.
     straightening_width: int | None = None
-    # The upper end of the histograms, in SD above the mean. The histograms start at -5.
-    max_histogram_value: float = 20.0
-    histogram_bin_width: float = 0.25  # The bin width of the histograms, in SD.
+    # The upper end of the histograms, in SD above the mean. The histograms start at -5. Empty means automatic: the
+    # 99th percentile of the interface values or of the control windows, whichever is higher (at least 5), rounded up
+    # to a whole number of bins. Values above the upper end are not counted.
+    max_histogram_value: float | None = None
+    # The bin width of the histograms, in SD. Empty means automatic: the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5,
+    # 10, ... that gives at most 60 bins (usually 25 to 60).
+    histogram_bin_width: float | None = None
     # The number of random control windows per cell without an interface. Each window is as long as the median
     # interface.
     control_repeats: int = 10

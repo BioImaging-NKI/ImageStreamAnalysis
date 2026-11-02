@@ -255,3 +255,13 @@ def test_datasets_of_an_experiment_are_classified_together(ideas_zip, pool):
     assert (table["interactions"] == 10).all()
     log_text = (a / "log.txt").read_text(encoding="utf-8")
     assert "Marker normalization" in log_text and "Done in" in log_text  # one log over both stages
+
+
+def test_one_immune_marker_per_zip_is_enough():
+    """The immune markers are summed: a zip needs one of them, not all (another zip may name its marker otherwise)."""
+    ch = ChannelSettings(brightfield="BF", marker_of_interest="", tumor="Tumor", immune=["CD3", "T cells"],
+                         functional=[])
+    numbers, names = [1, 2, 3], ["BF", "Tumor", "T cells"]
+    assert ch.resolved(numbers, names).immune == [3]
+    with pytest.raises(ValueError, match="immune marker 'CD3'"):
+        ch.resolved(numbers, ["BF", "Tumor", "other"])

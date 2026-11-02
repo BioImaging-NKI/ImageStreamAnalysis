@@ -100,11 +100,53 @@ def _score(window: np.ndarray, rest: np.ndarray) -> float:
     return float((window.mean() - rest.mean()) / sd) if sd > 0 else float("nan")
 
 
-def _histogram(values: np.ndarray, settings: MembraneSettings) -> pd.DataFrame:
-    """As the macro's Distribution: round((max+5)/binWidth) bins over [-5, max]; values outside are not counted."""
-    hi = settings.max_histogram_value
-    n_bins = int(round((hi - HISTOGRAM_MIN) / settings.histogram_bin_width))
-    counts, edges = np.histogram(values[np.isfinite(values)], bins=n_bins, range=(HISTOGRAM_MIN, hi))
+HISTOGRAM_PERCENTILE = 99.0  # automatic maximum: this percentile of the interface or the control values
+HISTOGRAM_MIN_TOP = 5.0  # automatic maximum: at least this
+HISTOGRAM_MAX_BINS = 60  # automatic bin width: the smallest nice step that gives at most this many bins
+HISTOGRAM_FALLBACK_TOP = 20.0  # automatic maximum when there are no values (the macro's default)
+
+
+def _nice_step(raw: float) -> float:
+    """The smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, ... that is at least `raw` (each divides 5)."""
+    if raw <= 0.1:
+        return 0.1
+    for step in (0.2, 0.25, 0.5):
+        if raw <= step + 1e-12:
+            return step
+    unit = 1.0
+    while True:
+        for m in (1.0, 2.5, 5.0):
+            if raw <= m * unit + 1e-12:
+                return m * unit
+        unit *= 10
+
+
+def histogram_scale(interface: np.ndarray, control: np.ndarray, max_value: float | None = None,
+                    bin_width: float | None = None) -> tuple[float, float, int]:
+    """The histogram range [-5, top], its bin width and number of bins. An empty (None or 0) setting is automatic:
+
+    - top: the 99th percentile (numpy's linear interpolation) of the finite interface values or of the control
+      windows, whichever is higher, at least 5 (20 without values), rounded up to a whole number of bins;
+    - bin width: the smallest nice step (_nice_step) that gives at most 60 bins over [-5, top].
+
+    Explicit values are used as given, as in the macro: round((top + 5) / bin width) bins. The dashboard repeats this
+    rule in JS (histScale in templates/dashboard.html)."""
+    if max_value:
+        top = float(max_value)
+    else:
+        finite = [v[np.isfinite(v)] for v in (np.asarray(interface, float), np.asarray(control, float))]
+        pcts = [float(np.percentile(v, HISTOGRAM_PERCENTILE)) for v in finite if len(v)]
+        top = max(HISTOGRAM_MIN_TOP, *pcts) if pcts else HISTOGRAM_FALLBACK_TOP
+    width = float(bin_width) if bin_width else _nice_step((top - HISTOGRAM_MIN) / HISTOGRAM_MAX_BINS)
+    if not max_value:
+        top = round(HISTOGRAM_MIN + float(np.ceil((top - HISTOGRAM_MIN) / width - 1e-9)) * width, 10)
+    n_bins = max(1, int(round((top - HISTOGRAM_MIN) / width)))
+    return top, width, n_bins
+
+
+def _histogram(values: np.ndarray, top: float, n_bins: int) -> pd.DataFrame:
+    """As the macro's Distribution: n_bins bins over [-5, top]; values outside are not counted."""
+    counts, edges = np.histogram(values[np.isfinite(values)], bins=n_bins, range=(HISTOGRAM_MIN, top))
     return pd.DataFrame({"bin_start": edges[:-1], "counts": counts})
 
 
@@ -345,7 +387,7 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, cell_of_interest
     avg = np.where(counts > 0, np.nansum(with_if[:, :length], axis=0) / np.maximum(counts, 1), np.nan)
     average = pd.DataFrame({"position (px)": np.arange(length), "profile": avg})
     control = np.array(control_all, dtype=float)
-    return MembraneResult(table_df, profiles, lengths, has, average,
-                          _histogram(table_df["stdDevs above mean"].to_numpy(dtype=float) if n else np.zeros(0),
-                                     settings),
-                          _histogram(control, settings), control, window)
+    sd_values = table_df["stdDevs above mean"].to_numpy(dtype=float) if n else np.zeros(0)
+    top, _, n_bins = histogram_scale(sd_values, control, settings.max_histogram_value, settings.histogram_bin_width)
+    return MembraneResult(table_df, profiles, lengths, has, average, _histogram(sd_values, top, n_bins),
+                          _histogram(control, top, n_bins), control, window)

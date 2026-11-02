@@ -31,7 +31,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; bord
 header h1 { font-size: 18px; margin: 0; font-weight: 600; }
 header .version { color: var(--muted); font-size: 12px; }
 header .spacer { flex: 1; }
-main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
 section > h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
 section > h2 .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
@@ -43,11 +43,15 @@ input, select, button { font: inherit; color: var(--text); }
 input[type=text], input[type=number], select { background: var(--input); border: 1px solid var(--line);
   border-radius: 5px; padding: 5px 8px; min-width: 0; }
 input[type=text].wide { flex: 1 1 360px; }
-input[type=number] { width: 90px; }
+input[type=number] { width: 120px; }
 button { background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 5px 12px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 button:disabled { opacity: .5; cursor: default; }
+button svg.icon { width: 15px; height: 15px; vertical-align: -3px; margin-right: 6px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+button.icon-only svg.icon { margin-right: 0; }
+.row.bottom { justify-content: flex-end; margin: 0; }
 button.link { background: none; border: none; color: var(--accent); padding: 0 4px; }
 a { color: var(--accent); }
 table { border-collapse: collapse; width: 100%; }
@@ -65,6 +69,9 @@ td.role, th.role { text-align: center; }
 .scroll { overflow-x: auto; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { background: var(--chip); border-radius: 10px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+.chip.ok { background: color-mix(in srgb, var(--ok) 15%, var(--panel)); color: var(--ok); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 15%, var(--panel)); color: var(--warn); }
+legend .chip { margin-left: 8px; font-weight: 400; }
 .problems { color: var(--warn); margin: 6px 0; padding-left: 18px; }
 .error { color: var(--error); }
 .ok { color: var(--ok); }
@@ -76,8 +83,15 @@ td.role, th.role { text-align: center; }
 .settings-row.wide input { flex: 1; }
 .settings-row select { max-width: 50%; }
 @media (max-width: 720px) { .settings-row, .settings-row.three { grid-template-columns: 1fr; } }
-fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; padding: 8px 12px; }
+fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 10px 0; padding: 8px 12px 10px; }
 legend { color: var(--muted); padding: 0 4px; }
+/* the setting groups: lightly tinted blocks, one hue each, so that they are told apart at a glance */
+fieldset.tint { --hue: #2a78d6; background: color-mix(in srgb, var(--hue) 6%, var(--panel));
+  border-color: color-mix(in srgb, var(--hue) 28%, var(--line)); }
+fieldset.tint legend { color: var(--text); font-weight: 600; background: var(--panel); border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--hue) 28%, var(--line)); padding: 1px 8px; }
+fieldset.tint-1 { --hue: #1baf7a; } fieldset.tint-2 { --hue: #eb6834; } fieldset.tint-3 { --hue: #eda100; }
+fieldset.tint-4 { --hue: #e87ba4; } fieldset.tint-5 { --hue: #8a63d2; }
 pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 260px;
   overflow: auto; font-size: 12px; white-space: pre-wrap; margin: 8px 0 0; }
 progress { width: 260px; }
@@ -91,9 +105,12 @@ progress { width: 260px; }
 <header>
   <h1>ImageStream Analysis</h1><span class="version">v__ISA_VERSION__</span>
   <span class="spacer"></span>
-  <button id="helpBtn" title="The manual of this page. ? or F1 over a step: the part about that step">? Help</button>
-  <button id="theme" title="Light / dark">◐</button>
-  <button id="quit" title="Save the project and stop ImageStream Analysis (it also stops by itself 15 minutes after this page was closed)">Quit</button>
+  <button id="open-project" data-icon="load" title="Open the settings of a project (its project.toml)">Load settings…</button>
+  <button id="save" data-icon="save" title="Save the settings of this project (project.toml in the output folder), without running">Save settings</button>
+  <span id="saved" class="ok"></span>
+  <button id="helpBtn" data-icon="help" title="The manual of this page. ? or F1 over a step: the part about that step">Help</button>
+  <button id="theme" data-icon="theme" title="Light / dark" aria-label="Light / dark"></button>
+  <button id="quit" data-icon="quit" title="Save the project and stop ImageStream Analysis (it also stops by itself 15 minutes after this page was closed)">Quit</button>
 </header>
 <main>
   <section>
@@ -101,10 +118,7 @@ progress { width: 260px; }
     <p class="hint">All results and the project file (<code>project.toml</code>) go to this folder.</p>
     <div class="row">
       <input type="text" id="folder" class="wide" placeholder="Output folder of the project">
-      <button id="browse-folder">Browse…</button>
-      <button id="open-project">Open project…</button>
-      <button id="save">Save</button>
-      <span id="saved" class="ok"></span>
+      <button id="browse-folder" data-icon="folder">Browse…</button>
     </div>
   </section>
 
@@ -116,9 +130,9 @@ progress { width: 260px; }
       overview. To compare conditions, give each dataset its condition (control, treated, …) and its replicate (the
       donor or independent experiment it comes from).</p>
     <div class="row">
-      <button id="add-zip" class="primary">Add zip files…</button>
+      <button id="add-zip" class="primary" data-icon="add">Add zip files…</button>
       <input type="text" id="zip-path" class="wide" placeholder="…or paste the path of a zip">
-      <button id="add-path">Add</button>
+      <button id="add-path" data-icon="add">Add</button>
     </div>
     <div id="zips"></div>
   </section>
@@ -133,8 +147,8 @@ progress { width: 260px; }
     <h2 data-help="guide/import-page#4-run"><span class="step">4</span>Run</h2>
     <ul id="problems" class="problems"></ul>
     <div class="row">
-      <button id="run" class="primary">Run all datasets</button>
-      <button id="stop" disabled>Stop</button>
+      <button id="run" class="primary" data-icon="run">Run all datasets</button>
+      <button id="stop" data-icon="stop" disabled>Stop</button>
       <progress id="progress" max="1" value="0" hidden></progress>
       <span id="progress-text"></span>
     </div>
@@ -144,11 +158,15 @@ progress { width: 260px; }
   <section>
     <h2 data-help="guide/import-page#5-overview"><span class="step">5</span>Overview</h2>
     <div class="row">
-      <button id="refresh">Refresh</button>
-      <button id="open-folder">Open folder</button>
+      <button id="refresh" data-icon="refresh">Refresh</button>
+      <button id="open-folder" data-icon="folder">Open folder</button>
     </div>
     <div id="overview" class="scroll"><p class="hint">No results yet.</p></div>
   </section>
+  <div class="row bottom">
+    <button id="save-bottom" data-icon="save" title="Save the settings of this project (project.toml in the output folder), without running">Save settings</button>
+    <span id="saved-bottom" class="ok"></span>
+  </div>
 </main>
 <div id="toast"></div>
 <script id="isa-help" type="application/json">__ISA_HELP__</script>
@@ -157,6 +175,35 @@ progress { width: 260px; }
 <script>
 "use strict";
 const TOKEN = "__ISA_TOKEN__";
+// ---------- icons (inline SVG, 24 x 24, stroked in the text color)
+const ICONS = {
+  save: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8V3"/><rect x="7" y="13" width="10" height="8" rx="1"/>',
+  load: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8V3"/><path d="M12 20v-7m-3 3 3-3 3 3"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  add: '<path d="M12 5v14M5 12h14"/>',
+  run: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5v.01"/>',
+  theme: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/>',
+  quit: '<path d="M12 3v8"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  remove: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+  reset: '<path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/>',
+};
+function iconSvg(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("class", "icon"); svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = ICONS[name];
+  return svg;
+}
+function withIcon(button, name) {  // put the icon in front of the label (once)
+  if (!button.querySelector("svg.icon")) button.prepend(iconSvg(name));
+  if (!button.textContent.trim()) button.classList.add("icon-only");
+  return button;
+}
+document.querySelectorAll("button[data-icon]").forEach(b => withIcon(b, b.dataset.icon));
+
 // the roles of the panel: [key, column, description]; immune and functional take several markers
 const ROLES = [["brightfield", "BF", "Brightfield"], ["tumor", "Tumor", "Tumor marker"],
                ["immune", "Immune", "Immune-cell marker (several are summed)"],
@@ -306,7 +353,7 @@ function renderZips() {
 function renderZip(z) {
   const info = z.info;
   const head = el("h3", {}, el("span", { class: "title" }, z.name, el("span", { class: "path" }, z.path)),
-    el("button", { onclick: () => { state.zips = state.zips.filter(x => x !== z); renderZips(); renderProblems(); } }, "Remove"));
+    withIcon(el("button", { onclick: () => { state.zips = state.zips.filter(x => x !== z); renderZips(); renderProblems(); } }, "Remove"), "remove"));
   const card = el("div", { class: "zip" }, head);
   if (!info) { card.append(el("p", { class: "hint" }, "Reading…")); return card; }
   if (info.error) { card.append(el("p", { class: "error" }, info.error)); return card; }
@@ -361,7 +408,7 @@ function renderZip(z) {
     "This zip has its own roles by channel number (from an older project), which override the ticks above: " +
     Object.entries(z.roles).map(([r, v]) => `${r.replace(/_/g, " ")} = Ch${[].concat(v).join(", Ch")}`).join("; ")));
   if (state.zips.length > 1) card.append(el("div", { class: "row" },
-    el("button", { title: "Copy pixel size and channels to the other zips", onclick: () => copySetup(z) }, "Copy setup to all")));
+    withIcon(el("button", { title: "Copy the pixel size and channel names to the other zips", onclick: () => copySetup(z) }, "Copy setup to all"), "copy")));
   return card;
 }
 function copySetup(src) {
@@ -404,18 +451,49 @@ const FIELDS = [
     [["membrane.straightening_width", "Straightening width (px)", "int", null, "about 4.5 µm"],
      ["membrane.inside_only", "Straighten inside the measured cell only", "bool"]],
     [["membrane.control_repeats", "Control windows per cell", "int"],
-     ["membrane.max_histogram_value", "Histogram maximum (SD)", "float"],
-     ["membrane.histogram_bin_width", "Histogram bin width (SD)", "float"]]]]];
+     ["membrane.max_histogram_value", "Histogram maximum (SD)", "float", null, "automatic"],
+     ["membrane.histogram_bin_width", "Histogram bin width (SD)", "float", null, "automatic"]]]]];
 function getS(path) { const [a, b] = path.split("."); return state.settings[a][b]; }
-function setS(path, v) { const [a, b] = path.split("."); state.settings[a][b] = v; if (path === "membrane.analysis") renderProblems(); }
+function setS(path, v) {
+  const [a, b] = path.split("."); state.settings[a][b] = v;
+  if (path === "membrane.analysis") renderProblems();
+  if (path === "segmentation.cellpose_python" || path === "segmentation.use_gpu") showCellpose();
+}
+
+// ---------- Cellpose and GPU: checked in the background (as in FAST-HIPPOS), shown as a chip at the segmentation
+const CP = {};  // per Python setting: the result of api("cellpose"), or { pending: true }
+async function checkCellpose(py) {
+  CP[py] = { pending: true };
+  try { CP[py] = await api("cellpose", { python: py }); } catch (e) { CP[py] = { error: e.message }; }
+  showCellpose();
+  if (CP[py].cached) {  // the last result at once; then the environment again, to see changes
+    try { CP[py] = await api("cellpose", { python: py, fresh: true }); } catch (e) { CP[py] = { error: e.message }; }
+    showCellpose();
+  }
+}
+function cellposeChip() {
+  const py = getS("segmentation.cellpose_python") || "", r = CP[py];
+  if (!r) { checkCellpose(py); return el("span", { class: "chip" }, "checking Cellpose…"); }
+  if (r.pending) return el("span", { class: "chip" }, "checking Cellpose…");
+  if (r.error || !r.cellpose) return el("span", { class: "chip warn", title: r.error || "" },
+    py ? "Cellpose not found in this Python" : "Cellpose not found in this environment: set Python with Cellpose");
+  if (!r.gpu) return el("span", { class: "chip warn", title: r.python || "" },
+    `Cellpose ${r.cellpose} · no GPU found: CPU only (slow)`);
+  return el("span", { class: "chip ok", title: r.python || "" },
+    `Cellpose ${r.cellpose} · GPU ${r.gpu}` + (getS("segmentation.use_gpu") ? "" : " (switched off)"));
+}
+function showCellpose() {
+  const box = document.getElementById("cp-status");
+  if (box) box.replaceChildren(cellposeChip());
+}
 function settingInput(path, kind, list, placeholder) {
   const v = getS(path);
   if (kind === "thresholds") {  // set from a dashboard; shown, and back to automatic with the button
     const names = Object.keys(v || {});
     if (!names.length) return el("span", {}, "none: all automatic");
     return el("span", { class: "row" }, names.map(n => `${n} = ${+(+v[n]).toPrecision(4)}`).join(", "),
-      el("button", { onclick: e => { e.preventDefault(); setS(path, {}); renderSettings(); },
-                     title: "Remove the thresholds set by hand: the next run computes them all again" }, "Automatic again"));
+      withIcon(el("button", { onclick: e => { e.preventDefault(); setS(path, {}); renderSettings(); },
+                     title: "Remove the thresholds set by hand: the next run computes them all again" }, "Automatic again"), "reset"));
   }
   if (kind === "choice") return el("select", { onchange: e => setS(path, e.target.value) },
     (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
@@ -429,7 +507,7 @@ function settingInput(path, kind, list, placeholder) {
 }
 function renderSettings() {
   const box = document.getElementById("settings"); box.replaceChildren();
-  for (const [title, help, rows] of FIELDS) {
+  for (const [k, [title, help, rows]] of FIELDS.entries()) {
     const group = el("div", { class: "settings-rows" });
     for (const fields of rows) {
       const wide = fields.length === 1 && ["text", "list", "thresholds"].includes(fields[0][2]);
@@ -437,8 +515,11 @@ function renderSettings() {
         fields.map(([path, label, kind, list, placeholder]) =>  // a div, not a label, around a button (a click on a label clicks it)
           el(kind === "thresholds" ? "div" : "label", {}, label, settingInput(path, kind, list, placeholder)))));
     }
-    box.append(el("fieldset", {}, el("legend", { "data-help": help }, title), group));
+    const legend = el("legend", { "data-help": help }, title);
+    if (k === 1) legend.append(el("span", { id: "cp-status" }));  // Segmentation (Cellpose)
+    box.append(el("fieldset", { class: `tint tint-${k % 6}` }, legend, group));
   }
+  showCellpose();
 }
 
 // ---------- run
@@ -456,6 +537,10 @@ function problems() {
       const names = MULTI.has(r) ? (v || []) : (v == null || v === "" ? [] : [v]);
       const needed = REQUIRED.includes(r) && (r !== "marker_of_interest" || state.settings.membrane.analysis);
       if (!names.length && needed) { p.push(`Tick a channel as ${desc.split(" (")[0].toLowerCase()} (step 2)`); continue; }
+      if (r === "immune") {  // summed: one of the immune markers in each zip is enough
+        if (!names.some(n => typeof n !== "string" || has(n))) p.push(`${z.name}: tick a channel as immune-cell marker`);
+        continue;
+      }
       const missing = names.filter(n => typeof n === "string" && !has(n));
       if (missing.length) p.push(`${z.name}: no channel named ${missing.map(n => `'${n}'`).join(", ")} (${desc.split(" (")[0].toLowerCase()})`);
     }
@@ -463,7 +548,18 @@ function problems() {
   if (state.zips.length && !state.zips.some(z => z.datasets.some(d => d.include))) p.push("Select at least one dataset");
   return p;
 }
+function pruneRoles() {  // a role name that no zip has any more (renamed, zip removed) cannot be seen or unticked
+  const zips = state.zips.filter(z => !Object.keys(z.roles || {}).length);
+  if (!zips.length) return;
+  const known = new Set(zips.flatMap(z => z.channel_names.filter(Boolean)));
+  for (const [r] of ROLES) {
+    const v = panel()[r];
+    if (MULTI.has(r)) panel()[r] = (v || []).filter(n => typeof n !== "string" || known.has(n));
+    else if (typeof v === "string" && v && !known.has(v)) panel()[r] = null;
+  }
+}
 function renderProblems() {
+  pruneRoles();
   const p = problems();
   document.getElementById("problems").replaceChildren(...p.map(m => el("li", {}, m)));
   document.getElementById("run").disabled = p.length > 0 || !!polling;
@@ -472,8 +568,10 @@ async function save() {
   try {
     const r = await api("save", { project: toProject() });
     forgetDraft();
-    document.getElementById("saved").textContent = "Saved";
-    setTimeout(() => document.getElementById("saved").textContent = "", 2500);
+    for (const id of ["saved", "saved-bottom"]) {
+      document.getElementById(id).textContent = "Saved";
+      setTimeout(() => document.getElementById(id).textContent = "", 2500);
+    }
     return r;
   } catch (e) { toast(e.message); }
 }
@@ -632,6 +730,7 @@ document.getElementById("open-project").onclick = async () => {
 };
 document.getElementById("folder").onchange = () => { renderProblems(); refreshOverview(); };
 document.getElementById("save").onclick = save;
+document.getElementById("save-bottom").onclick = save;
 document.getElementById("quit").onclick = quit;
 document.getElementById("add-zip").onclick = async () => {
   for (const p of await api("browse", { kind: "zip", initial: state.zips[0]?.path.replace(/[\\/][^\\/]*$/, "") || "" })) await addZip(p);

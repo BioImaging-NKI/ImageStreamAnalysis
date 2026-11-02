@@ -23,7 +23,7 @@ dependencies = [
 imagestream-cli = "imagestream_analysis.cli:main"  # command line
 
 [project.gui-scripts]
-imagestream = "imagestream_analysis.gui:main_gui"  # the import and run page in the browser, without a console
+imagestream = "imagestream_analysis.launcher:main_gui"  # the import and run page in the browser, without a console
 
 [project.optional-dependencies]
 # Cellpose in this environment (optional). Both versions can also run from another environment via

@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "gui":
-        from .gui import serve
+        from .launcher import serve
 
         serve(args.port, open_browser=not args.no_browser)
         return 0

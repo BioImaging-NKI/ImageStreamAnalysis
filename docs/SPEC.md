@@ -169,7 +169,8 @@ For the cell of interest (`CellOfInterest`; both `markerLoc` branches are identi
 ## 9. Histograms (lines 829-891) ✅
 
 `stdDevs above mean` (interface) and `control stdDevs above mean`: `round((maxHistValue+5)/binWidth)` bins over
-[−5, maxHistValue] (100 bins with the defaults) → `Histogram_*_stdDevs_above_mean.tsv/.png`.
+[−5, maxHistValue] (100 bins with the defaults) → `Histogram_*_stdDevs_above_mean.tsv/.png`. The port scales
+automatically by default (see below).
 
 ## 10. Aligned profiles (lines 898-996) ✅
 
@@ -223,6 +224,18 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   pixel + total interface length / 2). Cells without interface are not shifted and **not averaged (I11)**.
 - Average profile over the cells with an interface, up to round(mean + sd) of their lengths, NaN-aware.
 - Histograms: as the macro, but the first column is called `bin_start` (the macro's `bin_center` holds the bin starts).
+- **Automatic histogram scale (2026-11-02, the user).** `membrane.max_histogram_value` and
+  `membrane.histogram_bin_width` default to empty = automatic (the macro: 20 and 0.25, 100 bins).
+  `membrane.histogram_scale`: maximum = the 99th percentile (linear interpolation) of the finite interface values or
+  of the control windows, whichever is higher, at least 5 (20 without values), rounded up to a whole number of bins
+  from −5; bin width = the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, 25, ... giving at most 60 bins (all divide
+  5, so a bin edge lies at 0). Explicit values are used as before (round((max + 5) / width) bins). Reason: with a
+  fixed 20 SD most of the plot was empty or, with strong enrichment, the tail was cut; a percentile keeps one
+  extreme cell from squeezing the rest. The lower end stays at −5, as in the macro (the control windows centre on 0, and
+  strongly negative interfaces are rare). Effect: only the binning of the two histogram tables changes; no cell
+  value changes (not rerun on the test data). The dashboard repeats the rule in JS (`histScale`), with −/+ buttons for the maximum and the bin width and
+  *auto*, rebinning live from every cell's value and the control windows; the scale is kept in the remembered view.
+  Its control windows use a fixed seed, so its automatic scale can differ by a bin from the run's tables.
 - `membrane_profiles_normalized.tif`: one row per row of the membrane table, NaN beyond the length. Plots ⬜ (dashboard).
 
 Validation on the test data (2026-10-22), on distributions: the number of cells with an interface and the medians

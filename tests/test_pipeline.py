@@ -94,6 +94,12 @@ def test_settings_round_trip(tmp_path):
     path.write_text(s.to_toml(), encoding="utf-8")
     loaded = Settings.load(path)
     assert loaded == s
+    assert loaded.membrane.max_histogram_value is None and loaded.membrane.histogram_bin_width is None  # automatic
+    s.membrane.max_histogram_value, s.membrane.histogram_bin_width = 15.0, 0.5  # explicit values still work
+    path.write_text(s.to_toml(), encoding="utf-8")
+    assert Settings.load(path) == s
+    path.write_text("[membrane]\nmax_histogram_value = 20\nhistogram_bin_width = 1\n", encoding="utf-8")  # ints too
+    assert Settings.load(path).membrane.max_histogram_value == 20.0
 
 
 def test_relative_paths_are_relative_to_the_settings_file(tmp_path):
@@ -223,3 +229,20 @@ def test_pair_table_of_every_membrane_pair(synthetic):
     row = t.loc[("Tumor", "Immune")]
     assert row["cells with an interface"] == 10 and row["median stdDevs above mean"] > 2
     assert row["marker check"] and (result.out_dir / "Membrane pairs.tsv").exists()
+
+
+def test_cellpose_python_accepts_an_environment_folder(tmp_path):
+    """A folder (venv, conda, pixi, or a project with .venv) stands for the Python inside it."""
+    import sys
+
+    from imagestream_analysis.segmentation import cellpose_python
+
+    assert cellpose_python(None) == sys.executable and cellpose_python("") == sys.executable
+    exe = tmp_path / "env" / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"")
+    assert cellpose_python(tmp_path / "env") == str(exe)
+    assert cellpose_python(tmp_path / "env" / ".venv") == str(exe)
+    assert cellpose_python(exe) == str(exe)
+    with pytest.raises(ValueError, match="no python executable"):
+        cellpose_python(tmp_path)

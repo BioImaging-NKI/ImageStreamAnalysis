@@ -21,7 +21,7 @@ In the dataset tables of the import page (step 2), give each dataset that should
 Several datasets with the same condition and the same replicate (for example two tubes from one donor) are pooled
 into one. They are technical repeats, not replicates: only independent units count as replicates.
 
-You can set or change the labels after the analysis. The overview updates at once, and *Save* writes
+You can set or change the labels after the analysis. The overview updates at once, and *Save settings* writes
 `condition comparison.tsv` again. On the command line, `imagestream-cli overview <project folder>` does the same.
 
 **Classify the conditions together.** Otherwise a subtype can differ between conditions only because its threshold
