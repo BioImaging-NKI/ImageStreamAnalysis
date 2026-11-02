@@ -1,153 +1,169 @@
 # The dashboard
 
-Every analysed dataset gets a `dashboard.html` in its folder. It opens from the overview of the import page, or
-directly from disk (double-click): it needs no server and no internet, so a folder can be sent to a colleague. The
-event images are in `dashboard_files/` next to it.
+Every analyzed dataset gets a `dashboard.html` file in its folder. You can open it from the overview of the import
+page, or directly from disk by double-clicking it. It needs no server and no internet connection, so you can send the
+folder to a colleague. The event images are stored in the `dashboard_files/` folder next to it.
 
-Everything is **linked**: hovering a cell in the events, a plot or a table highlights it everywhere; clicking selects
-it and shows it in the *Cell* card. *Esc* clears the selection. `dashboard.html#cell=12` or `#event=5` in the address
-selects that cell (row of the cell table) or event when the page opens.
+All views on the page are **linked**. When you hover over a cell in the events, in a plot or in a table, it is
+highlighted in every view. Clicking a cell selects it and shows it in the *Cell* card. Press *Esc* to clear the
+selection. To select a cell or an event when the page opens, add `#cell=12` or `#event=5` to the address, as in
+`dashboard.html#cell=12`; the cell number is its row in the cell table.
 
-The page remembers its view (channels and their brightness, overlays, filter, sort, size, membrane pair and tabs) in
-the browser, per dashboard, and shows it again the next time it is opened.
+The page remembers its view in the browser, separately for each dashboard: the channels and their brightness, the
+overlays, the filter, the sort order, the size, the membrane pair and the open tabs. The next time you open the
+dashboard, it shows the same view again.
 
 ![The dashboard](../images/dash_overview.png)
 
 ## Top: counts and filters
 
-The header counts events, cells, cell types, events with one tumor and one immune cell, touching pairs, artefacts and
-cells with an interface. The filter row below applies to every view:
+The header shows the number of events, cells, cell types, events with one tumor cell and one immune cell, touching
+pairs, artefacts and cells with an interface. The filter row below the header applies to every view:
 
-- **Events**: all, those with immune and tumor cells, one tumor + one immune cell, those with an interface, those with
-  touching cells. A contact chosen in the [interaction matrix](#interactions) adds a chip here (✕ clears it).
-- **Sort**: the order of the events.
-- **Size**: the size of the event images; also <kbd>Ctrl</kbd>+scroll over the gallery. Small events show only
-  their number (hover for the IDEAS object number).
+- **Events**: shows all events, the events with immune cells and tumor cells, the events with one tumor cell and one
+  immune cell, the events with an interface, or the events with touching cells. When you choose a contact in the
+  [interaction matrix](#interactions), a chip for it is added here; click ✕ to remove it.
+- **Sort**: sets the order of the events.
+- **Size**: sets the size of the event images. You can also hold <kbd>Ctrl</kbd> and scroll over the gallery. Small
+  event images show only their event number; hover over one to see its IDEAS object number.
 
-The **?** button behind a heading, and the **? Help** button at the top, open the part of this manual about it in a
-panel at the side; <kbd>F1</kbd> or <kbd>?</kbd> does the same for the card under the mouse. The panel works offline.
+The **?** button after a heading, and the **? Help** button at the top, open the part of this manual that describes
+that item in a panel at the side of the page. <kbd>F1</kbd> or <kbd>?</kbd> does the same for the card under the
+mouse pointer. The help panel also works offline.
 
 ![The help of the subtype markers, next to the card](../images/dash_help.png){ width="600" }
 
 ## Events
 
-The events as a gallery, with the cells outlined in the colour of their type and the interfaces in aqua. Only the
-visible events are drawn, so large datasets stay fast.
+This card shows the events as a gallery. Each cell is outlined in the color of its cell type, and the interfaces are
+drawn in aqua. Only the events that are visible on the screen are drawn, so the page stays fast for large datasets.
 
 ## Channels and overlays
 
-The column left of the gallery switches what is drawn in the event images:
+The column to the left of the gallery controls what is drawn in the event images:
 
-- **Channels**: one row per channel, with a tick box and its brightness. Double-click a channel's name to show only
-  that channel. Brightfield starts at half brightness, under the fluorescence.
-- **Overlays**: the **outlines** of the cells (in the colour of their type), the **interfaces** and the **contacts**:
-  a white line, with a dark edge, between the centres of every two cells that touch.
+- **Channels**: one row per channel, with a tick box to show or hide the channel and a control for its brightness.
+  Double-click the name of a channel to show only that channel. The brightfield channel starts at half brightness,
+  underneath the fluorescence channels.
+- **Overlays**: the **outlines** of the cells (in the color of their cell type), the **interfaces**, and the
+  **contacts**. A contact is drawn as a white line with a dark edge between the centers of two cells that touch.
 
 ## Cell
 
-The selected cell: its event, measurements, subtype markers (value, positive or negative), the cells it touches, and,
-with the membrane analysis, its membrane profile aligned on the interface.
+This card shows the selected cell: its event, its measurements, its subtype markers (the value, and whether it is
+positive or negative), and the cells it touches. If the membrane analysis was run, the card also shows the membrane
+profile of the cell, aligned on the interface.
 
 ![A selected cell](../images/dash_cell.png){ width="420" }
 
 ## Subtype markers
 
-Shown when the panel has subtype markers. Per marker, a histogram of the immune cells (on a log scale:
-log(intensity − min + 1)), the threshold of the run (dashed; the numbers are background-subtracted intensities) and a
-slider. Where the histogram has two clear peaks, the threshold belongs in the gap between them (see
-[Cell types](../analysis/classification.md#immune-subtypes)). **Dragging the slider changes the subtypes everywhere on the page** at
-once: the colours, the plots, the contacts, the membrane pairs and the tables. The count next to the marker says how
-many immune cells are positive.
+This card is shown when the panel has subtype markers. For each marker, it shows a histogram of the immune cells on a
+log scale, log(intensity − min + 1), with the threshold of the run as a dashed line and a slider. The numbers are
+background-subtracted intensities. If the histogram has two clear peaks, the threshold belongs in the gap between them
+(see [Cell types](../analysis/classification.md#immune-subtypes)). **Dragging a slider changes the subtypes everywhere
+on the page** at once: the colors, the plots, the contacts, the membrane pairs and the tables. The count next to the
+marker shows how many immune cells are positive.
 
 ![Subtype markers](../images/dash_markers.png){ width="420" }
 
-To make the thresholds of the sliders those of the tables and of every other output:
+The sliders change only the page. To use their thresholds in the tables and in every other output, there are two
+ways:
 
-- **Apply to the project…** (only in a dashboard opened from the overview of the [import page](import-page.md)):
-  writes the thresholds that were moved, and the membrane pair if it was changed, into the project, and runs it
-  again. Cellpose is skipped when its input and settings did not change, so this takes seconds per dataset; the page
-  reloads when the run is done. The thresholds hold for **all datasets of the project**: the page asks first and says
-  how many.
-- **Copy as settings** copies the thresholds and the membrane pair as lines for a settings file or `project.toml` to
-  the clipboard (and shows them). This also works in a dashboard opened from disk.
+- **Apply to the project…** is available only in a dashboard that was opened from the overview of the
+  [import page](import-page.md). It writes the thresholds that you moved, and the membrane pair if you changed it, into
+  the project, and then runs the project again. Cellpose is skipped when its input and settings have not changed, so
+  this takes only seconds per dataset. The page reloads when the run has finished. The thresholds apply to **all
+  datasets of the project**, so the page first asks for confirmation and says how many datasets will be affected.
+- **Copy as settings** copies the thresholds and the membrane pair to the clipboard, as lines for a settings file or
+  for `project.toml`, and also shows them on the page. This also works in a dashboard that was opened from disk.
 
-A threshold set this way shows *Run: manual* under its slider, with an **automatic** button: on the next *Apply* the
-threshold is computed automatically again. The import page lists the thresholds set by hand (*Analysis settings*).
-*Reset all* returns the sliders to the run's thresholds.
+A threshold that was set in this way shows *Run: manual* under its slider, together with an **automatic** button. If
+you click *automatic*, the threshold is computed automatically again on the next *Apply*. The import page lists the
+thresholds that were set by hand under *Analysis settings*. *Reset all* returns all sliders to the thresholds of the
+run.
 
 ??? note "Technical: what the slider changes, and what not"
 
-    The slider re-applies the threshold to the immune cells in the page. It does not repeat the tumor / immune
-    clustering, and the artefacts stay as computed: both would need the whole classification again (the artefact rule
-    uses thresholds over *all* detections, see [Cell types](../analysis/classification.md#artefacts)). In the run, a
-    threshold set by hand (`classification.thresholds`) is used for both: for the subtypes and for the artefact rule.
+    The slider applies the new threshold to the immune cells on the page. It does not repeat the clustering into tumor
+    cells and immune cells, and the artefacts stay as they were computed, because both would need the whole
+    classification to be run again. (The artefact rule uses thresholds over *all* detections; see
+    [Cell types](../analysis/classification.md#artefacts).) In the run, a threshold that was set by hand
+    (`classification.thresholds`) is used for both the subtypes and the artefact rule.
 
-    So a threshold applied to the project can change the artefacts too, and with them the counts of the other cells.
+    A threshold that is applied to the project can therefore change the artefacts too, and with them the numbers of
+    the other cells.
 
 ## Cell classes
 
-Area against the marker ratio (immune / tumor marker), log–log: the space in which the k-means separates tumor cells
-from immune cells. Clicking a type in the legend brings it forward.
+This plot shows the area of each cell against its marker ratio (immune marker / tumor marker), on log–log axes. This
+is the space in which k-means separates the tumor cells from the immune cells. Click a cell type in the legend to bring
+its points to the front.
 
 ![Cell classes](../images/dash_classes.png){ width="420" }
 
 ## Marker of interest at the interface
 
-Per event, the mean of the marker of interest at the interface against the rest of the membrane, for the cell type
-that expresses it (the per-event table of the Fiji macro). Points above the dashed line: more at the interface. Not
-shown without a marker of interest.
+For each event, this plot shows the mean of the marker of interest at the interface against its mean on the rest of
+the membrane, for the cell type that expresses the marker. This is the per-event table of the Fiji macro. Points above
+the dashed line have more marker at the interface. The plot is not shown when there is no marker of interest.
 
 ## Interactions
 
 ![Interactions](../images/dash_interactions.png)
 
-- **Partner preference** (left): rows are cell types, columns the type they touch. The colour and the number:
-  contacts observed ÷ expected by chance, within the events of three or more cells (blue: fewer than chance, red:
-  more). *fraction touching* shows instead the share of the row's cells that touch one of the column's type.
-  Hovering a square gives the counts. **Clicking a square shows only the events with that contact**, with the
+- **Partner preference** (left): the rows are cell types, and the columns are the cell types they touch. The color and
+  the number in each square give the number of observed contacts divided by the number expected by chance, within the
+  events with three or more cells. Blue means fewer contacts than expected by chance, and red means more. The
+  *fraction touching* option shows instead the share of the row's cells that touch at least one cell of the column's
+  type. Hover over a square to see the counts. **Click a square to show only the events with that contact**, with the
   contacts drawn.
-- **Among immune cells** (tab): the [subset preference](../analysis/interactions.md#subset-preference-which-immune-cells-touch):
-  per immune subtype, whether it is the one touching the tumor cell (or another subtype) more often than chance when
-  an event offers a choice. Squares are coloured only where the 95 % interval excludes 1; hover for the counts and
-  the interval.
-- **Share of contacts** (right): per cell type, whom it touches, as a share of its contacts or as numbers; on the right
-  the share of its cells that touch any cell.
+- **Among immune cells** (tab): the
+  [subset preference](../analysis/interactions.md#subset-preference-which-immune-cells-touch). For each immune subtype,
+  it shows whether that subtype is the one that touches the tumor cell (or another subtype) more often than expected
+  by chance, in events that offer a choice. A square is colored only where the 95 % interval excludes 1. Hover over a
+  square to see the counts and the interval.
+- **Share of contacts** (right): for each cell type, which cell types it touches, as a share of its contacts or as
+  numbers. On the right, it also shows the share of its cells that touch any other cell.
 
-How contacts and chance are defined, and what they can and cannot tell, is in
-[Cell contacts](../analysis/interactions.md).
+[Cell contacts](../analysis/interactions.md) explains how contacts and chance are defined, and what they can and
+cannot tell you.
 
 ![The events with a contact of tumor cells and Subtype A cells](../images/dash_contact_filter.png){ width="560" }
 
 ## Membrane enrichment
 
-Shown when the membrane analysis was run. **Membrane of** and **interface with** choose the pair: a cell type, an
-immune subtype, or all immune cells positive for a marker. The page computes the enrichment for that pair at once;
-*Apply to the project…* makes it the pair of the tables (see [Subtype markers](#subtype-markers)).
+This card is shown when the membrane analysis was run. The **Membrane of** and **interface with** menus choose the
+pair of cells to compare. Each can be a cell type, an immune subtype, or all immune cells that are positive for a
+marker. The page computes the enrichment for the chosen pair immediately. *Apply to the project…* makes it the pair
+that is used for the tables (see [Subtype markers](#subtype-markers)).
 
 ![Membrane enrichment](../images/dash_membrane.png)
 
-- **Histogram**: the enrichment at the interface (aqua) of every cell with an interface, against random control
-  windows on cells without an interface (dashed), in standard deviations above the mean of the free membrane.
-- **Average profile**: the profiles of the cells with an interface, centred on the interface.
-- **Heatmap**: one row per cell with an interface, the strongest on top.
-- **All pairs** (folded): the median enrichment of every *Membrane of* × *interface with* combination, with the number
-  of cells and the marker check of each pair. Compare pairs here (see
-  [The control](../analysis/membrane.md#the-control)); clicking a number shows that pair.
-- **The badge** next to the menus: whether the marker of interest is on the measured cells, also on their partners,
-  on both at a similar level, or hardly on the measured cells at all (grey: not informative). Read
-  [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed) before trusting a result with an amber,
-  red or grey badge, and [The control](../analysis/membrane.md#the-control) on what the control windows can and cannot
-  tell.
+- **Histogram**: the enrichment at the interface (aqua) of every cell with an interface, compared with random control
+  windows on cells without an interface (dashed). The enrichment is expressed in standard deviations above the mean of
+  the free membrane, that is, the membrane that touches no other cell.
+- **Average profile**: the average membrane profile of the cells with an interface, centered on the interface.
+- **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top.
+- **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the
+  number of cells and the marker check of each pair. Use this table to compare pairs (see
+  [The control](../analysis/membrane.md#the-control)). Click a number to show that pair.
+- **The badge** next to the menus shows where the marker of interest is expressed: on the measured cells, also on
+  their partners, on both at a similar level, or hardly on the measured cells at all (gray: not informative). Before
+  you trust a result with an amber, red or gray badge, read
+  [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed).
+  [The control](../analysis/membrane.md#the-control) explains what the control windows can and cannot tell you.
 
 ??? note "Technical: the page and the tables"
 
-    The page computes the pair from every cell's membrane profile and neighbour track, as the program does for the
-    tables. Only the random control windows differ (the page uses a fixed seed, the run an unseeded generator); their
-    summaries agree closely. The tables (`Membrane intensity analysis.tsv`) hold the pair of the settings.
+    The page computes the pair from the membrane profile and the neighbor track of every cell, in the same way as the
+    program does for the tables. Only the random control windows differ: the page uses a fixed seed, and the run uses
+    an unseeded random generator. Their summaries agree closely. The tables (`Membrane intensity analysis.tsv`) hold
+    the pair that is set in the settings.
 
 ## Tables
 
-*Cells*, *Events* and *Contacts*, sortable by clicking a column header. Rows follow the filters; at most 2000 are
-shown (sort to see others). **Download .tsv** saves the current table with all its rows, as filtered and sorted
-here and with the subtypes of the sliders. The tables of the run are the TSV files in the
-[output folder](output-folder.md).
+The *Cells*, *Events* and *Contacts* tables can be sorted by clicking a column header. The rows follow the filters,
+and at most 2000 rows are shown; sort the table to see other rows. **Download .tsv** saves the current table with all
+its rows, filtered and sorted as on the page, and with the subtypes set by the sliders. The tables of the run itself
+are the TSV files in the [output folder](output-folder.md).

@@ -37,16 +37,22 @@ Channel = int | str  # a channel number (1-based), or a channel name
 
 @dataclass
 class InputSettings:
-    # an IDEAS export (.zip, one folder per dataset) or an ImageJ hyperstack from ImageStreamCombiner (.tif, one
-    # frame per event)
+    # The input file: an IDEAS export (.zip, with one folder per dataset) or an ImageJ hyperstack made by
+    # ImageStreamCombiner (.tif, with one frame per event).
     image: Path = Path()
-    output: Path = Path("output")  # the results go to a folder named after the dataset (or stack) in this folder
-    max_events: int | None = None  # analyse only the first N events (by object number); empty = all
-    dataset: str = ""  # IDEAS zip: the dataset (folder in the zip); empty = the only one
-    # IDEAS zip: the channels to load (IDEAS numbers Ch<N>); the channels with a role are always loaded
+    # The results are written to a folder inside this folder, named after the dataset (or the stack).
+    output: Path = Path("output")
+    # Analyze only the first N events (in order of object number). Empty means all events.
+    max_events: int | None = None
+    # IDEAS zip only: the dataset to analyze (a folder in the zip). Empty means the only dataset in the zip.
+    dataset: str = ""
+    # IDEAS zip only: the channels to load, as IDEAS channel numbers (Ch<N>). Channels that have a role are always
+    # loaded.
     channels: list[int] = field(default_factory=list)
-    channel_names: list[str] = field(default_factory=list)  # IDEAS zip: their names, in the same order as channels
-    pixel_size: float | None = None  # µm per pixel; required for an IDEAS zip (its files do not hold it)
+    # IDEAS zip only: the names of these channels, in the same order as in channels.
+    channel_names: list[str] = field(default_factory=list)
+    # The pixel size in µm per pixel. It is required for an IDEAS zip, because the files in the zip do not record it.
+    pixel_size: float | None = None
 
 
 @dataclass
@@ -54,19 +60,21 @@ class ChannelSettings:
     # a channel is a number (the IDEAS channel Ch<N> for a zip, the position in the stack for a Combiner .tif) or a
     # name (of input.channel_names, or of the stack)
 
-    brightfield: Channel = 1  # the brightfield channel
-    # the marker whose enrichment at the interface is measured; empty ("") = none (only cell types and contacts; the
-    # membrane analysis needs one)
+    brightfield: Channel = 1  # The brightfield channel.
+    # The marker whose enrichment at the interface is measured. Empty ("") means no marker of interest: the tool
+    # then determines only the cell types and their contacts. The membrane analysis needs a marker of interest.
     marker_of_interest: Channel = 2
-    tumor: Channel = 3  # the tumor-cell marker
-    # the immune-cell marker(s), a list; several are each normalized and summed (2.8: phenotypic markers)
+    tumor: Channel = 3  # The tumor-cell marker.
+    # The immune-cell marker or markers, as a list. With several markers, each is normalized and the results are
+    # summed (the phenotypic markers of macro 2.8).
     immune: list[Channel] = field(default_factory=lambda: [4])
-    # immune subtype markers, a list: positive or negative per immune cell (2.8: functional markers)
+    # The immune subtype markers, as a list. Each immune cell is called positive or negative for each of them (the
+    # functional markers of macro 2.8).
     functional: list[Channel] = field(default_factory=list)
-    # where the tumor and immune markers stain: "nuclear" (nucleus or cytoplasm) or "membrane"; sets the image for
-    # Cellpose
+    # Where the tumor and immune markers stain: "nuclear" (the nucleus or the cytoplasm) or "membrane". This
+    # determines the image that Cellpose segments.
     marker_location: MarkerLocation = MarkerLocation.NUCLEAR
-    # the cell type that expresses the marker of interest: "Tumor cell" or "Immune cell"
+    # The cell type that expresses the marker of interest: "Tumor cell" or "Immune cell".
     cell_of_interest: CellOfInterest = CellOfInterest.IMMUNE_CELL
 
     @staticmethod
@@ -116,24 +124,34 @@ class ChannelSettings:
 
 @dataclass
 class SegmentationSettings:
-    method: str = "cellpose"  # "cellpose", or "labelmap": load the labels of labelmap_file instead
-    labelmap_file: Path | None = None  # labelmap_cells.tif (or the macro's .zip) of an earlier run
-    model: str = "cyto3"  # Cellpose 3: cyto3, cyto2, nuclei, ...; Cellpose 4: cpsam; or the path of a model
-    diameter: float = 30.0  # the typical cell diameter in pixels; 0 = Cellpose estimates it (Cellpose 3 only)
-    flow_threshold: float = 0.5  # Cellpose's flow threshold (higher: more, less certain cells)
-    cellprob_threshold: float = 0.0  # Cellpose's cell probability threshold (lower: larger cells)
-    use_gpu: bool = True  # run Cellpose on the GPU
-    # reuse the Cellpose result of the previous run of the dataset when its input image and Cellpose settings are the
-    # same (labelmap_cells.tif and .json in the dataset folder); off = always run Cellpose
+    # "cellpose" runs Cellpose. "labelmap" loads the labels from labelmap_file instead.
+    method: str = "cellpose"
+    labelmap_file: Path | None = None  # The labelmap_cells.tif (or the Fiji macro's .zip) of an earlier run.
+    # The Cellpose model: cyto3, cyto2, nuclei, and so on for Cellpose 3, or cpsam for Cellpose 4. It can also be
+    # the path of a model file.
+    model: str = "cyto3"
+    # The typical cell diameter in pixels. 0 means that Cellpose estimates it (Cellpose 3 only).
+    diameter: float = 30.0
+    # The flow threshold of Cellpose. A higher value gives more cells, some of them less certain.
+    flow_threshold: float = 0.5
+    # The cell probability threshold of Cellpose. A lower value gives larger cells.
+    cellprob_threshold: float = 0.0
+    use_gpu: bool = True  # Run Cellpose on the GPU.
+    # Reuse the Cellpose result of the previous run of the dataset if its input image and Cellpose settings have not
+    # changed (labelmap_cells.tif and its .json file in the dataset folder). When off, Cellpose always runs.
     reuse_labels: bool = True
-    # events per row of the montage that Cellpose segments; 0 = about square; the number of events = one row, as the
-    # Fiji macro
+    # The number of events per row in the montage that Cellpose segments. 0 makes the montage about square. Setting
+    # it to the number of events gives a single row, as in the Fiji macro.
     montage_columns: int = 0
-    cellpose_python: Path | None = None  # python.exe of an environment with Cellpose 3 or 4; empty = this one
-    erosion: int = 1  # shrink the cells from the background by this many pixels
-    min_cell_size: int = 100  # smaller cells (in pixels, after shrinking) are removed
-    max_cell_size: int = 10000  # larger cells (in pixels, after shrinking) are removed
-    # leave out cells cut by the edge of their event image (they are always marked: column Edge)
+    # The python.exe of an environment with Cellpose 3 or 4. Empty means the environment of this program.
+    cellpose_python: Path | None = None
+    erosion: int = 1  # Shrink the cells by this many pixels at their border with the background.
+    # Cells smaller than this (in pixels, after shrinking) are removed.
+    min_cell_size: int = 100
+    # Cells larger than this (in pixels, after shrinking) are removed.
+    max_cell_size: int = 10000
+    # Leave out cells that are cut by the edge of their event image. Such cells are always flagged in the column
+    # Edge, whether or not they are left out.
     exclude_edge_cells: bool = False
 
 
@@ -148,19 +166,21 @@ class Pool(StrEnum):
 
 @dataclass
 class ClassificationSettings:
-    # the automatic threshold of the subtype markers, on log(intensity - min + 1): "Two populations" (where a
-    # positive population is as likely as the negative one, or the upper noise limit of the negative cells when
-    # there is no second population), "MaxEntropy" (as 2.8), "MaxEntropy strict" (at least 2 robust SDs above the
-    # negative cells) or "Otsu"; in a settings file also "Yen" or "RenyiEntropy"
+    # The method for the automatic threshold of the subtype markers, applied to log(intensity - min + 1).
+    # "Two populations" puts the threshold where a cell is as likely to belong to the positive population as to the
+    # negative one; when there is no second population, it uses the upper noise limit of the negative cells.
+    # "MaxEntropy" works as in macro 2.8. "MaxEntropy strict" raises the MaxEntropy threshold, if needed, to at
+    # least 2 robust SDs above the negative cells. "Otsu" is the fourth choice. A settings file also accepts "Yen"
+    # and "RenyiEntropy".
     threshold_method: str = "Two populations"
-    # thresholds set by hand, by marker name: { "Subtype A" = 12.5 } (background-subtracted intensity); they replace
-    # the automatic ones
+    # Thresholds set by hand, by marker name, for example { "Subtype A" = 12.5 }, as background-subtracted
+    # intensities. They replace the automatic thresholds.
     thresholds: dict[str, float] = field(default_factory=dict)
-    # a detection positive in at least this many subtype markers is an artefact, not a cell; empty = all of them
-    # (with two or more markers); 0 = no artefacts
+    # A detection that is positive in at least this many subtype markers is an artefact, not a cell. Empty means
+    # all subtype markers (only with two or more of them). 0 means that no detection is an artefact.
     artefact_min_positive: int | None = None
-    # in a project: "experiment" classifies the datasets of each experiment together (one set of thresholds),
-    # "dataset" each dataset on its own
+    # In a project, "experiment" classifies the datasets of each experiment together, with one set of thresholds.
+    # "dataset" classifies each dataset on its own.
     pool: Pool = Pool.EXPERIMENT
 
 
@@ -182,25 +202,31 @@ def straightening_px(width: int | None, pixel_size: float) -> int:
 
 @dataclass
 class MembraneSettings:
-    # the membrane profiles and the enrichment at the interface (the per-event interface table is always made)
+    # Measure the membrane profiles and the enrichment at the interface. The interface table per event is always
+    # made, whether or not this is on.
     analysis: bool = False
-    # the cells whose membrane is measured, a list of: a cell type ("Tumor", "Immune"), an immune subtype as in the
-    # tables ("Immune A+ B+"), or a marker ("A+": immune cells positive for A); empty = channels.cell_of_interest
+    # The cells whose membrane is measured, as a list. Each item is a cell type ("Tumor", "Immune"), an immune
+    # subtype as written in the tables ("Immune A+ B+"), or a marker ("A+" means the immune cells positive for A).
+    # Empty means the cell type set in channels.cell_of_interest.
     cells: list[str] = field(default_factory=list)
-    # the partners whose contact is the interface, as for cells; empty = the other cell type
+    # The partners whose contact forms the interface, written as for cells. Empty means the other cell type.
     partners: list[str] = field(default_factory=list)
-    # pixels: the width of the membrane band, and the distance at which cells touch; empty = about 1.5 µm (2 px at
-    # 20x, 3 at 40x, 5 at 60x)
+    # In pixels: the width of the membrane band, which is also the distance at which cells count as touching. Empty
+    # means about 1.5 µm (2 px at 20x, 3 px at 40x, 5 px at 60x).
     thickness: int | None = None
-    # pixels: the width of the band across the outline that is straightened; empty = about 4.5 µm (5 px at 20x, 9 at
-    # 40x, 13 at 60x), so that the band reaches the membrane where the outline lies a little outside it
+    # In pixels: the width of the band across the outline that is straightened. Empty means about 4.5 µm (5 px at
+    # 20x, 9 px at 40x, 13 px at 60x). This width lets the band reach the membrane where the outline lies a little
+    # outside it.
     straightening_width: int | None = None
-    max_histogram_value: float = 20.0  # the end of the histograms (SD above the mean); they start at -5
-    histogram_bin_width: float = 0.25  # the bin width of the histograms (SD)
-    # random control windows per cell without an interface, each as long as the median interface
+    # The upper end of the histograms, in SD above the mean. The histograms start at -5.
+    max_histogram_value: float = 20.0
+    histogram_bin_width: float = 0.25  # The bin width of the histograms, in SD.
+    # The number of random control windows per cell without an interface. Each window is as long as the median
+    # interface.
     control_repeats: int = 10
-    # take the profile only from the part of the band inside the measured cell (a sensitivity test, not a separation:
-    # touching membranes are far closer than the resolution, so every pixel there mixes both)
+    # Take the profile only from the part of the band that lies inside the measured cell. This is a sensitivity
+    # test, not a way to separate the two membranes: touching membranes are much closer together than the
+    # resolution, so every pixel at the interface contains signal from both.
     inside_only: bool = False
 
 

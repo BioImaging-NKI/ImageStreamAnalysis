@@ -306,7 +306,6 @@ function renderZips() {
 function renderZip(z) {
   const info = z.info;
   const head = el("h3", {}, el("span", { class: "title" }, z.name, el("span", { class: "path" }, z.path)),
-    el("button", { title: "Copy pixel size and channels to the other zips", onclick: () => copySetup(z) }, "Copy setup to all"),
     el("button", { onclick: () => { state.zips = state.zips.filter(x => x !== z); renderZips(); renderProblems(); } }, "Remove"));
   const card = el("div", { class: "zip" }, head);
   if (!info) { card.append(el("p", { class: "hint" }, "Reading…")); return card; }
@@ -361,6 +360,8 @@ function renderZip(z) {
   if (Object.keys(z.roles || {}).length) card.append(el("p", { class: "hint" },
     "This zip has its own roles by channel number (from an older project), which override the ticks above: " +
     Object.entries(z.roles).map(([r, v]) => `${r.replace(/_/g, " ")} = Ch${[].concat(v).join(", Ch")}`).join("; ")));
+  if (state.zips.length > 1) card.append(el("div", { class: "row" },
+    el("button", { title: "Copy pixel size and channels to the other zips", onclick: () => copySetup(z) }, "Copy setup to all")));
   return card;
 }
 function copySetup(src) {

@@ -66,6 +66,7 @@ markers = ["reference: compares with the reference output of the Fiji macro (nee
 [tool.ruff]
 line-length = 120
 src = ["src", "tests"]
+extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 select = [

@@ -5,7 +5,7 @@ Which immune cells seek out the tumor cells, and what gathers where they meet? A
 cell in every event image, sorts the cells into tumor cells and immune subtypes, finds the ones that touch, and
 measures how strongly a marker of interest concentrates at the interface between two cell types.
 
-It takes the IDEAS exports as they are, analyses many of them with one marker panel, and gives every dataset an
+It takes the IDEAS exports as they are, analyzes many of them with one marker panel, and gives every dataset an
 interactive dashboard (thresholds and cell-type pair adjustable live) and the project an overview that compares
 conditions across donors.
 
@@ -47,39 +47,40 @@ conditions across donors.
 
 <div class="grid cards" markdown>
 
-- **[Installation](start/install.md)**: uv, the program, and a Python environment with Cellpose.
-- **[Your first analysis](start/first-analysis.md)**: a walk-through with the example data, from the IDEAS export to
-  the dashboard.
-- **[Try it in your browser](start/demo.md)**: the dashboard of an example dataset, live, without installing
-  anything.
-- **[How the analysis works](analysis/input.md)**: every step, with the reasoning behind it in foldable *Technical*
-  sections.
-- **[All settings](reference/settings.md)**: every setting, its default and its meaning.
+- **[Installation](start/install.md)**: how to install uv, the program, and a Python environment with Cellpose.
+- **[Your first analysis](start/first-analysis.md)**: a walk-through with the example data, from the IDEAS export
+  to the dashboard.
+- **[Try it in your browser](start/demo.md)**: the live dashboard of an example dataset, which you can use without
+  installing anything.
+- **[How the analysis works](analysis/input.md)**: every step of the analysis, with the reasoning behind it in
+  foldable *Technical* sections.
+- **[All settings](reference/settings.md)**: every setting, with its default and its meaning.
 
 </div>
 
 ## What it does
 
-1. **Reads the IDEAS export**: one folder per dataset, one image per object and channel. The channels get a name and a
-   role: brightfield, tumor marker, immune-cell marker(s), immune subtype markers, and the marker of interest.
-2. **Segments the cells** with Cellpose, on a montage of all events, and measures every cell in every channel.
-3. **Classifies the cells**: tumor or immune cell (k-means), the immune cells into subtypes (a threshold per marker),
-   and detections that are positive in too many subtype markers as artefacts. The datasets of one experiment are
-   classified together.
-4. **Finds the cells that touch** and compares the contacts with chance: which cell types prefer each other within
-   the events.
-5. **Measures the marker of interest along the membrane** of one cell type, at its interface with another, against
-   the rest of its membrane and against random control windows; and checks that the marker is on the measured cells
-   rather than on their partners.
-6. **Shows the results** in a dashboard per dataset, in which the subtype thresholds and the pair of cell types can be
-   changed live, and in a project overview.
+1. **It reads the IDEAS export**, which has one folder per dataset and one image per object and channel. You give
+   each channel a name and a role: brightfield, tumor marker, immune-cell marker(s), immune subtype marker, or marker
+   of interest.
+2. **It segments the cells** with Cellpose, on a montage of all events, and measures every cell in every channel.
+3. **It classifies the cells.** Each cell is called a tumor cell or an immune cell by k-means clustering. The immune
+   cells are then divided into subtypes, with a threshold for each subtype marker. Detections that are positive in
+   too many subtype markers are set aside as artefacts. The datasets of one experiment are classified together.
+4. **It finds the cells that touch** and compares these contacts with what is expected by chance, which shows which
+   cell types prefer each other within the events.
+5. **It measures the marker of interest along the membrane** of one cell type, at its interface with another cell
+   type. The interface is compared with the rest of the membrane and with random control windows. The program also
+   checks that the marker is on the measured cells rather than on their partners.
+6. **It shows the results** in a dashboard for each dataset, in which you can change the subtype thresholds and the
+   pair of cell types live, and in an overview of the project.
 
 ## Background
 
-ImageStream Analysis for Python is a port of the Fiji macros that this repository started with (kept in
-[`legacy/`](https://github.com/BioImaging-NKI/ImageStreamAnalysis/tree/main/legacy)): the two-cell-type
-analysis with membrane enrichment (v1.8) and the classification of immune subtypes (ClassifyCellTypes 2.8). Where the
-port differs from the macros, and why, is listed in [From the Fiji macros](reference/fiji.md).
+ImageStream Analysis for Python is a port of the Fiji macros that this repository started with (they are kept in
+[`legacy/`](https://github.com/BioImaging-NKI/ImageStreamAnalysis/tree/main/legacy)): the two-cell-type analysis
+with membrane enrichment (v1.8), and the classification of immune subtypes (ClassifyCellTypes 2.8). The places where
+the port differs from the macros, and the reasons, are listed in [From the Fiji macros](reference/fiji.md).
 
 Authors: Bram van den Broek and Rolf Harkes, The Netherlands Cancer Institute (NKI), Amsterdam. License:
 GPL-3.0-or-later.
