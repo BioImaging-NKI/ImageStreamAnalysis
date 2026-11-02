@@ -5,12 +5,13 @@ page, or directly from disk by double-clicking it. It needs no server and no int
 folder to a colleague. The event images are stored in the `dashboard_files/` folder next to it.
 
 All views on the page are **linked**. When you hover over a cell in the events, in a plot or in a table, it is
-highlighted in every view. Clicking a cell selects it and shows it in the *Cell* card. Press *Esc* to clear the
-selection. To select a cell or an event when the page opens, add `#cell=12` or `#event=5` to the address, as in
+highlighted in every view. Clicking a cell selects it and shows it in the *Cell* card. Clicking an event next to its
+cells selects the event and shows it in the *Cell* card. Press *Esc* to clear the selection. To select a cell or an event when the page opens, add `#cell=12` or `#event=5` to the address, as in
 `dashboard.html#cell=12`; the cell number is its row in the cell table.
 
 The page remembers its view in the browser, separately for each dashboard: the channels and their brightness, the
-overlays, the filter, the sort order, the size, the membrane pair and the open tabs. The next time you open the
+overlays, the filter, the sort order, the size, the magnification in the *Cell* card, the membrane pair, the scale of
+the membrane histograms and the open tabs. The next time you open the
 dashboard, it shows the same view again.
 
 ![The dashboard](../images/dash_overview.png)
@@ -37,6 +38,8 @@ mouse pointer. The help panel also works offline.
 
 This card shows the events as a gallery. Each cell is outlined in the color of its cell type, and the interfaces are
 drawn in aqua. Only the events that are visible on the screen are drawn, so the page stays fast for large datasets.
+The selected event has a dark frame and a bold number. The gallery takes the full height of the card, as tall as the
+cards on the right.
 
 ## Channels and overlays
 
@@ -54,16 +57,28 @@ This card shows the selected cell: its event, its measurements, its subtype mark
 positive or negative), and the cells it touches. If the membrane analysis was run, the card also shows the membrane
 profile of the cell, aligned on the interface.
 
+When an event is selected but no cell, the card shows that event: its object number, its cells and their types, the
+number of touching pairs, and the marker of interest at the interface. You can hover over the cells in the enlarged
+image and click one to show it.
+
+The **−** and **+** buttons under the image set its magnification: 100 % is one screen pixel per image pixel, and the
+steps are 100, 150, 200, 300, 400 and 600 %. The default is 200 %. The page remembers the last magnification.
+
 ![A selected cell](../images/dash_cell.png){ width="420" }
 
 ## Subtype markers
 
 This card is shown when the panel has subtype markers. For each marker, it shows a histogram of the immune cells on a
-log scale, log(intensity − min + 1), with the threshold of the run as a dashed line and a slider. The numbers are
-background-subtracted intensities. If the histogram has two clear peaks, the threshold belongs in the gap between them
+log scale, log(intensity − min + 1), with the threshold of the run as a dashed line and a slider. The bars have the
+color of the marker's channel, and the numbers under the histogram are background-subtracted intensities. If the
+histogram has two clear peaks, the threshold belongs in the gap between them
 (see [Cell types](../analysis/classification.md#immune-subtypes)). **Dragging a slider changes the subtypes everywhere
-on the page** at once: the colors, the plots, the contacts, the membrane pairs and the tables. The count next to the
-marker shows how many immune cells are positive.
+on the page**: the colors, the plots, the contacts, the membrane pairs and the tables. The count next to the marker
+shows how many immune cells are positive.
+
+While you drag, the events, the cell classes and the count follow at once. The contacts, the membrane enrichment and
+the tables take longer to compute on large datasets, so they follow when you release the slider, or when it has
+stood still for 0.7 s.
 
 ![Subtype markers](../images/dash_markers.png){ width="420" }
 
@@ -106,7 +121,9 @@ its points to the front.
 
 For each event, this plot shows the mean of the marker of interest at the interface against its mean on the rest of
 the membrane, for the cell type that expresses the marker. This is the per-event table of the Fiji macro. Points above
-the dashed line have more marker at the interface. The plot is not shown when there is no marker of interest.
+the dashed line have more marker at the interface. The plot is not shown when there is no marker of interest. When
+the membrane analysis was run, the plot is a panel of the [Membrane enrichment](#membrane-enrichment) card, next to
+the histograms and profiles; otherwise it has a card of its own, below the interactions.
 
 ## Interactions
 

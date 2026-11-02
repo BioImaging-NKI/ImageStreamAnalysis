@@ -51,7 +51,10 @@ select, input, button { font: inherit; color: var(--ink); }
 select, button { background: var(--surface); border: 1px solid var(--axis); border-radius: 5px; padding: 3px 8px; }
 button { cursor: pointer; }
 button:hover, select:hover { border-color: var(--ink-2); }
-.eventsbody { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: start; }
+.card.events { display: flex; flex-direction: column; }
+.eventsbody { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: stretch; flex: 1; }
+.eventsbody .switches { align-self: start; }
+.galwrap { position: relative; min-height: max(360px, 70vh); }  /* as tall as the card (next to the right-hand column) */
 @media (max-width: 600px) { .eventsbody { grid-template-columns: 1fr; } }
 .switches { display: grid; gap: 2px; font-size: 13px; }
 .switches h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 6px 0 2px; }
@@ -69,13 +72,18 @@ main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); 
 .card .sub { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
 .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .span2 { grid-column: 1 / -1; }
+#iface-card .plot { max-width: 640px; }
+#iface-card.inset { border: 0; padding: 0; background: none; grid-column: auto; }  /* a panel of the membrane card */
+#iface-card.inset h2 { font-size: 13px; font-weight: 500; color: var(--ink-2); }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
 .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
-#gallery { position: relative; height: 70vh; min-height: 360px; overflow-y: auto; background: var(--page); border-radius: 6px; }
+#gallery { position: absolute; inset: 0; overflow-y: auto; background: var(--page); border-radius: 6px; }
 #gallery .inner { position: relative; }
 .tile { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
 .tile canvas { background: #000; border-radius: 3px; outline: 2px solid transparent; }
-.tile.selected canvas { outline-color: var(--ink); }
+.tile.selected { background: var(--chip); box-shadow: 0 0 0 2px var(--ink); border-radius: 5px; padding: 3px; margin: -3px; }  /* clear in light mode too */
+.tile.selected canvas { outline: 0; }
+.tile.selected span { color: var(--ink); font-weight: 600; }
 .tile span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 4px 0; }
@@ -94,6 +102,10 @@ svg .axis { stroke: var(--axis); stroke-width: 1; }
 #tooltip .v { font-weight: 600; }
 #tooltip .l { color: var(--ink-2); }
 #cellcard .empty { color: var(--muted); }
+.cardimg { max-width: 100%; overflow-x: auto; }
+.zoomctl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.zoomctl button { padding: 0 8px; line-height: 18px; }
+.zoomctl span { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
 #cellcard dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 13px; }
 #cellcard dt { color: var(--ink-2); }
 #cellcard dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -156,7 +168,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
   <label title="The size of the events; also Ctrl+scroll over the gallery">Size <input type="range" id="f-zoom" min="0.5" max="2.5" step="0.25" value="1"></label>
 </div>
 <main>
-  <div class="card">
+  <div class="card events">
     <h2 data-help="guide/dashboard#events">Events</h2>
     <p class="sub" id="gallery-sub"></p>
     <div class="legend" id="gallery-legend"></div>
@@ -169,11 +181,11 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
         <label title="The interfaces between cells (where the marker of interest is measured)"><input type="checkbox" id="f-interfaces" checked> interfaces</label>
         <label title="A line between the centres of every two cells that touch"><input type="checkbox" id="f-contacts"> contacts</label>
       </div>
-      <div id="gallery"><div class="inner"></div></div>
+      <div class="galwrap"><div id="gallery"><div class="inner"></div></div></div>
     </div>
   </div>
   <div class="col">
-    <div class="card" id="cellcard"><h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p></div>
+    <div class="card" id="cellcard"><h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell or an event in the events, a plot or the table.</p></div>
     <div class="card" id="markers-card" hidden>
       <h2 data-help="guide/dashboard#subtype-markers">Subtype markers</h2>
       <p class="sub">The threshold of each marker on the immune cells: a histogram on a log scale, the threshold in
@@ -189,12 +201,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
       <p class="sub">Area against marker ratio (immune / tumor marker), log–log, as the k-means classification. Click a
         type in the legend to bring it forward.</p>
       <div class="legend" id="classes-legend"></div>
-      <div class="plot"><canvas id="classes" height="300"></canvas></div>
-    </div>
-    <div class="card" id="iface-card">
-      <h2 id="iface-title" data-help="guide/dashboard#marker-of-interest-at-the-interface">Marker of interest at the interface</h2>
-      <p class="sub" id="iface-sub"></p>
-      <div class="plot"><canvas id="iface" height="280"></canvas></div>
+      <div class="plot"><canvas id="classes" height="300" data-square="1"></canvas></div>
     </div>
   </div>
   <div class="card span2" id="contacts-card">
@@ -256,6 +263,11 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
       </div>
     </div>
   </div>
+  <div class="card span2" id="iface-card">
+    <h2 id="iface-title" data-help="guide/dashboard#marker-of-interest-at-the-interface">Marker of interest at the interface</h2>
+    <p class="sub" id="iface-sub"></p>
+    <div class="plot"><canvas id="iface" height="280"></canvas></div>
+  </div>
   <div class="card span2" data-help-scope="guide/dashboard#tables">
     <div class="tabs"><button id="tab-cells" class="on">Cells</button><button id="tab-events">Events</button>
       <button id="tab-contacts">Contacts</button><span class="note" id="table-note"></span><span class="spacer"></span>
@@ -281,7 +293,9 @@ const css = name => getComputedStyle(document.documentElement).getPropertyValue(
 const fmt = (v, d = 3) => v == null || (typeof v === "number" && !isFinite(v)) ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : Number(v.toFixed(d)).toString());
 const pct = v => v == null || !isFinite(v) ? "–" : Math.round(v * 100) + " %";
 const state = { filter: "all", sort: "event", zoom: 1, outlines: true, interfaces: true, contacts: false, hover: -1, selected: -1,
-                event: -1, tab: "cells", tableSort: null, tableDesc: false, contact: null, focus: null, matrix: "ratio", bars: "share" };
+                event: -1, tab: "cells", tableSort: null, tableDesc: false, contact: null, focus: null, matrix: "ratio", bars: "share",
+                cardZoom: 2 };  // the magnification of the image in the cell card (CSS pixels per image pixel)
+const CARD_ZOOMS = [1, 1.5, 2, 3, 4, 6];
 
 // ---------- cell types: tumor, immune (or immune subtypes, live from the marker thresholds), artefact
 for (const m of MK) { m.thr0 = m.threshold; m.thr = m.threshold; }
@@ -455,7 +469,7 @@ function renderVisible() {
       if (i >= 0) showTip(ev, cellTip(i)); else showTip(ev, eventTip(e));
     });
     cv.addEventListener("pointerleave", () => { setHover(-1); hideTip(); });
-    cv.addEventListener("click", () => { if (state.hover >= 0) select(state.hover); else selectEvent(e); });
+    cv.addEventListener("click", () => { if (state.hover >= 0) select(state.hover); else { if (state.selected >= 0) select(-1); selectEvent(e); } });
   }
 }
 gallery.addEventListener("scroll", () => requestAnimationFrame(renderVisible));
@@ -472,9 +486,11 @@ gallery.addEventListener("wheel", ev => {
   state.zoom = zoom; slider.value = String(zoom); relayout();
   gallery.scrollTop = (Math.floor(Math.max(0, k) / layout.cols) + pos - row) * (layout.h + layout.gap) - y;
 }, { passive: false });
-new ResizeObserver(() => { relayout(); drawPlots(); }).observe(gallery);
-function redrawEvent(e) { const t = tiles.get(e); if (t) drawEvent(t.querySelector("canvas"), e, state.zoom); }
-function redrawEventsOfSheet(s) { for (const e of tiles.keys()) if (Math.floor(e / PER_SHEET) === s) redrawEvent(e); if (state.selected >= 0) renderCard(); }
+let galleryWidth = -1;  // the plots follow the page width; the gallery's height also follows the right-hand column
+new ResizeObserver(() => { relayout(); if (gallery.clientWidth !== galleryWidth) { galleryWidth = gallery.clientWidth; drawPlots(); } }).observe(gallery);
+function redrawEvent(e) { const t = tiles.get(e); if (t) drawEvent(t.querySelector("canvas"), e, state.zoom);
+  if (e === cardEvent && cardCanvas) drawEvent(cardCanvas, e, state.cardZoom); }
+function redrawEventsOfSheet(s) { for (const e of tiles.keys()) if (Math.floor(e / PER_SHEET) === s) redrawEvent(e); if (cardEvent >= 0 && Math.floor(cardEvent / PER_SHEET) === s) renderCard(); }
 function scrollToEvent(e) {
   const k = shown.indexOf(e); if (k < 0) return;
   const top = Math.floor(k / layout.cols) * (layout.h + layout.gap);
@@ -485,7 +501,7 @@ function renderGalleryLegend() {
   const box = document.getElementById("gallery-legend"); box.replaceChildren();
   for (const [v, t] of items) { const s = document.createElement("span"); const k = document.createElement("span"); k.className = "key"; k.style.borderColor = `var(${v})`; s.append(k, t); box.append(s); }
   const i = document.createElement("span"); const k = document.createElement("span"); k.className = "key"; k.style.borderColor = "var(--s3)"; i.append(k, "interface"); box.append(i);
-  const n = document.createElement("span"); n.className = "note"; n.textContent = "hover a cell; click to select it"; box.append(n);
+  const n = document.createElement("span"); n.className = "note"; n.textContent = "click a cell to select it, or next to the cells for the event"; box.append(n);
 }
 
 // ---------- linking
@@ -506,6 +522,7 @@ function selectEvent(e, keepCell) {
   if (!keepCell && state.selected >= 0 && C.event[state.selected] !== e) { const s = state.selected; state.selected = -1; redrawEvent(C.event[s]); renderCard(); }
   for (const x of [old, e]) { const t = tiles.get(x); if (t) t.classList.toggle("selected", x === e); }
   scrollToEvent(e); drawOverlay(); markRows();
+  if (state.selected < 0) renderCard();  // the event in the cell card
 }
 
 // ---------- tooltip
@@ -534,7 +551,9 @@ function eventTip(e) {
 
 // ---------- plots (canvas with an overlay for hover/selection)
 function setupCanvas(cv) {
-  const r = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.height / (cv._r || 1);
+  const r = window.devicePixelRatio || 1, w = cv.clientWidth;
+  const h = cv.dataset.square ? Math.round(Math.min(560, Math.max(220, w - PAD.l - PAD.r + PAD.t + PAD.b)))  // a square plot area
+                              : cv.height / (cv._r || 1);
   cv._r = r; cv._w = w; cv._h = h; cv.width = w * r; cv.height = h * r; cv.style.height = h + "px";
   const ctx = cv.getContext("2d"); ctx.setTransform(r, 0, 0, r, 0, 0); return ctx;
 }
@@ -604,15 +623,7 @@ function drawOverlay() {
   drawHeatOverlay();
 }
 function drawPlots() {
-  const cellPts = [];
-  for (let i = 0; i < NC; i++) if (shownSet.has(C.event[i]) && C.area[i] > 0 && C.ratio[i] > 0)
-    cellPts.push({ x: C.area[i], y: C.ratio[i], id: i, color: typeColor(TYPE[i]), group: TYPE[i] });
-  scatter("classes", "classes", cellPts, { kind: "cell", xlog: true, ylog: true, xlabel: "area (px)", ylabel: "marker ratio", front: state.focus });
-  const counts = new Map(); for (const p of cellPts) counts.set(p.group, (counts.get(p.group) || 0) + 1);
-  const lg = document.getElementById("classes-legend"); lg.replaceChildren();
-  for (const t of ORDER.filter(t => counts.has(t))) { const s = document.createElement("span"); s.className = "item" + (state.focus && state.focus !== t ? " faded" : "");
-    const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = `var(${colorVar(t)})`;
-    s.append(dot, `${shortType(t)} (${counts.get(t).toLocaleString()})`); s.onclick = () => { state.focus = state.focus === t ? null : t; drawPlots(); }; lg.append(s); }
+  drawClasses();
   document.getElementById("iface-card").hidden = !D.has_moi;
   const evPts = !D.has_moi ? [] : shown.filter(e => iInterface[e] != null && iRest[e] != null).map(e => ({ x: iRest[e], y: iInterface[e], id: e, color: css(OF_INTEREST === "Tumor" ? "--s2" : "--s1") }));
   const who = OF_INTEREST === "Tumor" ? "tumor cell" : "immune cell";
@@ -623,6 +634,17 @@ function drawPlots() {
   drawContacts();
   drawOverlay();
   if (M) drawMembranes();
+}
+function drawClasses() {
+  const cellPts = [];
+  for (let i = 0; i < NC; i++) if (shownSet.has(C.event[i]) && C.area[i] > 0 && C.ratio[i] > 0)
+    cellPts.push({ x: C.area[i], y: C.ratio[i], id: i, color: typeColor(TYPE[i]), group: TYPE[i] });
+  scatter("classes", "classes", cellPts, { kind: "cell", xlog: true, ylog: true, xlabel: "area (px)", ylabel: "marker ratio", front: state.focus });
+  const counts = new Map(); for (const p of cellPts) counts.set(p.group, (counts.get(p.group) || 0) + 1);
+  const lg = document.getElementById("classes-legend"); lg.replaceChildren();
+  for (const t of ORDER.filter(t => counts.has(t))) { const s = document.createElement("span"); s.className = "item" + (state.focus && state.focus !== t ? " faded" : "");
+    const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = `var(${colorVar(t)})`;
+    s.append(dot, `${shortType(t)} (${counts.get(t).toLocaleString()})`); s.onclick = () => { state.focus = state.focus === t ? null : t; drawClasses(); drawOverlay(); }; lg.append(s); }
 }
 
 // ---------- svg helpers
@@ -839,6 +861,18 @@ document.getElementById("bars-count").onclick = () => { state.bars = "count"; to
 function toggleOn(on, offId) { document.getElementById(on).classList.add("on"); document.getElementById(offId).classList.remove("on"); }
 
 // ---------- subtype markers: live thresholds
+function markerColor(name) {  // the display color of the marker's channel; white and gray channels in the axis gray
+  const ch = D.channels.find(c => c.name === name), c = ch ? LUT[ch.lut] : null;
+  return !c || /^#(f{6}|f{3})$/i.test(c) ? "var(--axis)" : c;
+}
+function intensityTicks(lo, hi, xOf) {  // round intensities (0, ±1, 2, 5 × 10^k) on the log axis, at least 34 px apart
+  const cand = [0];
+  for (let p = 0; 10 ** p <= Math.max(Math.abs(lo), Math.abs(hi)) * 10; p++) for (const f of [1, 2, 5]) cand.push(f * 10 ** p, -f * 10 ** p);
+  const ok = cand.filter(t => t >= lo && t <= hi).sort((a, b) => a - b);
+  const out = []; let last = -Infinity;
+  for (const t of ok) { const x = xOf(t); if (x - last >= 34) { out.push(t); last = x; } }
+  return out;
+}
 function renderMarkers() {
   const card = document.getElementById("markers-card"); if (!MK.length) return; card.hidden = false;
   const box = document.getElementById("markers"); box.replaceChildren();
@@ -852,14 +886,20 @@ function renderMarkers() {
     const name = document.createElement("b"); name.textContent = m.name + "+";
     const info = document.createElement("span"); info.className = "note";
     head.append(name, info);
-    const H = 64, svg = svgEl("svg", { style: "width:100%;display:block" });
+    const PH = 64, H = PH + 16, svg = svgEl("svg", { style: "width:100%;display:block" });  // the plot, then the intensity axis
     div.append(head, svg); box.append(div);
     const W = fitSvg(svg, H, 200);
-    const hmax = Math.max(...hist, 1), bw = (W - 8) / bins;
-    hist.forEach((c, k) => { if (c) svg.append(svgEl("rect", { x: 4 + k * bw + 0.5, y: H - 2 - (H - 6) * c / hmax, width: Math.max(1, bw - 1), height: (H - 6) * c / hmax, rx: 1, fill: "var(--axis)" })); });
-    svg.append(svgEl("line", { x1: 4, x2: W - 4, y1: H - 2, y2: H - 2, class: "axis" }));
-    const line = svgEl("line", { y1: 2, y2: H - 2, stroke: "var(--ink)", "stroke-width": 2 }); svg.append(line);
-    const runLine = svgEl("line", { y1: 2, y2: H - 2, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 2" }); svg.append(runLine);
+    const hmax = Math.max(...hist, 1), bw = (W - 8) / bins, fill = markerColor(m.name);
+    hist.forEach((c, k) => { if (c) svg.append(svgEl("rect", { x: 4 + k * bw + 0.5, y: PH - 2 - (PH - 6) * c / hmax, width: Math.max(1, bw - 1), height: (PH - 6) * c / hmax, rx: 1, fill })); });
+    svg.append(svgEl("line", { x1: 4, x2: W - 4, y1: PH - 2, y2: PH - 2, class: "axis" }));
+    const xOf = v => 4 + (W - 8) * logv(v) / xmax;
+    for (const t of intensityTicks(lo, lo + Math.exp(xmax) - 1, xOf)) {  // the axis in intensity (background subtracted)
+      const x = xOf(t);
+      svg.append(svgEl("line", { x1: x, x2: x, y1: PH - 2, y2: PH + 1, class: "axis" }));
+      svgText(svg, x, PH + 12, tickLabel(t), { "text-anchor": "middle" });
+    }
+    const line = svgEl("line", { y1: 2, y2: PH - 2, stroke: "var(--ink)", "stroke-width": 2 }); svg.append(line);
+    const runLine = svgEl("line", { y1: 2, y2: PH - 2, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 2" }); svg.append(runLine);
     const slider = document.createElement("input"); slider.type = "range"; slider.min = 0; slider.max = xmax; slider.step = xmax / 500;
     const place = () => { const x = 4 + (W - 8) * Math.min(1, Math.max(0, logv(m.thr) / xmax));
       line.setAttribute("x1", x); line.setAttribute("x2", x);
@@ -869,8 +909,13 @@ function renderMarkers() {
       if (m.auto) info.textContent += " · automatic on Apply";
       info.classList.toggle("changed", m.auto || Math.abs(m.thr - m.thr0) > 1e-9); };
     slider.value = logv(m.thr);
-    let pending = false;
-    slider.oninput = () => { m.thr = Math.exp(+slider.value) - 1 + lo; place(); if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; typesChanged(); }); } };
+    // While dragging, only the cheap views follow (events, cell classes, counts); the rest (membranes, contacts with
+    // their bootstrap, table) when the slider is released or has stood still for SETTLE_MS: large datasets stay fluid.
+    let pending = false, settle = null;
+    slider.oninput = () => { m.thr = Math.exp(+slider.value) - 1 + lo; place();
+      if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; typesPreview(); }); }
+      clearTimeout(settle); settle = setTimeout(typesChanged, SETTLE_MS); };
+    slider.onchange = () => { clearTimeout(settle); typesChanged(); };
     const note = document.createElement("div"); note.className = "note"; note.textContent = `Immune cells, on log(intensity − min + 1); thresholds in intensity. Run: ${m.method} ${fmt(m.thr0, 2)} (dashed)${m.how && m.method !== "manual" ? ": " + m.how : ""}` + (m.threshold_all != null ? `; for the artefact rule: ${fmt(m.threshold_all, 2)}` : "");
     div.append(slider, note);
     if (m.method === "manual") {  // set by hand (Apply, or a settings file): Apply can make it automatic again
@@ -893,6 +938,10 @@ document.getElementById("export").onclick = async () => {
     "# skipped when its input and settings did not change. A threshold set by hand also applies to the artefact rule.";
   try { await navigator.clipboard.writeText(text); } catch (e) {}
 };
+const SETTLE_MS = 700;
+function typesPreview() {
+  recomputeTypes(); renderGalleryLegend(); redrawAll(); drawClasses(); drawOverlay();
+}
 function typesChanged() {
   recomputeTypes(); renderGalleryLegend(); fillPairOptions(); computeM();
   applyFilter(); redrawAll(); drawPlots(); renderTable(); renderHeader();
@@ -1164,26 +1213,61 @@ function drawHeatOverlay() {
     ctx.strokeStyle = css("--ink"); ctx.lineWidth = wd; ctx.strokeRect(0.5, r * rowH - 1, cv._w - 1, Math.max(rowH, 1) + 2); }
 }
 
-// ---------- cell card
+// ---------- cell card: the selected cell, or else the selected event; its cells can be hovered and clicked
+let cardCanvas = null, cardEvent = -1;
+const EMPTY_CARD = '<h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell or an event in the events, a plot or the table.</p>';
+function cardImage(e) {  // the event at state.cardZoom, with − / + and the cells under the mouse
+  const z = state.cardZoom, cv = document.createElement("canvas");
+  cv.width = Math.round(TW * z); cv.height = Math.round(TH * z); cv.style.cssText = "background:#000;border-radius:4px;display:block;cursor:pointer";
+  drawEvent(cv, e, z);
+  const at = ev => { const r = cv.getBoundingClientRect(), ctx = cv.getContext("2d"); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const i = cellAt(e, (ev.clientX - r.left) / z, (ev.clientY - r.top) / z, ctx); ctx.restore(); return i; };
+  cv.addEventListener("pointermove", ev => { const i = at(ev); setHover(i); if (i >= 0) showTip(ev, cellTip(i)); else hideTip(); });
+  cv.addEventListener("pointerleave", () => { setHover(-1); hideTip(); });
+  cv.addEventListener("click", ev => { const i = at(ev); if (i >= 0) select(i); else if (state.selected >= 0) { select(-1); selectEvent(e); } });
+  cardCanvas = cv; cardEvent = e;
+  const k = CARD_ZOOMS.indexOf(z);
+  const btn = (label, title, to) => { const b = document.createElement("button"); b.textContent = label; b.title = title; b.disabled = to == null;
+    b.onclick = () => { state.cardZoom = to; saveView(); renderCard(); }; return b; };
+  const ctl = document.createElement("div"); ctl.className = "zoomctl";
+  const v = document.createElement("span"); v.textContent = `${Math.round(z * 100)} %`; v.title = "screen pixels per image pixel";
+  ctl.append(btn("−", "Smaller", k > 0 ? CARD_ZOOMS[k - 1] : null), v, btn("+", "Larger", k < CARD_ZOOMS.length - 1 ? CARD_ZOOMS[k + 1] : null));
+  const box = document.createElement("div"); box.className = "cardimg"; box.append(cv, ctl);
+  return box;
+}
+function cardList(rows) {
+  const dl = document.createElement("dl");
+  for (const [a, b] of rows) { const dt = document.createElement("dt"); dt.textContent = a; const dd = document.createElement("dd"); dd.textContent = b; dl.append(dt, dd); }
+  return dl;
+}
+const cellsLine = e => `${E.t_cells[e]} immune, ${E.tumor_cells[e]} tumor` +
+  ((n => n ? `, ${n} artefact${n > 1 ? "s" : ""}` : "")(cellsOfEvent[e].filter(c => C.type[c] === "Artefact").length));
 function renderCard() {
   const card = document.getElementById("cellcard"), i = state.selected;
-  if (i < 0) { card.innerHTML = '<h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell in the events, a plot or the table.</p>'; return; }
+  cardCanvas = null; cardEvent = -1;
+  if (i < 0 && state.event < 0) { card.innerHTML = EMPTY_CARD; return; }
+  const h2 = document.createElement("h2"); h2.dataset.help = "guide/dashboard#cell";
+  if (i < 0) {  // an event: its image, larger, and what is in it
+    const e = state.event;
+    h2.textContent = `Event #${e + 1}`;
+    const rows = [["object", E.object ? E.object[e] : "–"], ["cells", cellsLine(e)], ["touching pairs", String(pairsOfEvent[e].length)],
+                  ["cell types", cellsOfEvent[e].map(c => `${shortType(TYPE[c])} (${C.label[c]})`).join(", ") || "none"]];
+    if (D.has_moi && iInterface[e] != null) rows.push(["marker of interest at the interface", fmt(iInterface[e])], ["rest of the membrane", fmt(iRest[e])]);
+    const row = document.createElement("div"); row.className = "cardrow"; row.append(cardImage(e), cardList(rows));
+    const hint = document.createElement("p"); hint.className = "note"; hint.textContent = "Click a cell in the image to show it.";
+    card.replaceChildren(h2, row, hint); return;
+  }
   const e = C.event[i], k = memOfCell[i];
-  const h2 = document.createElement("h2"); h2.dataset.help = "guide/dashboard#cell"; h2.textContent = typeName(i).replace(/^./, c => c.toUpperCase()) + ` in event #${e + 1}`;
-  const cv = document.createElement("canvas"); const z = 1.5; cv.width = TW * z; cv.height = TH * z; cv.style.cssText = "background:#000;border-radius:4px";
-  drawEvent(cv, e, z);
-  const dl = document.createElement("dl");
+  h2.textContent = typeName(i).replace(/^./, c => c.toUpperCase()) + ` in event #${e + 1}`;
   const rows = [["object", E.object ? E.object[e] : "–"], ["label", C.label[i]], ["area", fmt(C.area[i], 0) + " px"], ["immune marker", fmt(C.t_int[i])], ["tumor marker", fmt(C.tu_int[i])],
-                ["marker ratio", fmt(C.ratio[i])], [`cells in the event`, `${E.t_cells[e]} immune, ${E.tumor_cells[e]} tumor` +
-                  ((n => n ? `, ${n} artefact${n > 1 ? "s" : ""}` : "")(cellsOfEvent[e].filter(c => C.type[c] === "Artefact").length))]];
+                ["marker ratio", fmt(C.ratio[i])], ["cells in the event", cellsLine(e)]];
   for (const m of MK) rows.push([m.name, C.type[i] === "Immune" ? `${fmt(m.values[i], 1)} (${m.values[i] > m.thr ? "positive" : "negative"}; threshold ${fmt(m.thr, 1)})`
                                                           : fmt(m.values[i], 1)]);  // only immune cells have a subtype
   rows.push(["touching", neighbours[i].length ? neighbours[i].map(j => `${shortType(TYPE[j])} (${C.label[j]})`).join(", ") : "none"]);
   if (M && k >= 0) rows.push(["membrane length", fmt(M.length[k], 0) + " px"], ["interface", M.interface_length[k] ? fmt(M.interface_length[k], 0) + " px" : "none"],
                         M.sd[k] != null ? ["SD above mean", fmt(M.sd[k], 2)] : ["control (mean of windows)", fmt(M.control[k], 2)],
                         ["ratio interface / rest", fmt(M.ratio[k])]);
-  for (const [a, b] of rows) { const dt = document.createElement("dt"); dt.textContent = a; const dd = document.createElement("dd"); dd.textContent = b; dl.append(dt, dd); }
-  const row = document.createElement("div"); row.className = "cardrow"; row.append(cv, dl);
+  const row = document.createElement("div"); row.className = "cardrow"; row.append(cardImage(e), cardList(rows));
   card.replaceChildren(h2, row);
   if (M && k >= 0) {
     const W = 360, H = 120, svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, style: "width:100%;max-width:420px;display:block;margin-top:8px" });
@@ -1294,7 +1378,7 @@ function renderControls() {
     lab.append(cb, sw, name); wrap.append(lab, gain); box.append(wrap);
   }
 }
-function redrawAll() { for (const e of tiles.keys()) redrawEvent(e); if (state.selected >= 0) renderCard(); }
+function redrawAll() { for (const e of tiles.keys()) redrawEvent(e); if (state.selected >= 0 || state.event >= 0) renderCard(); }
 function update() { applyFilter(); relayout(); drawPlots(); renderTable(); }
 document.getElementById("f-events").onchange = e => { state.filter = e.target.value; update(); };
 document.getElementById("f-sort").onchange = e => { state.sort = e.target.value; gallery.scrollTop = 0; applyFilter(); relayout(); };
@@ -1358,7 +1442,7 @@ for (const b of document.querySelectorAll("button.apply")) {
 const VIEW_KEY = "isa-view:" + location.pathname.replace(/^\/files\/[^/]+\//, "/files/");
 function saveView() {
   const v = { filter: state.filter, sort: state.sort, zoom: state.zoom, outlines: state.outlines, interfaces: state.interfaces,
-              contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair }, hist: { ...histView },
+              contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair }, hist: { ...histView }, cardZoom: state.cardZoom,
               channels: D.channels.map(c => ({ name: c.name, on: c.on, gain: c.gain ?? 1 })) };
   try { localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (e) {}
 }
@@ -1366,6 +1450,7 @@ let VIEW = null;
 try { VIEW = JSON.parse(localStorage.getItem(VIEW_KEY) || "null"); } catch (e) {}
 if (VIEW) {
   for (const k of ["filter", "sort", "zoom", "outlines", "interfaces", "contacts"]) if (VIEW[k] != null) state[k] = VIEW[k];
+  if (CARD_ZOOMS.includes(VIEW.cardZoom)) state.cardZoom = VIEW.cardZoom;
   for (const c of VIEW.channels || []) { const ch = D.channels.find(x => x.name === c.name); if (ch) { ch.on = c.on; ch.gain = c.gain; } }
   if (VIEW.hist && typeof VIEW.hist === "object") for (const k of ["max", "bin"]) {  // the histogram scale (null = automatic)
     const v = VIEW.hist[k]; if (v === null || (typeof v === "number" && isFinite(v) && (k === "max" ? v > HIST_MIN : v > 0))) histView[k] = v; }
@@ -1374,6 +1459,10 @@ addEventListener("pagehide", saveView);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveView(); });
 
 recomputeTypes();
+if (MP) {  // the marker of interest at the interface: a panel of the membrane card
+  const ic = document.getElementById("iface-card"); ic.classList.add("inset"); ic.classList.remove("span2");
+  ic.querySelector("canvas").height = 240; document.querySelector("#membrane-card .grid3").append(ic);
+}
 if (MP) { pair.cells = VIEW?.pair?.cells || MP.cells[0]; pair.partners = VIEW?.pair?.partners || MP.partners[0]; fillPairOptions(); computeM(); }
 renderMarkers(); renderControls(); renderHeader(); renderGalleryLegend();
 if (VIEW) {  // the remembered view in the controls
