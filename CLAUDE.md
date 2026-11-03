@@ -193,6 +193,7 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   data the additivity it assumes failed (same-type contacts clearly negative, see SPEC.md); the comparison of
   conditions stays on `stdDevs above mean`. The dashboard's switch *across the band: maximum / sum* (sums kept in
   `Profiles.sums`; the tables keep the maximum): the sum brings same-type contacts closer to 0, not yet to 0.
+  A fitted scale factor was examined and not adopted (2026-11-03; SPEC.md): it depends on the partner's cell type.
 - The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
   the membrane card has a *Marker* menu. On the import page *Membrane of* / *Interface with* are menus.
 

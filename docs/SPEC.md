@@ -496,6 +496,26 @@ is the partner's mean free membrane (`membrane.free_means`, the marker check's p
   test checks both projections. On the real dataset (numbers in the local notes) the sum brings the same-type
   contacts clearly closer to 0 for both markers, but three of the four stay negative: better, not yet sound. The
   excess therefore stays experimental and out of the comparison of conditions.
+- **A scale factor: examined, not adopted (the user, 2026-11-03; may be revisited).** Idea: subtract *k* times the
+  partner's free membrane, with *k* fitted so that same-type contacts give 0. Diagnostic on the real dataset (script
+  and plot kept locally): per cell with a same-type interface, y = interface mean - own free mean against x = the
+  partner's free mean over the interface positions.
+  - Maximum across the band: not linear (flat for dim partners, then a slope well below 1). No factor can fix it.
+  - Sum across the band: about linear and through 0, for both markers, so the partner's level is taken into account
+    as the model assumes. But the slope is below 1 and depends on the cell type of the partner, not on the marker:
+    clearly lower at immune-immune than at tumor-tumor contacts, alike for both markers. That points to geometry (the
+    share of the partner's membrane that falls in the band; small, curved cells give less). For a marker on both
+    types, the slopes of the mixed contacts were close to the same-type slope of the partner type.
+  - Per cell the scatter is large (correlations about 0.6-0.8): the correction holds on average, not per cell.
+    The own free membrane as a second regressor has a small negative weight (the own membrane counts somewhat less
+    than fully at an interface).
+  - Not adopted because: fitting on same-type contacts assumes they are not enriched (doubtful for a homophilic
+    adhesion molecule, where it would remove real enrichment); the mixed pairs, the ones of interest, have no neutral
+    reference to check a factor per partner type; and two fitted parameters per dataset with a hidden assumption
+    are hard to defend. If revisited: a factor per partner type, fitted on same-type contacts with a marker that is
+    not expected to be enriched there, and checked on a dataset it was not fitted on.
+  - Both the interface and the free membrane are means *along* the membrane (and the SD is over positions), so the
+    sum *across* the band (a fixed number of samples) does not make the measure depend on the cell's size.
 
 ## Zero intensities in the clustering (2026-11-03)
 
