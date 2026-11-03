@@ -9,8 +9,8 @@ comparison of the conditions. The same information is written to `overview.tsv`,
 
 ## The table
 
-The table has one row per dataset. The *dashboard* link opens the dashboard of the dataset, and *folder* opens its
-folder. For a dataset that failed, the row shows the error instead. Hover over a column header to see what the column
+The table has one row per dataset. The *dashboard* link opens the dashboard of the dataset, *folder* opens its
+folder, and *run again* runs only that dataset again (see [Run](import-page.md#4-run)). For a dataset that failed, the row shows the error instead. Hover over a column header to see what the column
 means:
 
 | Column | Meaning |

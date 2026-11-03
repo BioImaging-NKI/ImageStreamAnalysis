@@ -18,6 +18,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("example-settings", help="print a settings file with all defaults")
     proj_p = sub.add_parser("run-project", help="analyze all datasets of a project (project.toml or its folder)")
     proj_p.add_argument("project", help="project.toml, or the project folder")
+    proj_p.add_argument("--dataset", action="append", metavar="NAME",
+                        help="run only this dataset (again; repeat for several). With pools per experiment its whole "
+                             "experiment runs, because it is classified together with it")
     over_p = sub.add_parser("overview", help="write the overview tables of a project again from its results (for "
                                              "example after changing the conditions), without analysing")
     over_p.add_argument("project", help="project.toml, or the project folder")
@@ -40,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run-project":
         from .project import run_project
 
-        run_project(args.project)
+        run_project(args.project, args.dataset)
         return 0
     if args.command == "overview":
         from pathlib import Path

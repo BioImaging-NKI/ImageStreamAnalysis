@@ -59,6 +59,8 @@ th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line
 th { color: var(--muted); font-weight: 500; font-size: 13px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.sig td { font-weight: 600; }
+td.links { white-space: nowrap; }
+td.links > * + * { margin-left: 6px; }
 .zip { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 10px 0; }
 .zip h3 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; }
 .zip h3 .title { flex: 1; min-width: 0; }
@@ -148,6 +150,7 @@ progress { width: 260px; }
     <ul id="problems" class="problems"></ul>
     <div class="row">
       <button id="run" class="primary" data-icon="run">Run all datasets</button>
+      <span class="hint" style="margin:0">or one dataset: <i>Run</i> in its row of step 2, or <i>run again</i> in the overview</span>
       <button id="stop" data-icon="stop" disabled>Stop</button>
       <progress id="progress" max="1" value="0" hidden></progress>
       <span id="progress-text"></span>
@@ -374,15 +377,19 @@ function renderZip(z) {
   const dt = el("table", {}, el("tr", {}, el("th", {}, "Use"), el("th", {}, "Dataset"), el("th", { class: "num" }, "Objects"),
     el("th", { class: "num" }, "Complete"), el("th", {}, "Experiment"),
     el("th", { title: "control, treated, …: compared across the replicates in the overview (empty: not compared)" }, "Condition"),
-    el("th", { title: "the independent unit the dataset comes from: a donor, an independent experiment. Give both conditions of a donor the same replicate" }, "Replicate")));
+    el("th", { title: "the independent unit the dataset comes from: a donor, an independent experiment. Give both conditions of a donor the same replicate" }, "Replicate"),
+    el("th", {}, "")));
   for (const d of z.datasets) {
     const di = info.datasets.find(x => x.name === d.name) || {};
     dt.append(el("tr", {},
-      el("td", {}, el("input", { type: "checkbox", checked: d.include, onchange: e => { d.include = e.target.checked; renderProblems(); } })),
+      el("td", {}, el("input", { type: "checkbox", checked: d.include, onchange: e => { d.include = e.target.checked;
+        const b = e.target.closest("tr").querySelector("button.run-one"); if (b) b.dataset.off = d.include ? "" : "1"; renderProblems(); } })),
       el("td", {}, d.name), el("td", { class: "num" }, di.objects ?? ""), el("td", { class: "num", title: "objects with all channels" }, di.complete ?? ""),
       el("td", {}, el("input", { type: "text", value: d.experiment, onchange: e => d.experiment = e.target.value.trim() })),
       ["condition", "replicate"].map(k => el("td", {}, el("input", { type: "text", size: 10, value: d[k] || "",
-        onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } })))));
+        onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } }))),
+      el("td", {}, withIcon(el("button", { class: "run-one", "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
+        title: runOneTitle(d.name), onclick: () => run([d.name]) }, "Run"), "run"))));
   }
   card.append(el("div", { class: "scroll" }, dt));
 
@@ -563,6 +570,7 @@ function renderProblems() {
   const p = problems();
   document.getElementById("problems").replaceChildren(...p.map(m => el("li", {}, m)));
   document.getElementById("run").disabled = p.length > 0 || !!polling;
+  for (const b of document.querySelectorAll("button.run-one")) b.disabled = p.length > 0 || !!polling || b.dataset.off === "1";
 }
 async function save() {
   try {
@@ -575,9 +583,17 @@ async function save() {
     return r;
   } catch (e) { toast(e.message); }
 }
-async function run() {
+function runOneTitle(name) {  // what the run button of one dataset runs
+  const d = state.zips.flatMap(z => z.datasets).find(x => x.name === name);
+  if (state.settings.classification.pool === "experiment" && d) {
+    const others = state.zips.flatMap(z => z.datasets).filter(x => x.include && x.experiment === d.experiment && x.name !== name);
+    if (others.length) return `Run this dataset again, with the other ${others.length} dataset(s) of experiment '${d.experiment}': they are classified together`;
+  }
+  return "Run only this dataset (again); the others keep their results";
+}
+async function run(datasets = null) {
   try {
-    const r = await api("run", { project: toProject() });
+    const r = await api("run", { project: toProject(), datasets });
     if (!r.started) { toast(r.problems.join("; ")); return; }
     forgetDraft();
     logSince = 0;
@@ -636,16 +652,21 @@ async function refreshOverview() {
   try { o = await api("overview", { folder, project: state.settings ? toProject() : null }); } catch (e) { box.replaceChildren(el("p", { class: "error" }, e.message)); return; }
   if (!o.rows.length) { box.replaceChildren(el("p", { class: "hint" }, "No results yet.")); return; }
   const cols = o.columns.filter(c => !["zip", "folder", "seconds"].includes(c));
-  const table = el("table", {}, el("tr", {}, cols.map(c => el("th", { class: typeof o.rows[0][c] === "number" ? "num" : "", title: columnHelp(c) }, c)), el("th", {}, ""), el("th", {}, "")));
+  // the links first, so that they are in view however many columns follow
+  const table = el("table", {}, el("tr", {}, el("th", {}, ""), cols.map(c => el("th", { class: typeof o.rows[0][c] === "number" ? "num" : "", title: columnHelp(c) }, c))));
   const rows = [...o.rows].sort((a, b) => String(a.experiment).localeCompare(String(b.experiment)) || String(a.dataset).localeCompare(String(b.dataset)));
   for (const r of rows) {
-    table.append(el("tr", {}, cols.map(c => {
+    const links = el("td", { class: "links" },
+      r.error ? "" : el("a", { href: `/files/${TOKEN}/${r.folder.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}/dashboard.html`,
+                               target: "_blank", rel: "noopener" }, "dashboard"),
+      el("button", { class: "link", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"),
+      el("button", { class: "link run-one", disabled: problems().length > 0 || !!polling, title: runOneTitle(String(r.dataset)),
+                     onclick: () => run([String(r.dataset)]) }, "run again"));
+    table.append(el("tr", {}, links, cols.map(c => {
       const v = r[c];
       if (c === "error" && v) return el("td", { class: "error" }, v);
       return el("td", { class: typeof v === "number" ? "num" : "" }, v == null ? "" : typeof v === "number" ? NUMBER.format(v) : String(v));
-    }), el("td", {}, r.error ? "" : el("a", { href: `/files/${TOKEN}/${r.folder.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}/dashboard.html`,
-          target: "_blank", rel: "noopener" }, "dashboard")),
-        el("td", {}, el("button", { class: "link", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"))));
+    })));
   }
   box.replaceChildren(table);
   if (o.interactions && o.interactions.length) box.append(contactMatrices(o.interactions));
@@ -739,7 +760,7 @@ document.getElementById("add-path").onclick = async () => {
   const input = document.getElementById("zip-path"); const p = input.value.trim().replace(/^"|"$/g, "");
   if (p) { input.value = ""; await addZip(p); }
 };
-document.getElementById("run").onclick = run;
+document.getElementById("run").onclick = () => run();
 document.getElementById("stop").onclick = () => api("stop");
 document.getElementById("refresh").onclick = refreshOverview;
 document.getElementById("open-folder").onclick = () => {

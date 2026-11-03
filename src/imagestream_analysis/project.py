@@ -262,17 +262,23 @@ def _median(values: pd.Series) -> float | None:
     return round(float(np.median(v)), 4) if len(v) else None
 
 
-def run_project(path: str | Path) -> pd.DataFrame:
+def run_project(path: str | Path, only: list[str] | None = None) -> pd.DataFrame:
     """Analyse all included datasets; a failing dataset is logged and skipped. Writes the overview.
 
     classification.pool = "experiment": all datasets are measured first, then the cells of each experiment are
     classified together (one set of thresholds, one clustering), then every dataset is finished. "dataset": each
-    dataset is analysed on its own."""
+    dataset is analysed on its own.
+
+    only: the names of the datasets to run (again); the others keep their results, and the overview is written from
+    all of them. With pools per experiment, a dataset is classified with the other datasets of its experiment, so
+    its whole experiment runs."""
     project = Project.load(path)
     problems = project.problems()
     if problems:
         raise ValueError("The project is not ready:\n- " + "\n- ".join(problems))
     samples = project.samples()
+    if only:
+        samples = select_samples(samples, only, project.settings.classification.pool)
     if project.settings.classification.pool == Pool.DATASET:
         _run_each(samples)
     else:
@@ -282,6 +288,23 @@ def run_project(path: str | Path) -> pd.DataFrame:
 
 
 Sample = tuple["ZipEntry", "DatasetEntry", Settings]
+
+
+def select_samples(samples: list[Sample], only: list[str], pool: Pool) -> list[Sample]:
+    """The samples of the named datasets; with pools per experiment, all datasets of their experiments."""
+    names = set(only)
+    chosen = [s for s in samples if s[1].name in names]
+    missing = names - {d.name for _, d, _ in chosen}
+    if missing:
+        raise ValueError(f"No included dataset named {', '.join(sorted(missing))}")
+    if pool == Pool.EXPERIMENT:
+        experiments = {d.experiment or Path(z.path).stem for z, d, _ in chosen}
+        chosen = [s for s in samples if (s[1].experiment or Path(s[0].path).stem) in experiments]
+        extra = [d.name for _, d, _ in chosen if d.name not in names]
+        if extra:
+            log.info("Classified together with the other datasets of the experiment, so these run too: %s",
+                     ", ".join(extra))
+    return chosen
 
 
 def _label(z: ZipEntry, d: DatasetEntry) -> str:

@@ -177,6 +177,8 @@ def test_api_scan_save_and_overview(server, ideas_zip):
     run_project(folder)
     o = call(server, "overview", {"folder": str(folder)})["result"]
     assert o["rows"][0]["cells"] == 20 and "experiment" in o["columns"]
+    unknown = call(server, "run", {"project": project, "datasets": ["Nothing"]})  # run one dataset: checked first
+    assert not unknown["ok"] and "No included dataset named Nothing" in unknown["error"]
 
 
 def test_apply_from_a_dashboard(ideas_zip, monkeypatch):
@@ -265,3 +267,24 @@ def test_one_immune_marker_per_zip_is_enough():
     assert ch.resolved(numbers, names).immune == [3]
     with pytest.raises(ValueError, match="immune marker 'CD3'"):
         ch.resolved(numbers, ["BF", "Tumor", "other"])
+
+
+@pytest.mark.parametrize("pool", ["experiment", "dataset"])
+def test_run_one_dataset_again(ideas_zip, pool):
+    """Run only one dataset: the other keeps its results (with pools per experiment its experiment runs along)."""
+    folder = ideas_zip["tmp"] / "project"
+    p = make_project(ideas_zip, folder)
+    p.settings.classification.pool = Pool(pool)
+    second = write_ideas_zip(ideas_zip["tmp"] / "second.zip", ideas_zip["data"][:, [0, 1, 2, 3]], IDEAS_IDS,
+                             [1, 3, 6, 9], dataset="Sample B")
+    p.zips.append(ZipEntry(second, 0.5, [1, 3, 6, 9], list(NAMES), {}, [DatasetEntry("Sample B", "Experiment 1")]))
+    p.save()
+    run_project(folder)
+    a, b = (folder / "Experiment 1" / name / "run.json" for name in ("Sample A", "Sample B"))
+    before = a.stat().st_mtime_ns, b.stat().st_mtime_ns
+    table = run_project(folder, ["Sample B"])
+    assert len(table) == 2  # the overview still has both
+    assert b.stat().st_mtime_ns != before[1]
+    assert (a.stat().st_mtime_ns != before[0]) == (pool == "experiment")  # classified together: runs along
+    with pytest.raises(ValueError, match="No included dataset named Nothing"):
+        run_project(folder, ["Nothing"])

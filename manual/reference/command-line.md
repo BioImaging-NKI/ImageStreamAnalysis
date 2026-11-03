@@ -8,11 +8,16 @@ several exports, or a **settings file**, for one dataset. Both are [TOML](https:
 ```powershell
 uv run imagestream-cli gui                          # the import page (also: uv run imagestream)
 uv run imagestream-cli run-project D:\data\project  # all datasets of a project (project.toml or its folder)
+uv run imagestream-cli run-project D:\data\project --dataset "Donor 2"   # only this dataset (repeat for several)
 uv run imagestream-cli overview D:\data\project     # rewrite the overview tables, without analyzing (after new conditions)
 uv run imagestream-cli run settings.toml            # one dataset, with a settings file
 uv run imagestream-cli run settings.toml --max-events 50
 uv run imagestream-cli example-settings > settings.toml   # a settings file with every default
 ```
+
+With `--dataset`, `run-project` runs only the named datasets; the others keep their results, and the overview is
+written again from all of them. With pools per experiment (`classification.pool = "experiment"`), the other datasets
+of the same experiment run too, because they are classified together.
 
 ## A settings file
 

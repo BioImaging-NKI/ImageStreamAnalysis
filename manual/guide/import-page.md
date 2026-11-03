@@ -108,9 +108,15 @@ the same in every dataset of that experiment. With **dataset**, each dataset is 
 
 The list above *Run all datasets* names anything that is still missing, such as an output folder, a pixel size, or a
 channel for a role. For the immune-cell markers, one ticked *Immune* channel in each export is enough: the markers are
-summed, so an export may lack a marker that another export has. The button works only when this list is empty. The run first saves the project. The log shows the
-progress of the run, and *Stop* ends it. If a dataset fails, the error is logged and the other datasets are still
-analyzed.
+summed, so an export may lack a marker that another export has. The button works only when this list is empty. The
+run first saves the project. The log shows the progress of the run, and *Stop* ends it. If a dataset fails, the error
+is logged and the other datasets are still analyzed.
+
+To run **one dataset** (again), click *Run* in its row of the dataset table in step 2, or *run again* in its row of the
+overview. The other datasets keep their results, and the overview is written again from all of them. With *Classify
+together* set to *experiment*, a dataset is classified together with the other datasets of its experiment. Its whole
+experiment then runs, so that all of them keep one set of thresholds; the tooltip of the button says so. Cellpose is
+skipped for every dataset whose Cellpose input and settings have not changed.
 
 ## 5. Overview
 

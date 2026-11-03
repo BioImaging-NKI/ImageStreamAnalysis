@@ -30,7 +30,7 @@ from .comparison import compare, write_comparison
 from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
 from .launcher import STATE_DIR
-from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview
+from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview, select_samples
 
 log = logging.getLogger(__name__)
 PREFS = STATE_DIR / "gui_prefs.json"  # last project folder, light / dark
@@ -146,12 +146,14 @@ class Job:
     def running(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
 
-    def start(self, project_file: Path) -> None:
+    def start(self, project_file: Path, only: list[str] | None = None) -> None:
         if self.running:
             raise RuntimeError("A run is still going")
         exe = Path(sys.executable)
         python = exe.with_name("python.exe") if exe.name.lower() == "pythonw.exe" else exe
         cmd = [str(python), "-m", "imagestream_analysis.cli", "run-project", str(project_file)]
+        for name in only or []:  # only these datasets (with pools per experiment: their experiments)
+            cmd += ["--dataset", name]
         with self.lock:
             self.lines, self.progress, self.folder = [], "", str(project_file.parent)
         self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -315,9 +317,12 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         problems = p.problems()
         if problems:
             return {"started": False, "problems": problems}
+        only = [str(n) for n in data.get("datasets") or []]
+        if only:
+            select_samples(p.samples(), only, p.settings.classification.pool)  # an unknown name: an error here
         path = p.save()
         save_prefs({"project": str(p.folder)})
-        job.start(path)
+        job.start(path, only or None)
         return {"started": True, "problems": []}
     if api == "status":
         return job.status(int(data.get("since", 0)))
