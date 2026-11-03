@@ -28,7 +28,7 @@ SECTIONS = [("input", "InputSettings",
 def page_labels() -> dict[str, str]:
     """setting path -> its label on the import page"""
     text = GUI.read_text(encoding="utf-8")
-    kinds = "choice|int|float|text|bool|list|pair|thresholds"
+    kinds = "choice|int|float|text|bool|list|pairs|thresholds"
     return {m[1]: m[2] for m in re.finditer(rf'\["(\w+\.\w+)", "([^"]+)", "(?:{kinds})"', text)}
 
 

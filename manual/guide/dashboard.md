@@ -152,8 +152,8 @@ With two or more markers of interest, a **Marker** menu comes first. It switches
 histograms, the profile, the heatmap, *All pairs*, the badge, the membrane columns of the *Cells* table and the cell
 card. Each marker starts with the pair of the run, which is by default the cell type that carries that marker against
 the other type, and keeps the pair you choose for it. The line under the menus names the marker and the cell type that
-carries it. *Apply to the project…* and *Copy as settings* write one pair, which then applies to **every** marker of
-interest. The page remembers the chosen marker.
+carries it. *Apply to the project…* and *Copy as settings* write the pair of the marker shown only
+(`[membrane.pairs.'<marker>']`); the other markers keep theirs. The page remembers the chosen marker.
 
 ![Membrane enrichment](../images/dash_membrane.png)
 

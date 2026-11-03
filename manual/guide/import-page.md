@@ -92,25 +92,32 @@ These settings apply to all datasets of the project. The most important ones are
 - **Classify together**, **Threshold of the subtype markers** and **Artefact** control how the
   [cell types](../analysis/classification.md) are assigned. **Thresholds set by hand** lists the thresholds that were
   applied from a [dashboard](dashboard.md#subtype-markers); *Automatic again* removes them.
-- **Membrane profiles and enrichment**, **Membrane of** and **Interface with** control the
-  [membrane enrichment](../analysis/membrane.md). *Membrane of* and *Interface with* are menus. Their first choice is
-  automatic: *where the marker is expressed* means the cell type that carries the marker of interest, which the
+- **Membrane profiles and enrichment** and the membrane pairs control the
+  [membrane enrichment](../analysis/membrane.md). Every marker of interest has a row of its own, for example
+  *Marker: membrane of* … *interface with* …, so that each marker can be measured on its own pair. The rows follow the
+  *MOI* ticks in step 2: a marker that you tick gets a row, and a marker that you untick loses its row and its pair.
+  A renamed channel keeps its pair. Without a marker of interest there are no rows. *Membrane of* and *Interface with*
+  are menus. Their first choice is automatic: *where the marker is expressed* means the cell type that carries the marker of interest, which the
   program finds in the data for each marker, and *the other cell type* means the other one. The other choices are the
   tumor cells, all immune cells, every combination of the subtype markers ticked in step 2 (for example *immune A+
   cells* or *immune negative cells*), and with two or more subtype markers each marker on its own (*immune cells A+
   (any other markers)*). These are the same choices as in the dashboard's membrane card, which shows only the
   combinations that occur in the data. The menus follow the roles: when you tick, untick or rename a subtype marker,
-  they change with it. A pair that you choose applies to every marker of interest. The run check asks for at least
-  one *MOI* channel when *Membrane profiles and enrichment* is on.
+  they change with it. A pair that you choose applies to that marker only, and each side on its own: if you choose
+  only *Membrane of*, *Interface with* stays automatic. The run check asks for at least one *MOI* channel when
+  *Membrane profiles and enrichment* is on.
 
     A value that the menus do not offer, for example from an older project or a settings file edited by hand, is
     kept and shown as its own choice, marked *(from the settings file)*, so that saving the project does not change
     it. If it is not a selection of the panel, the list above the *Run* button says so, with the likely meaning: for
     example, `Immune A` is no subset, and the program asks whether you meant `A+` (every A-positive immune cell) or
     `Immune A+` (A positive only). The run does not start until you choose a pair in the menu. A valid subset that
-    has no cells in a dataset only gives a warning in the log, and that dataset gets no membrane files for it. In a
-    settings file, both are lists (`cells = ['Tumor']`); the menus write one entry, or none for the automatic
-    choice.
+    has no cells in a dataset only gives a warning in the log, and that dataset gets no membrane files for it.
+
+    In `project.toml` the pairs are tables by marker name, for example `[membrane.pairs.'Marker']` with
+    `cells = ['Tumor']` and `partners = ['Immune Subtype A+']`; the menus write one entry per side, or none for the
+    automatic choice. An older project with one pair for all markers (`membrane.cells` and `membrane.partners`) is
+    shown with that pair in the row of every marker, and saved as one entry per marker.
 
 [All settings](../reference/settings.md) lists every setting with its default value.
 

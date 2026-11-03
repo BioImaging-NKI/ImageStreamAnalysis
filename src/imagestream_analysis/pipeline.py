@@ -198,10 +198,11 @@ def marker_result(cells: pd.DataFrame, number: int, column: str, name: str, prof
     suffix = f" - {safe_name(name)}"
     m = settings.membrane
     carried_by, medians = carrier(cells, profiles, column)
-    wanted, partners = pair_of(m, carried_by)
+    wanted, partners = pair_of(m, carried_by, name)
     source = "membrane that touches no cell" if profiles is not None else "whole cell"
-    chosen = ("membrane.cells / membrane.partners" if m.cells or m.partners
-              else "empty membrane.cells: the type that carries it")
+    set_cells, set_partners = m.pair_settings(name)
+    chosen = ("set in membrane.pairs" if name in m.pairs else "set in membrane.cells / partners"
+              if set_cells or set_partners else "automatic: the type that carries it")
     log.info("%s: carried by the %s cells (medians %s, %s): membranes of %s with %s (%s)", name,
              carried_by.lower() or "(no tumor or immune)",
              ", ".join(f"{k.lower()} {v:.4g}" for k, v in medians.items()), source, " / ".join(wanted),
@@ -219,8 +220,8 @@ def marker_result(cells: pd.DataFrame, number: int, column: str, name: str, prof
             log.warning("%s: no %s of the pair in this dataset (%s): no membrane results for this marker", name,
                         what, " / ".join(sels))
     if profiles is not None:
-        out.membranes = analyze_membranes(cells, profiles, carried_by, m)
-        out.pairs_table = pair_table(cells, profiles, column)
+        out.membranes = analyze_membranes(cells, profiles, carried_by, m, marker=name)
+        out.pairs_table = pair_table(cells, profiles, column, (wanted, partners))
     return out
 
 
@@ -309,7 +310,8 @@ def subtype_marker_names(settings: Settings, stack: EventStack) -> list[str]:
 def start(settings: Settings) -> tuple[EventStack, Path]:
     """Load the input, make the output folder, start its log and save the settings."""
     stack = load(settings)
-    problems = selector_problems(settings.membrane, subtype_marker_names(settings, stack))
+    moi_names = [stack.channel_names[stack.numbers.index(int(n))] for n in settings.channels.marker_of_interest]
+    problems = selector_problems(settings.membrane, subtype_marker_names(settings, stack), moi_names)
     if problems:  # before anything is segmented
         raise ValueError("; ".join(problems))
     out = Path(settings.input.output) / stack.name

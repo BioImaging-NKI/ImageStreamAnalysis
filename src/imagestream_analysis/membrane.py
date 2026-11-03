@@ -259,10 +259,19 @@ def _marker_words(text: str, markers: list[str]) -> list[str] | None:
     return out or None
 
 
-def selector_problems(settings: MembraneSettings, markers: list[str]) -> list[str]:
-    """The problems of membrane.cells and membrane.partners (selector_problem), as messages."""
-    return [f"membrane.{key}: {msg}" for key, sels in (("cells", settings.cells), ("partners", settings.partners))
-            for sel in sels if (msg := selector_problem(sel, markers))]
+def selector_problems(settings: MembraneSettings, markers: list[str],
+                      markers_of_interest: list[str] | None = None) -> list[str]:
+    """The problems of membrane.cells, membrane.partners and membrane.pairs (selector_problem), as messages; with
+    markers_of_interest (their names), also the entries of pairs for a name that is not one of them."""
+    sides = [("membrane.cells", settings.cells), ("membrane.partners", settings.partners)]
+    for marker, entry in settings.pairs.items():
+        sides += [(f"membrane.pairs.{marker}.{k}", v) for k, v in entry.items()]
+    out = [f"{key}: {msg}" for key, sels in sides for sel in sels if (msg := selector_problem(sel, markers))]
+    if markers_of_interest is not None:
+        known = ", ".join(f"'{m}'" for m in markers_of_interest) or "none"
+        out += [f"membrane.pairs.{m}: '{m}' is not a marker of interest (markers of interest: {known})"
+                for m in settings.pairs if m not in markers_of_interest]
+    return out
 
 
 def select(cells: pd.DataFrame, selectors: list[str]) -> pd.Series:
@@ -371,48 +380,56 @@ def pair_selections(cells: pd.DataFrame) -> tuple[list[str], list[str]]:
     return rows, ["Tumor", "Immune", *subtypes]
 
 
-def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str) -> pd.DataFrame:
+def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
+               run_pair: tuple[list[str], list[str]] | None = None) -> pd.DataFrame:
     """Every pair of selections (pair_selections), as the dashboard's 'All pairs': the measured cells with an interface
     with the partners, their median SD above mean and median ratio interface / free membrane (scored as
-    analyze_membranes, without the controls), and the marker check of the pair."""
+    analyze_membranes, without the controls), and the marker check of the pair. run_pair (cells, partners): the pair
+    of the run, added when it is not one of these (a marker as partner, or several selections), so that the
+    comparison of conditions finds it too."""
     rows, cols = pair_selections(cells)
+    combos = [([r], [c]) for r in rows for c in cols]
+    if run_pair is not None and (list(run_pair[0]), list(run_pair[1])) not in combos:
+        combos.append((list(run_pair[0]), list(run_pair[1])))
     labels = cells["label"].astype(int)
     index = {int(lab): k for k, lab in enumerate(membranes.labels)}
     out = []
-    for r in rows:
-        chosen = [index[int(lab)] for lab in labels[select(cells, [r])] if int(lab) in index]
-        for c in cols:
-            partners = np.array(sorted(labels[select(cells, [c])]), dtype=np.int64)
-            scores, ratios = [], []
-            for k in chosen:
-                p, track = membranes.profiles[k], membranes.tracks[k]
-                f, free = np.isin(track, partners), track == 0
-                if f.any() and free.sum() > 1:
-                    scores.append(_score(p[f], p[free]))
-                    mean_free = float(p[free].mean())
-                    ratios.append(float(p[f].mean()) / mean_free if mean_free else np.nan)
-            check = expression_check(cells, membranes, moi_column, [r], [c])
-            out.append({"membrane of": r, "interface with": c, "cells with an interface": len(scores),
-                        "median stdDevs above mean": float(np.nanmedian(scores)) if scores else np.nan,
-                        "median ratio interface/free": float(np.nanmedian(ratios)) if ratios else np.nan,
-                        "marker check": check["level"], "partners / measured": check["partners / measured"]})
+    for rs, cs in combos:
+        r, c = " / ".join(rs), " / ".join(cs)
+        chosen = [index[int(lab)] for lab in labels[select(cells, rs)] if int(lab) in index]
+        partners = np.array(sorted(labels[select(cells, cs)]), dtype=np.int64)
+        scores, ratios = [], []
+        for k in chosen:
+            p, track = membranes.profiles[k], membranes.tracks[k]
+            f, free = np.isin(track, partners), track == 0
+            if f.any() and free.sum() > 1:
+                scores.append(_score(p[f], p[free]))
+                mean_free = float(p[free].mean())
+                ratios.append(float(p[f].mean()) / mean_free if mean_free else np.nan)
+        check = expression_check(cells, membranes, moi_column, rs, cs)
+        out.append({"membrane of": r, "interface with": c, "cells with an interface": len(scores),
+                    "median stdDevs above mean": float(np.nanmedian(scores)) if scores else np.nan,
+                    "median ratio interface/free": float(np.nanmedian(ratios)) if ratios else np.nan,
+                    "marker check": check["level"], "partners / measured": check["partners / measured"]})
     return pd.DataFrame(out)
 
 
-def pair_of(settings: MembraneSettings, carried_by: str) -> tuple[list[str], list[str]]:
-    """The cells and partners of the enrichment; empty settings: the cell type that carries the marker ("Tumor" or
-    "Immune", see carrier; "" counts as Tumor) against the other type."""
+def pair_of(settings: MembraneSettings, carried_by: str, marker: str = "") -> tuple[list[str], list[str]]:
+    """The cells and partners of the enrichment of one marker, each side on its own: its entry in membrane.pairs,
+    else membrane.cells / partners, else automatic: the cell type that carries the marker ("Tumor" or "Immune", see
+    carrier; "" counts as Tumor), and the other type."""
     own = "Immune" if carried_by == "Immune" else "Tumor"
     other = "Tumor" if own == "Immune" else "Immune"
-    return list(settings.cells) or [own], list(settings.partners) or [other]
+    cells, partners = settings.pair_settings(marker)
+    return cells or [own], partners or [other]
 
 
 def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str, settings: MembraneSettings,
-                      rng: np.random.Generator | None = None) -> MembraneResult:
+                      rng: np.random.Generator | None = None, marker: str = "") -> MembraneResult:
     """The enrichment of the marker of interest at the interface of the chosen cells with their partners
-    (pair_of: carried_by is the cell type that carries the marker)."""
+    (pair_of: carried_by is the cell type that carries the marker; marker: its name, for membrane.pairs)."""
     rng = rng or np.random.default_rng()
-    wanted, partners = pair_of(settings, carried_by)
+    wanted, partners = pair_of(settings, carried_by, marker)
     chosen = set(cells.loc[select(cells, wanted), "label"].astype(int))
     partner_labels = np.array(sorted(cells.loc[select(cells, partners), "label"].astype(int)), dtype=np.int64)
     frame_of = dict(zip(cells["label"].astype(int), cells["frame"].astype(int), strict=True))

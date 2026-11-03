@@ -124,11 +124,11 @@ class Project:
                 ch = self.channels_of(z)
             except ValueError as e:
                 msgs.append(f"{name}: {e}")
-            else:  # the membrane pair, against the subtype markers by their names in this zip
-                if self.settings.membrane.cells or self.settings.membrane.partners:
-                    names = [z.channel_names[z.channels.index(int(n))] if int(n) in z.channels else ""
-                             for n in ch.functional]
-                    msgs += [m for m in selector_problems(self.settings.membrane, names) if m not in msgs]
+            else:  # the membrane pairs, against the subtype markers and markers of interest by their names here
+                name_of = dict(zip(z.channels, z.channel_names, strict=False))
+                found = selector_problems(self.settings.membrane, [name_of.get(int(n), "") for n in ch.functional],
+                                          [name_of.get(int(n), "") for n in ch.marker_of_interest])
+                msgs += [m for m in found if m not in msgs]
             if not Path(z.path).exists():
                 msgs.append(f"{name}: file not found")
         return msgs
@@ -182,6 +182,32 @@ class Project:
         project = cls(folder, settings, zips, str(data.get("comparison", {}).get("reference", "")).strip())
         project.roles_to_panel()
         return project
+
+    def moi_names(self) -> list[str]:
+        """The names of the markers of interest (a channel given by number: its name in the first zip that has it)."""
+        out = []
+        for ref in self.settings.channels.marker_of_interest:
+            if isinstance(ref, str):
+                out.append(ref)
+                continue
+            out += [next((z.channel_names[z.channels.index(ref)] for z in self.zips if ref in z.channels), f"Ch{ref}")]
+        return out
+
+    def pairs_per_marker(self) -> None:
+        """membrane.cells / partners (one pair for every marker, as older projects have it) as an entry of
+        membrane.pairs for each marker of interest without its own entry for that side; then cleared. The import page
+        writes the pairs only."""
+        m = self.settings.membrane
+        names = self.moi_names()
+        if not (m.cells or m.partners) or not names:
+            return
+        for marker in names:
+            entry = dict(m.pairs.get(marker, {}))
+            for side, value in (("cells", m.cells), ("partners", m.partners)):
+                if value and not entry.get(side):
+                    entry[side] = list(value)
+            m.pairs[marker] = entry
+        m.cells, m.partners = [], []
 
     def roles_to_panel(self) -> None:
         """Turn per-zip roles by number (projects before 2026-10-31) into the panel by name, when every zip has the

@@ -307,6 +307,8 @@ function setRole(role, name, on) {
 function renameRoles(from, to) {  // a renamed channel keeps its roles, unless another zip still uses the old name
   if (!from || state.zips.some(z => z.channel_names.includes(from))) return;
   for (const [r] of ROLES) if (hasRole(r, from)) { setRole(r, from, false); if (to) setRole(r, to, true); }
+  const pairs = state.settings?.membrane?.pairs;  // a marker of interest keeps its pair
+  if (pairs && pairs[from] && to && !pairs[to]) { pairs[to] = pairs[from]; delete pairs[from]; }
 }
 
 // ---------- zips
@@ -452,8 +454,7 @@ const FIELDS = [
   ["Membranes", "analysis/membrane", [
     [["membrane.analysis", "Membrane profiles and enrichment", "bool"],
      ["membrane.thickness", "Membrane / interface width (px)", "int", null, "about 1.5 µm"]],
-    [["membrane.cells", "Membrane of", "pair", null, "where the marker is expressed"],
-     ["membrane.partners", "Interface with", "pair", null, "the other cell type"]],
+    [["membrane.pairs", "Membrane pair per marker of interest", "pairs"]],
     [["membrane.straightening_width", "Straightening width (px)", "int", null, "about 4.5 µm"],
      ["membrane.inside_only", "Straighten inside the measured cell only", "bool"]],
     [["membrane.control_repeats", "Control windows per cell", "int"],
@@ -462,7 +463,7 @@ const FIELDS = [
 function getS(path) { const [a, b] = path.split("."); return state.settings[a][b]; }
 function setS(path, v) {
   const [a, b] = path.split("."); state.settings[a][b] = v;
-  if (["membrane.analysis", "membrane.cells", "membrane.partners"].includes(path)) renderProblems();
+  if (path === "membrane.analysis") renderProblems();
   if (path === "segmentation.cellpose_python" || path === "segmentation.use_gpu") showCellpose();
 }
 
@@ -510,8 +511,42 @@ function pairSelections() {
   }
   return opts;
 }
+// the pair of each marker of interest (membrane.pairs, by marker name): one row per marker; an empty side is automatic
+function moiNames() {
+  return (panel().marker_of_interest || []).map(n => typeof n === "string" ? n
+    : (state.zips.map(z => z.channel_names[z.channels.indexOf(n)]).find(Boolean) || "")).filter(Boolean);
+}
+const pairsOf = () => state.settings.membrane.pairs || (state.settings.membrane.pairs = {});
+const getPair = (marker, side) => (pairsOf()[marker] || {})[side] || [];
+function setPair(marker, side, value) {
+  const pairs = pairsOf(), entry = { ...(pairs[marker] || {}) };
+  if (value.length) entry[side] = value; else delete entry[side];
+  if (Object.keys(entry).length) pairs[marker] = entry; else delete pairs[marker];
+  renderProblems();
+}
+function pairSelect(marker, side, auto) {
+  const sel = el("select", { "data-pair": marker, "data-side": side, "data-auto": auto, title: `${marker}: ${side === "cells" ? "the cells whose membrane is measured" : "the partners whose contact is the interface"}`,
+    onchange: e => { const o = e.target.selectedOptions[0];
+      setPair(marker, side, o.dataset.stale ? [...(sel._stale || [])] : (o.value ? [o.value] : [])); } });
+  fillPairMenu(sel); return sel;
+}
+let pairRowsKey = "";
+function renderPairRows() {  // the rows follow the markers of interest (ticked, unticked, renamed) and the subtype markers
+  const box = document.getElementById("pair-rows"); if (!box || !state.settings) return;
+  const names = moiNames(), key = JSON.stringify([names, subtypeMarkerNames()]);
+  if (key === pairRowsKey && box.childElementCount === names.length) { box.querySelectorAll("select[data-pair]").forEach(fillPairMenu); return; }
+  pairRowsKey = key;
+  box.replaceChildren(...names.map(name => el("div", { class: "settings-row" },
+    el("label", {}, `${name}: membrane of`, pairSelect(name, "cells", "where the marker is expressed")),
+    el("label", {}, "interface with", pairSelect(name, "partners", "the other cell type")))));
+}
+function prunePairs() {  // an entry for a marker that is no longer a marker of interest (unticked, renamed away)
+  if (!state.settings || state.zips.some(z => Object.keys(z.roles || {}).length)) return;  // old roles by number
+  const names = new Set(moiNames()), pairs = pairsOf();
+  for (const m of Object.keys(pairs)) if (!names.has(m)) delete pairs[m];
+}
 function fillPairMenu(sel) {  // a stored value that is not offered (an old or hand-edited file) stays, as its own option
-  const v = getS(sel.dataset.pair) || [], key = v.length === 1 ? v[0] : v.length ? v.join(", ") : "";
+  const v = getPair(sel.dataset.pair, sel.dataset.side), key = v.length === 1 ? v[0] : v.length ? v.join(", ") : "";
   const opts = [["", sel.dataset.auto], ...pairSelections()];
   const options = opts.map(([value, text]) => el("option", { value, selected: value === key }, text));
   sel._stale = null;
@@ -521,7 +556,6 @@ function fillPairMenu(sel) {  // a stored value that is not offered (an old or h
   }
   sel.replaceChildren(...options);
 }
-function refreshPairMenus() { if (state.settings) document.querySelectorAll("select[data-pair]").forEach(fillPairMenu); }
 function settingInput(path, kind, list, placeholder) {
   const v = getS(path);
   if (kind === "thresholds") {  // set from a dashboard; shown, and back to automatic with the button
@@ -534,10 +568,6 @@ function settingInput(path, kind, list, placeholder) {
   if (kind === "choice") return el("select", { onchange: e => setS(path, e.target.value) },
     (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
   if (kind === "bool") return el("input", { type: "checkbox", checked: !!v, onchange: e => setS(path, e.target.checked) });
-  if (kind === "pair") { const sel = el("select", { "data-pair": path, "data-auto": placeholder || "",
-      onchange: e => { const o = e.target.selectedOptions[0];
-        setS(path, o.dataset.stale ? [...(sel._stale || [])] : (o.value ? [o.value] : [])); } });
-    fillPairMenu(sel); return sel; }
   if (kind === "list") return el("input", { type: "text", value: (v || []).join(", "), placeholder: placeholder || "",
     onchange: e => setS(path, e.target.value.split(",").map(t => t.trim()).filter(t => t)) });
   if (kind === "text") return el("input", { type: "text", value: v ?? "", placeholder: placeholder || "",
@@ -550,6 +580,8 @@ function renderSettings() {
   for (const [k, [title, help, rows]] of FIELDS.entries()) {
     const group = el("div", { class: "settings-rows" });
     for (const fields of rows) {
+      if (fields[0][2] === "pairs") {  // one row per marker of interest (renderPairRows)
+        group.append(el("div", { id: "pair-rows", class: "settings-rows", title: fields[0][1] })); continue; }
       const wide = fields.length === 1 && ["text", "list", "thresholds"].includes(fields[0][2]);
       group.append(el("div", { class: "settings-row" + (wide ? " wide" : fields.length === 3 ? " three" : "") },
         fields.map(([path, label, kind, list, placeholder]) =>  // a div, not a label, around a button (a click on a label clicks it)
@@ -560,13 +592,16 @@ function renderSettings() {
     box.append(el("fieldset", { class: `tint tint-${k % 6}` }, legend, group));
   }
   showCellpose();
+  pairRowsKey = ""; renderPairRows();
 }
 
 // ---------- run
 function pairProblems() {  // a membrane pair that the menus do not offer (an old or hand-edited file), as membrane.selector_problem
   const offered = new Set(pairSelections().map(([v]) => v)), names = subtypeMarkerNames(), out = [];
-  for (const [path, label] of [["membrane.cells", "Membrane of"], ["membrane.partners", "Interface with"]])
-    for (const sel of getS(path) || []) {
+  const sides = [["Membrane of", getS("membrane.cells")], ["Interface with", getS("membrane.partners")]];
+  for (const m of moiNames()) sides.push([`${m}: membrane of`, getPair(m, "cells")], [`${m}: interface with`, getPair(m, "partners")]);
+  for (const [label, values] of sides)
+    for (const sel of values || []) {
       if (offered.has(sel) || (sel.endsWith("+") && names.includes(sel.slice(0, -1)))) continue;
       const m = sel.replace(/^Immune /, "").replace(/\+$/, "");
       out.push(`${label}: '${sel}' is not a selection of this panel` + (names.includes(m)
@@ -612,7 +647,8 @@ function pruneRoles() {  // a role name that no zip has any more (renamed, zip r
 }
 function renderProblems() {
   pruneRoles();
-  refreshPairMenus();  // the subtype markers may have changed (ticked, unticked, renamed)
+  prunePairs();
+  renderPairRows();  // the markers of interest or the subtype markers may have changed (ticked, unticked, renamed)
   const p = problems();
   document.getElementById("problems").replaceChildren(...p.map(m => el("li", {}, m)));
   document.getElementById("run").disabled = p.length > 0 || !!polling;

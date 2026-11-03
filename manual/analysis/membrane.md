@@ -64,8 +64,9 @@ suggests what was probably meant.
 
 If *Membrane of* is left empty, the measured cells are the cell type that **carries the marker**: the tumor cells or
 the immune cells, whichever has the brighter membrane. This is decided from the data, for each marker of interest
-separately. If *Interface with* is left empty, the partners are the other cell type. A pair that you fill in applies to
-every marker of interest. In the [dashboard](../guide/dashboard.md#membrane-enrichment) you can change the pair
+separately. If *Interface with* is left empty, the partners are the other cell type. Every marker of interest has
+a pair of its own, and each side is set on its own: a marker can, for example, be measured on the tumor cells
+against *Subtype A+* cells, and another one on the *Subtype A+* cells against the tumor cells. In the [dashboard](../guide/dashboard.md#membrane-enrichment) you can change the pair
 directly.
 
 The log says which cell type carries each marker. In the example (Donor 1): "Marker: carried by the tumor cells (medians

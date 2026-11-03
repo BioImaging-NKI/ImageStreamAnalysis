@@ -304,3 +304,34 @@ def test_membrane_pair_is_checked_before_the_run(synthetic):
     assert not list(out.glob("Membrane intensity analysis*")) and not list(out.glob("membrane_profiles_normalized*"))
     assert (out / "dashboard.html").exists() and (out / "All cell combinations.tsv").exists()
     assert "no measured cells" in (out / "log.txt").read_text(encoding="utf-8")
+
+
+def test_membrane_pairs_in_a_settings_file(tmp_path):
+    """membrane.pairs round-trips as [membrane.pairs.'<marker>'] tables (a pasted table fits); bad entries fail."""
+    s = Settings()
+    s.membrane.pairs = {"CD1": {"cells": ["Tumor"], "partners": ["B+"]}, "it's": {"cells": ["Immune A+"]}}
+    path = tmp_path / "s.toml"
+    path.write_text(s.to_toml(), encoding="utf-8")
+    assert "[membrane.pairs.'CD1']" in s.to_toml() and Settings.load(path).membrane == s.membrane
+    path.write_text("[membrane]\npairs = { CD1 = { cells = 'Tumor', partners = [] } }\n", encoding="utf-8")
+    assert Settings.load(path).membrane.pairs == {"CD1": {"cells": ["Tumor"]}}
+    path.write_text("[membrane.pairs.CD1]\nmembrane = ['Tumor']\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="membrane.pairs.CD1"):
+        Settings.load(path)
+
+
+def test_two_markers_with_pairs_of_their_own(synthetic_two_markers):
+    """A pair per marker: the first against the immune cells (cells automatic), the second on the tumor cells
+    (partners automatic: the other type of the cell type that carries it); a marker that is no marker of interest
+    is an error before the run."""
+    s = settings_for(synthetic_two_markers)
+    s.channels.marker_of_interest = [2, "Second"]
+    s.membrane.pairs = {"MOI": {"partners": ["Immune negative"]}, "Second": {"cells": ["Tumor"]}}
+    first, second = run(s).markers
+    assert (first.cells, first.partners) == (["Tumor"], ["Immune negative"])
+    assert (second.cells, second.partners, second.carried_by) == (["Tumor"], ["Tumor"], "Immune")
+    pairs = second.pairs_table.set_index(["membrane of", "interface with"])
+    assert ("Tumor", "Tumor") in pairs.index
+    s.membrane.pairs = {"Other": {"cells": ["Tumor"]}}
+    with pytest.raises(ValueError, match="'Other' is not a marker of interest"):
+        run(s)

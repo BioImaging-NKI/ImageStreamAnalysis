@@ -347,3 +347,40 @@ def test_run_one_dataset_again(ideas_zip, pool):
     assert (a.stat().st_mtime_ns != before[0]) == (pool == "experiment")  # classified together: runs along
     with pytest.raises(ValueError, match="No included dataset named Nothing"):
         run_project(folder, ["Nothing"])
+
+
+def test_a_global_pair_becomes_a_pair_per_marker_on_the_page(ideas_zip):
+    """An older project with one pair for all markers (membrane.cells / partners): the page shows and saves it as an
+    entry of membrane.pairs per marker of interest; a pair for a name that is no marker of interest is a problem."""
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    p.settings.channels.marker_of_interest = ["MOI's name", "T cells"]
+    p.settings.membrane.cells = ["Tumor"]
+    p.settings.membrane.pairs = {"T cells": {"cells": ["Immune"]}}
+    data = gui.project_to_json(p)
+    m = data["settings"]["membrane"]
+    assert m["cells"] == [] and m["pairs"] == {"MOI's name": {"cells": ["Tumor"]}, "T cells": {"cells": ["Immune"]}}
+    saved = gui.project_from_json(data)
+    assert saved.settings.membrane.pairs == m["pairs"] and saved.settings.membrane.cells == []
+    assert p.settings.membrane.cells == ["Tumor"]  # the project itself is not changed by showing it
+    saved.settings.membrane.pairs["Nothing"] = {"cells": ["Tumor"]}
+    assert any("'Nothing' is not a marker of interest" in x for x in saved.problems())
+
+
+def test_apply_writes_the_pair_of_one_marker(ideas_zip, monkeypatch):
+    folder = ideas_zip["tmp"] / "applied"
+    project = make_project(ideas_zip, folder)
+    project.settings.membrane.pairs = {"Other": {"cells": ["Immune"]}}
+    project.save()
+    monkeypatch.setitem(gui.SERVED, "root", folder)
+
+    class FakeJob:
+        running, started = False, None
+
+        def start(self, path):
+            self.started = path
+
+    gui.apply_from_dashboard({"membrane": {"marker": "MOI's name", "cells": ["Tumor"], "partners": ["Tumor"]}},
+                             FakeJob())
+    m = Project.load(folder).settings.membrane
+    assert m.pairs == {"Other": {"cells": ["Immune"]}, "MOI's name": {"cells": ["Tumor"], "partners": ["Tumor"]}}
+    assert m.cells == [] and m.partners == []

@@ -921,11 +921,11 @@ document.getElementById("reset-all").onclick = () => { for (const m of MK) m._re
 document.getElementById("export").onclick = async () => {
   const q = s => JSON.stringify(s);
   let text = `[classification]\nthresholds = { ${MK.map(m => `${q(m.name)} = ${+m.thr.toPrecision(6)}`).join(", ")} }\n`;
-  if (MP) text += `\n[membrane]\ncells = [${q(pair.cells)}]\npartners = [${q(pair.partners)}]\n`;
+  if (MP) text += `\n[membrane.pairs.${q(MKS[MI].name)}]\ncells = [${q(pair.cells)}]\npartners = [${q(pair.partners)}]\n`;
   const pre = document.getElementById("export-text"); pre.hidden = false;
   pre.textContent = text + "\n# Paste into the settings file or project.toml (into its existing sections) and run again; Cellpose is\n" +
     "# skipped when its input and settings did not change. A threshold set by hand also applies to the artefact rule." +
-    (MKS.length > 1 ? "\n# The membrane pair applies to every marker of interest; leave it out to keep each marker's own pair." : "");
+    (MP ? `\n# The membrane pair is that of ${MKS[MI].name} only (the other markers keep theirs); it replaces a [membrane.pairs] table of the same name.` : "");
   try { await navigator.clipboard.writeText(text); } catch (e) {}
 };
 const SETTLE_MS = 700;
@@ -1419,9 +1419,9 @@ function applyBar(text, buttons = []) {
 function changes() {  // what Apply sends: changed thresholds (null = automatic again) and a changed membrane pair
   const thresholds = {};
   for (const m of MK) if (m.auto) thresholds[m.name] = null; else if (Math.abs(m.thr - m.thr0) > 1e-9) thresholds[m.name] = +m.thr.toPrecision(6);
-  const run = MKS[MI];  // the pair of the run for the marker shown; a changed pair applies to every marker
+  const run = MKS[MI];  // the pair of the run for the marker shown; a changed pair is written for this marker only
   const membrane = MP && (pair.cells !== run.cells[0] || pair.partners !== run.partners[0] || run.cells.length > 1 || run.partners.length > 1)
-    ? { cells: [pair.cells], partners: [pair.partners] } : null;
+    ? { marker: run.name, cells: [pair.cells], partners: [pair.partners] } : null;
   return { thresholds, membrane };
 }
 async function applyToProject() {
@@ -1431,8 +1431,8 @@ async function applyToProject() {
   try { info = await serverApi("apply", { dry_run: true }); } catch (e) { applyBar("Cannot apply: " + e.message, [["OK", () => applyBar("")]]); return; }
   if (info.running) { applyBar("A run is still going; apply when it is done.", [["OK", () => applyBar("")]]); return; }
   const what = [...names.map(n => ch.thresholds[n] == null ? `${n}: automatic` : `${n}: ${ch.thresholds[n]}`),
-                ...(ch.membrane ? [`membrane of ${ch.membrane.cells[0]} with ${ch.membrane.partners[0]}` +
-                                   (MKS.length > 1 ? " (for every marker of interest)" : "")] : [])];
+                ...(ch.membrane ? [`${ch.membrane.marker}: membrane of ${ch.membrane.cells[0]} with ${ch.membrane.partners[0]}` +
+                                   (MKS.length > 1 ? " (this marker only)" : "")] : [])];
   if (!confirm(`Use these settings for all ${info.datasets} dataset(s) of the project, and run it again?\n\n${what.join("\n")}\n\n` +
                "Cellpose is skipped where its input and settings did not change. This page reloads when the run is done.")) return;
   saveView();
@@ -1449,7 +1449,7 @@ for (const b of document.querySelectorAll("button.apply")) {
   if (SERVER_TOKEN) { b.onclick = applyToProject;
     b.title = "Write the changed thresholds and the membrane pair into the project and run it again (all its datasets)"; }
   else { b.disabled = true; b.title = "Open this dashboard from the overview of the import page to apply its settings to the project (here: Copy as settings)"; }
-  if (MKS.length > 1) b.title += ". A membrane pair applies to every marker of interest (not only the one shown)";
+  if (MKS.length > 1) b.title += ". A membrane pair is written for the marker shown only; the other markers keep theirs";
 }
 
 // ---------- the view (channels, overlays, filter, sort, size, membrane pair, tabs) is remembered per dashboard

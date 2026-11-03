@@ -212,10 +212,36 @@ class MembraneSettings:
     # The cells whose membrane is measured, as a list. Each item is a cell type ("Tumor", "Immune"), an immune
     # subtype as written in the tables ("Immune A+ B+"), or a marker ("A+" means the immune cells positive for A).
     # Empty means the cell type that carries the marker of interest, decided per marker from the data (the median
-    # intensity of the membrane that touches no cell). A pair set here applies to every marker of interest.
+    # intensity of the membrane that touches no cell). Set here, it applies to every marker of interest without an
+    # entry of its own in pairs (the import page writes pairs only).
     cells: list[str] = field(default_factory=list)
     # The partners whose contact forms the interface, written as for cells. Empty means the other cell type.
     partners: list[str] = field(default_factory=list)
+    # The pair of each marker of interest, by marker name, for example { Marker = { cells = ['Tumor'], partners =
+    # ['B+'] } }. A side that an entry leaves out comes from cells or partners above, and else is automatic.
+    pairs: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+
+    @staticmethod
+    def migrate(data: dict[str, Any]) -> dict[str, Any]:
+        """Check membrane.pairs: { marker = { cells = [...], partners = [...] } }; a single string is a list of one."""
+        pairs = data.get("pairs")
+        if pairs is None:
+            return data
+        if not isinstance(pairs, dict):
+            raise ValueError("membrane.pairs: a table by marker name, e.g. { Marker = { cells = ['Tumor'] } }")
+        clean: dict[str, dict[str, list[str]]] = {}
+        for marker, entry in pairs.items():
+            if not isinstance(entry, dict) or set(entry) - {"cells", "partners"}:
+                raise ValueError(f"membrane.pairs.{marker}: give cells and/or partners, e.g. {{ cells = ['Tumor'] }}")
+            sides = {k: [v] if isinstance(v, str) else [str(x) for x in v] for k, v in entry.items()}
+            clean[str(marker)] = {k: v for k, v in sides.items() if v}
+        return dict(data) | {"pairs": {k: v for k, v in clean.items() if v}}
+
+    def pair_settings(self, marker: str) -> tuple[list[str], list[str]]:
+        """The cells and partners set for one marker: its entry in pairs, else cells / partners (each side on its
+        own); empty: automatic (membrane.pair_of)."""
+        entry = self.pairs.get(marker, {})
+        return list(entry.get("cells") or self.cells), list(entry.get("partners") or self.partners)
     # In pixels: the width of the membrane band, which is also the distance at which cells count as touching. Empty
     # means about 1.5 µm (2 px at 20x, 3 px at 40x, 5 px at 60x).
     thickness: int | None = None
@@ -272,8 +298,17 @@ class Settings:
         lines = []
         for section, values in self.to_dict().items():
             lines.append(f"[{section}]")
-            lines += [f"{k} = {_toml_value(v)}" for k, v in values.items() if v is not None]
+            # a table of tables (membrane.pairs) as sub-tables, [membrane.pairs.'Marker'], so that a pasted entry fits
+            nested = {k: v for k, v in values.items() if isinstance(v, dict) and v
+                      and all(isinstance(x, dict) for x in v.values())}
+            lines += [f"{k} = {_toml_value(v)}" for k, v in values.items()
+                      if v is not None and k not in nested and not (isinstance(v, dict) and not v and k == "pairs")]
             lines.append("")
+            for k, table in nested.items():
+                for name, entry in table.items():
+                    lines.append(f"[{section}.{k}.{_toml_value(str(name))}]")
+                    lines += [f"{kk} = {_toml_value(vv)}" for kk, vv in entry.items()]
+                    lines.append("")
         return "\n".join(lines)
 
 

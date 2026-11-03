@@ -417,6 +417,7 @@ Decisions by the user, 2026-11-03, and their reasons:
   (two or more markers); the tracks are embedded once, a float32 profile per marker; each marker keeps its own pair
   on the page (default: that of the run); the chosen marker and the pairs are remembered in the view. Apply /
   Copy as settings write one pair, which applies to every marker (said in a tooltip and the exported text).
+  Superseded the same day by a pair per marker (below).
 - **Import page:** the MOI role takes several channels; *Marker of interest expressed in* is gone; *Membrane of* /
   *Interface with* are menus (automatic first, stored as `[]`; Tumor, Immune, every combination of the ticked subtype
   markers as `Immune A+ B+` / `Immune negative`, and with two or more markers `A+`: the strings of
@@ -430,6 +431,30 @@ Decisions by the user, 2026-11-03, and their reasons:
   marker then writes no membrane files (and removes those of an earlier run), and the dataset finishes normally.
 - Old project folders: the overview reads them (their `Membrane pairs.tsv` gets an empty `marker`, with a log
   line); the comparison skips their membranes with a note.
+
+## A membrane pair per marker of interest (the user, 2026-11-03) ✅
+
+Reason: a pair set for all markers did not fit a panel with one marker on the tumor cells and one on an immune subset
+(the first measured on the tumor cells against the subset, the second on the subset against the tumor cells).
+
+- `membrane.pairs`: `{ <marker name> = { cells = [...], partners = [...] } }`, written by `Settings.to_toml` as
+  sub-tables `[membrane.pairs.'<marker>']` (so that a table pasted from the dashboard fits a file; an inline table
+  could not be extended). `MembraneSettings.migrate` checks it (only `cells` / `partners`; a string is a list of one).
+- Resolution per marker and per side (`MembraneSettings.pair_settings`, `membrane.pair_of`): the entry in `pairs`,
+  else the global `membrane.cells` / `partners` (kept: compatibility, and one pair for all markers in a settings
+  file), else automatic (the carrier, then the other type of the carrier).
+- Checks (`selector_problems`, in `pipeline.start` and `Project.problems()`): the selectors of every entry, and an
+  entry for a name that is not a marker of interest.
+- `pair_table` adds the run pair of each marker when it is not one of the table's rows × columns (a marker such as
+  `A+` as partner, or several selections), so `Membrane pairs.tsv` and the comparison of conditions have it. The
+  comparison still takes the side from `marker on` and the partners from the other type; an explicit pair of the
+  carrier against the other type (or a subset of it) is therefore compared, a pair within one type is not.
+- Import page: one row per marker of interest ("<marker>: membrane of [menu] interface with [menu]"), no global
+  row. The rows follow the MOI ticks and renames (a renamed channel keeps its pair; an unticked marker loses its
+  entry). An older project's global pair is turned into an entry per marker when the page loads the project
+  (`Project.pairs_per_marker` in `gui.project_to_json`) and saved that way; the file itself changes only on saving.
+- Dashboard: *Apply to the project* sends `{marker, cells, partners}` and `apply_from_dashboard` writes
+  `membrane.pairs[<marker>]` only; *Copy as settings* gives `[membrane.pairs."<marker>"]`.
 
 ## Zero intensities in the clustering (2026-11-03)
 

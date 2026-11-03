@@ -193,3 +193,16 @@ def test_selector_problems():
     assert "did you mean 'Immune CD1+ Subtype B+'" in selector_problem("Immune Subtype B+ CD1+", markers)
     assert "after 'Immune '" in selector_problem("Immune T cells", markers)
     assert "is not a selection" in selector_problem("Macrophage", markers)
+
+
+def test_pair_per_marker_resolution():
+    """Each side on its own: the marker's entry in membrane.pairs, else membrane.cells / partners, else automatic."""
+    from imagestream_analysis.membrane import pair_of
+
+    s = MembraneSettings(pairs={"M1": {"cells": ["Tumor"], "partners": ["A+"]}, "M2": {"cells": ["A+"]}})
+    assert pair_of(s, "Immune", "M1") == (["Tumor"], ["A+"])
+    assert pair_of(s, "Immune", "M2") == (["A+"], ["Tumor"])  # partners: automatic, the other type of the carrier
+    assert pair_of(s, "Immune", "M3") == (["Immune"], ["Tumor"])  # no entry: automatic
+    s.partners = ["Immune negative"]  # the global setting fills a side that an entry leaves out
+    assert pair_of(s, "Immune", "M2") == (["A+"], ["Immune negative"])
+    assert pair_of(s, "Tumor", "M3") == (["Tumor"], ["Immune negative"])

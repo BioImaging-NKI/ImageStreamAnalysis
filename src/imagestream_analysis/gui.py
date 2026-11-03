@@ -11,6 +11,7 @@ or request (so 15 minutes after the page was closed; never during a run), or at 
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import mimetypes
@@ -57,6 +58,10 @@ def save_prefs(changes: dict[str, Any]) -> dict[str, Any]:
 
 
 def project_to_json(p: Project) -> dict[str, Any]:
+    """The project for the page. A membrane pair for every marker (membrane.cells / partners, older projects) is shown
+    and saved as an entry of membrane.pairs per marker of interest: the page has a pair per marker only."""
+    p = copy.deepcopy(p)
+    p.pairs_per_marker()
     return {"folder": str(p.folder), "settings": p.settings.to_dict(),
             "zips": [{"path": str(z.path), "pixel_size": z.pixel_size, "channels": z.channels,
                       "channel_names": z.channel_names, "roles": z.roles,
@@ -220,9 +225,13 @@ def apply_from_dashboard(data: dict[str, Any], job: Job) -> dict[str, Any]:
         else:
             thresholds[name] = float(value)
     p.settings.classification.thresholds = thresholds
-    if data.get("membrane"):
-        p.settings.membrane.cells = [str(c) for c in data["membrane"]["cells"]]
-        p.settings.membrane.partners = [str(c) for c in data["membrane"]["partners"]]
+    if data.get("membrane"):  # the pair of one marker (the one shown in the dashboard); the others stay
+        pair = data["membrane"]
+        cells, partners = [str(c) for c in pair["cells"]], [str(c) for c in pair["partners"]]
+        if pair.get("marker"):
+            p.settings.membrane.pairs[str(pair["marker"])] = {"cells": cells, "partners": partners}
+        else:  # a page from before 2026-11-03: one pair for all markers
+            p.settings.membrane.cells, p.settings.membrane.partners = cells, partners
     job.start(p.save())
     return {"started": True, "datasets": n}
 

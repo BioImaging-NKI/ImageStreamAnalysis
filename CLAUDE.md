@@ -154,7 +154,7 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **Artefacts by default: positive in all subtype markers** (2026-11-01; only with two or more of them).
 - **Where the marker of interest is expressed matters** (the user, 2026-11-01): a partner that carries it too makes
   an evenly stained interface look enriched. Check it on the data and let users change it: `expression_check`
-  warns, `membrane.cells` / `membrane.partners` set the pair (empty: the type that carries the marker, from the
+  warns, `membrane.pairs.<marker>` (else `membrane.cells` / `membrane.partners`) set the pair (empty: the type that carries the marker, from the
   data, since 2026-11-03), `membrane.inside_only`
   keeps the partner's pixels out (a sensitivity test only: touching membranes are nm apart, below the resolution,
   so the blur mixes both whatever is sampled).
@@ -184,6 +184,10 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   with `marker` and `marker on`; the comparison has one measure per marker.
 - **The measured cells follow from the data**: `channels.cell_of_interest` is gone (dropped with a log line on
   loading); empty `membrane.cells` = the type (Tumor or Immune) with the brighter free membrane, per marker.
+- **A membrane pair per marker of interest**: `membrane.pairs.<marker>` (`cells`, `partners`), each side on its
+  own, else the global `membrane.cells` / `partners`, else automatic. The import page has one pair row per marker and
+  writes only `pairs` (an older global pair becomes an entry per marker); the dashboard's Apply / Copy write the
+  pair of the marker shown.
 - The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
   the membrane card has a *Marker* menu. On the import page *Membrane of* / *Interface with* are menus.
 

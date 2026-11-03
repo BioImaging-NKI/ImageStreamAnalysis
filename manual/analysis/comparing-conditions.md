@@ -87,7 +87,9 @@ evidence that nothing changed. Look at the interval instead: it shows which chan
     the cell type that carries the marker with the other cell type are tested (*Membrane of* that type or one of its
     subsets, and *Interface with* the other cell type or one of its subsets). The pairs within one cell type are
     controls, not hypotheses. Each marker of interest is tested on its own, and the cell type that carries it comes from
-    the column *marker on* of each dataset's `Membrane pairs.tsv`. When the datasets disagree, the type named by most
+    the column *marker on* of each dataset's `Membrane pairs.tsv`. A pair set for the marker (for example the tumor
+    cells against *Subtype A+* cells) is in that file too, and is tested when it measures that type against the
+    other. When the datasets disagree, the type named by most
     of them is used, and a note on every row of that marker says so. Results from before November 2026 lack this
     column; run the analysis again to compare them. Testing several markers does not change the test itself: the
     *q* values are adjusted within each measure, as for one marker.
