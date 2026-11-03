@@ -62,10 +62,13 @@ def events(case: str, n: int = 30, seed: int = 0) -> tuple[np.ndarray, np.ndarra
     return labels, image, cells
 
 
-def simulate(case: str, n: int = 30, seed: int = 0) -> tuple[float, float]:
-    """The medians of the score (SD above own membrane) and of the excess over both membranes."""
+def simulate(case: str, n: int = 30, seed: int = 0, projection: str = "max") -> tuple[float, float]:
+    """The medians of the score (SD above own membrane) and of the excess over both membranes; projection across
+    the band: "max" (the macro's) or "sum"."""
     labels, image, cells = events(case, n, seed)
     profiles = membrane_profiles(labels, cells, image, 0.0, 9, 3)
+    if projection == "sum":
+        profiles = profiles.summed()
     table = analyze_membranes(cells, profiles, "Tumor", MembraneSettings(control_repeats=2),
                               np.random.default_rng(seed)).table
     return float(table["stdDevs above mean"].median()), float(table[EXCESS].median())
@@ -74,5 +77,7 @@ def simulate(case: str, n: int = 30, seed: int = 0) -> tuple[float, float]:
 if __name__ == "__main__":
     for case, text in [("a", "both cells, uniform, no enrichment"), ("b", "measured cell only, enriched"),
                        ("c", "both cells, enriched on the measured side")]:
-        score, excess = simulate(case)
-        print(f"{case}. {text}: SD above own membrane {score:.2f}, excess above both membranes {excess:.2f}")
+        for projection in ("max", "sum"):
+            score, excess = simulate(case, projection=projection)
+            print(f"{case}. {text} ({projection} across the band): SD above own membrane {score:.2f}, "
+                  f"excess above both membranes {excess:.2f}")

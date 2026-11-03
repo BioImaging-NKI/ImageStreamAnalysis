@@ -249,9 +249,12 @@ that there is no enrichment.
     simulation with thin membranes that touch exactly (`tools/stats/simulate_excess.py`), the excess of two evenly
     stained cells without enrichment was close to 0, where *SD above mean* was clearly positive. On real data, however,
     contacts between cells of the same type (where both carry the marker and no enrichment is expected) gave a
-    clearly negative excess: there the correction subtracts more than the partner adds. Check this on your own data
-    in the *All pairs* table, with the contacts between cells of the same type, before you read the excess of another
-    pair. The comparison of conditions uses *SD above mean*.
+    clearly negative excess: there the correction subtracts more than the partner adds. The dashboard's switch
+    *across the band: sum* adds all samples across the band instead of taking the brightest, which does add two
+    membranes up; on real data it brought the same-type contacts much closer to 0, though mostly still below it.
+    Check this on your own data in the *All pairs* table, with the contacts between cells of the same type (with
+    either projection), before you read the excess of another pair. The comparison of conditions uses *SD above
+    mean* with the maximum.
 
 ??? note "Technical: inside only, and why it is no cure"
 

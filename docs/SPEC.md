@@ -488,6 +488,14 @@ is the partner's mean free membrane (`membrane.free_means`, the marker check's p
   long as same-type contacts do not give about 0 on real data: a second test of a measure that is biased would add
   multiple testing without a clear meaning. Revisit if a better correction (for example a scale factor fitted on
   same-type contacts, or the sum instead of the maximum across the band) makes same-type contacts about 0.
+- **The sum across the band (the user, 2026-11-03).** `Profiles.sums` holds every profile as the sum over the
+  straightened band next to the maximum (`Profiles.summed()` swaps them; with `inside_only`, the samples outside the
+  cell count 0). The dashboard has a switch *across the band: maximum / sum* that the whole membrane card follows
+  (both measures, *All pairs*, the marker check), remembered in the view; the tables and `Membrane pairs.tsv` keep
+  the maximum. Simulation: (a) excess +0.9 with the sum (-1.0 with the maximum), (b) and (c) about the same; the
+  test checks both projections. On the real dataset (numbers in the local notes) the sum brings the same-type
+  contacts clearly closer to 0 for both markers, but three of the four stay negative: better, not yet sound. The
+  excess therefore stays experimental and out of the comparison of conditions.
 
 ## Zero intensities in the clustering (2026-11-03)
 

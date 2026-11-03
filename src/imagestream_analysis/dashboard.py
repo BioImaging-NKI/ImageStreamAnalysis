@@ -228,7 +228,10 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
             "markers": [{"name": mk.name, "carried_by": mk.carried_by, "cells": mk.cells, "partners": mk.partners,
                          "expression": mk.expression,
                          "profile": float32_b64(np.concatenate(mk.profiles.profiles) if mk.profiles.profiles
-                                                else np.zeros(0))}
+                                                else np.zeros(0)),
+                         # the sum across the band (the dashboard's switch; additive at an interface)
+                         "profile_sum": float32_b64(np.concatenate(mk.profiles.sums) if mk.profiles.sums
+                                                    else np.zeros(0))}
                         for mk in measured if mk.profiles is not None],
             "control_repeats": m.control_repeats, "max_histogram_value": m.max_histogram_value,
             "bin_width": m.histogram_bin_width, "inside_only": m.inside_only,

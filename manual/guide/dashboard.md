@@ -176,6 +176,10 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
   the heatmap, *All pairs*, the cell card and the *Cells* table follow the choice, and the page remembers it. Read
   [the excess over both membranes](../analysis/membrane.md#where-the-marker-is-expressed) before you use it: check it
   first on contacts between cells of the same type.
+- **Across the band**: *maximum* (the default, as the macro and the tables) takes the brightest sample across the
+  membrane at every position; *sum* adds all samples. At an interface both membranes lie in the band, and only the
+  sum adds them up, as *SD above both membranes* assumes. Everything in the card follows the switch; the tables of
+  the output folder keep the maximum. The page remembers it.
 - **The badge** next to the menus shows where the marker of interest is expressed: on the measured cells, also on
   their partners, on both at a similar level, or hardly on the measured cells at all (gray: not informative). Before
   you trust a result with an amber, red or gray badge, read

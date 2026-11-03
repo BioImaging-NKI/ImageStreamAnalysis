@@ -191,7 +191,8 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **The excess over both membranes** (2026-11-03): beside `stdDevs above mean`, the column `excess stdDevs above both
   membranes` subtracts the partner's free membrane at the interface; the dashboard has a *Measure* menu. On real
   data the additivity it assumes failed (same-type contacts clearly negative, see SPEC.md); the comparison of
-  conditions stays on `stdDevs above mean`.
+  conditions stays on `stdDevs above mean`. The dashboard's switch *across the band: maximum / sum* (sums kept in
+  `Profiles.sums`; the tables keep the maximum): the sum brings same-type contacts closer to 0, not yet to 0.
 - The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
   the membrane card has a *Marker* menu. On the import page *Membrane of* / *Interface with* are menus.
 

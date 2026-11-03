@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -193,11 +193,20 @@ def _histogram(values: np.ndarray, top: float, n_bins: int) -> pd.DataFrame:
 @dataclass
 class Profiles:
     """The membrane of every cell: its profile (marker of interest minus background, maximum across the membrane)
-    and its neighbour track (label of the nearest other cell within the reach, 0 = none), same length."""
+    and its neighbour track (label of the nearest other cell within the reach, 0 = none), same length.
+
+    sums: the same profiles as the sum across the band instead of the maximum (2026-11-03). At an interface both
+    membranes lie in the band, and a sum adds them where a maximum does not: the projection for the excess over both
+    membranes (a switch in the dashboard; the tables keep the maximum)."""
 
     labels: np.ndarray  # the cell (label) of each profile
     profiles: list[np.ndarray]
     tracks: list[np.ndarray]
+    sums: list[np.ndarray] = field(default_factory=list)
+
+    def summed(self) -> Profiles:
+        """The same membranes with the sum across the band as profile."""
+        return Profiles(self.labels, self.sums, self.tracks, self.sums)
 
 
 def membrane_profiles(labels: np.ndarray, cells: pd.DataFrame, moi: np.ndarray, background: float, width: int,
@@ -219,7 +228,7 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
     roi = cells[cells["Cell type"] != "Artefact"]
     objects = {t: ndi.find_objects(labels[t]) for t in np.unique(roi["frame"])}
     tracks: list[np.ndarray] = []
-    out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks) for _ in mois]
+    out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks, []) for _ in mois]
     kept = []
     for t, label in zip(roi["frame"].astype(int), roi["label"].astype(int), strict=True):
         sl = objects[t][label - 1] if label - 1 < len(objects[t]) else None
@@ -245,6 +254,7 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
             if inside_only:
                 band = np.where(inside, band, -np.inf)
             prof.profiles.append(band.max(axis=0))  # macro: maximum projection across the membrane
+            prof.sums.append(np.where(np.isfinite(band), band, 0.0).sum(axis=0))  # additive: both membranes count
         tracks.append(straighten(nearest.astype(np.float64), line, width, order=0).max(axis=0).astype(np.int64))
         kept.append(label)
     for prof in out:

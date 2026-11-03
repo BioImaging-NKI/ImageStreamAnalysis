@@ -219,9 +219,23 @@ def test_excess_over_both_membranes_by_simulation():
     spec = importlib.util.spec_from_file_location("simulate_excess", path)
     sim = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sim)
-    score_a, excess_a = sim.simulate("a", n=12)
-    score_b, excess_b = sim.simulate("b", n=12)
-    score_c, excess_c = sim.simulate("c", n=12)
-    assert score_a > 4 and abs(excess_a) < 2  # the partner's membrane alone looks like enrichment; the excess not
-    assert excess_b == pytest.approx(score_b, rel=0.15)
-    assert excess_c > 0.7 * excess_b and excess_c < score_c - 4
+    for projection in ("max", "sum"):  # the maximum across the band (the macro's) and the sum (dashboard switch)
+        score_a, excess_a = sim.simulate("a", n=12, projection=projection)
+        score_b, excess_b = sim.simulate("b", n=12, projection=projection)
+        score_c, excess_c = sim.simulate("c", n=12, projection=projection)
+        assert score_a > 4 and abs(excess_a) < 2  # the partner's membrane alone looks like enrichment; the excess not
+        assert excess_b == pytest.approx(score_b, rel=0.15)
+        assert excess_c > 0.7 * excess_b and excess_c < score_c - 4
+
+
+def test_sum_across_the_band():
+    """Profiles.sums: the sum over the straightened band, next to the maximum; summed() swaps them."""
+    labels = np.zeros((1, 40, 40), np.int32)
+    yy, xx = np.mgrid[:40, :40]
+    labels[0][(yy - 20) ** 2 + (xx - 20) ** 2 <= 100] = 1
+    image = np.ones((1, 40, 40)) * 2.0
+    cells = pd.DataFrame({"frame": [0], "label": [1], "Cell type": ["Tumor"]})
+    prof = membrane_profiles(labels, cells, image, 0.0, 5, 2)
+    assert len(prof.sums) == len(prof.profiles) == 1
+    assert np.allclose(prof.profiles[0], 2.0) and np.allclose(prof.sums[0], 10.0)  # uniform: max 2, sum 5 x 2
+    assert prof.summed().profiles is prof.sums and prof.summed().tracks is prof.tracks

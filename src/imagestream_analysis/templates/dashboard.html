@@ -227,6 +227,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
       <label>Membrane of <select id="pair-cells"></select></label>
       <label>interface with <select id="pair-partners"></select></label>
       <label title="SD above own membrane: the interface against the cell's own membrane that touches no cell. SD above both membranes: the partner's free membrane is subtracted as well, at every interface position: more marker at the contact than both membranes carry elsewhere (whichever side holds it)">Measure <select id="pair-measure"><option value="own">SD above own membrane</option><option value="both">SD above both membranes</option></select></label>
+      <span class="tabs" style="margin:0" title="How the band across the membrane becomes one value per position. Maximum: the brightest sample (the macro's). Sum: all samples added; at an interface both membranes lie in the band, and only a sum adds them up, as SD above both membranes assumes">across the band <button id="proj-max" class="on">maximum</button><button id="proj-sum">sum</button></span>
       <span id="expression-badge"></span>
       <span class="spacer"></span><button class="apply">Apply to the project…</button>
     </div>
@@ -943,19 +944,22 @@ const INTERFACE_OFFSET = 20, HIST_MIN = -5;
 // the markers of interest: the tracks (and outlines) are shared, a profile per marker; MI: the marker shown
 const MKS = MP ? MP.markers : [];
 let MI = 0, PROF = null, TRACK = null, OFFS = null, FREE = null;
-const PROFS = [], FREES = [];  // the decoded profiles per marker; the free membrane per cell, per marker
+// the projection across the band: "max" (the macro's, and the tables') or "sum" (additive: both membranes at an interface)
+let projection = "max";
+const PROFS = {}, FREES = {};  // the decoded profiles per marker and projection; the free membrane per cell, likewise
 const decodeB64 = (b64, T) => { const bin = atob(b64), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new T(buf); };
 function decodeMembranes() {
   if (!TRACK) { TRACK = decodeB64(MP.track, Int32Array);
     OFFS = new Int32Array(MP.length.length + 1); MP.length.forEach((n, k) => OFFS[k + 1] = OFFS[k] + n); }
-  PROF = PROFS[MI] || (PROFS[MI] = decodeB64(MKS[MI].profile, Float32Array));
-  if (!FREES[MI]) {  // every cell's free membrane (no contact), by row of the cell table: membrane.free_means
+  const key = MI + projection;
+  PROF = PROFS[key] || (PROFS[key] = decodeB64(projection === "sum" ? MKS[MI].profile_sum : MKS[MI].profile, Float32Array));
+  if (!FREES[key]) {  // every cell's free membrane (no contact), by row of the cell table: membrane.free_means
     const fr = new Float64Array(NC).fill(NaN);
     for (let k = 0; k < MP.cell.length; k++) { let s = 0, n = 0; for (let j = OFFS[k]; j < OFFS[k + 1]; j++) if (TRACK[j] < 0) { s += PROF[j]; n++; }
       if (n) fr[MP.cell[k]] = s / n; }
-    FREES[MI] = fr;
+    FREES[key] = fr;
   }
-  FREE = FREES[MI];
+  FREE = FREES[key];
 }
 // the measure of the card: "own" = SD above the own free membrane (stdDevs above mean); "both" = the excess over both
 // membranes (the partner's free membrane subtracted at the interface positions, membrane.partner_excess)
@@ -995,6 +999,13 @@ document.getElementById("pair-marker").onchange = e => setMarker(+e.target.value
 document.getElementById("pair-measure").onchange = e => {
   measure = e.target.value === "both" ? "both" : "own"; pairTable = null; applyMeasure();
   applyFilter(); relayout(); drawPlots(); renderTable(); if (state.selected >= 0 || state.event >= 0) renderCard(); saveView(); };
+function setProjection(v) {
+  projection = v === "sum" ? "sum" : "max"; toggleOn("proj-" + projection, projection === "sum" ? "proj-max" : "proj-sum");
+  PROF = null; pairTable = null; decodeMembranes(); computeM();
+  applyFilter(); relayout(); drawPlots(); renderTable(); if (state.selected >= 0 || state.event >= 0) renderCard(); saveView();
+}
+document.getElementById("proj-max").onclick = () => setProjection("max");
+document.getElementById("proj-sum").onclick = () => setProjection("sum");
 function selectorOptions() {
   const opts = [["Tumor", "tumor cells"], ["Immune", "immune cells (all)"]];
   if (MK.length) { for (const t of IMMUNE_TYPES) if (TYPE.includes(t)) opts.push([t, shortType(t) + " cells"]);
@@ -1134,7 +1145,7 @@ function expressionCheck(cellsSel, partnerSel) {  // as membrane.expression_chec
 // without the controls, of the marker shown; recomputed when the subtypes change (typesVersion) or the marker
 let typesVersion = 0, pairTable = null;
 function pairTableStats() {
-  if (pairTable && pairTable.version === typesVersion && pairTable.marker === MI && pairTable.measure === measure) return pairTable;
+  if (pairTable && pairTable.version === typesVersion && pairTable.marker === MI && pairTable.measure === measure && pairTable.projection === projection) return pairTable;
   const opts = selectorOptions(), cols = opts.filter(([v]) => !v.endsWith("+") || v.startsWith("Immune "));
   const rows = opts.map(([v, t]) => {
     const cells = []; for (let k = 0; k < MP.cell.length; k++) if (matches(MP.cell[k], v)) cells.push(k);
@@ -1147,7 +1158,7 @@ function pairTableStats() {
       return { median: sds.length ? median(sds) : NaN, n: sds.length, check: expressionCheck(v, w).level };
     }) };
   });
-  return pairTable = { version: typesVersion, marker: MI, measure, rows, cols };
+  return pairTable = { version: typesVersion, marker: MI, measure, projection, rows, cols };
 }
 function drawPairTable() {
   const box = document.getElementById("pairs-box"); if (!box.open) return;
@@ -1178,7 +1189,7 @@ function drawMembranes() {
   const mk = MKS[MI], on = mk.carried_by ? ` (carried by the ${mk.carried_by.toLowerCase()} cells)` : "";
   document.getElementById("membrane-sub").textContent = `${mk.name}${on}: ${shownMem.length.toLocaleString()} cells, ${withIf.length.toLocaleString()} with an interface; ` +
     `control: ${M.control_scores.length.toLocaleString()} random windows of ${M.window} px on the free membrane of the cells without an interface (all events)` +
-    (MP.inside_only ? "; straightened inside the cells only" : "");
+    (MP.inside_only ? "; straightened inside the cells only" : "") + (projection === "sum" ? "; sum across the band (the tables: maximum)" : "");
   const x = M.expression, badge = document.getElementById("expression-badge"); badge.replaceChildren();
   if (x.level !== "none") {
     const b = document.createElement("span"); b.className = "badge"; const ic = document.createElement("span"); ic.className = "icon";
@@ -1491,7 +1502,7 @@ const VIEW_KEY = "isa-view:" + location.pathname.replace(/^\/files\/[^/]+\//, "/
 function saveView() {
   const v = { filter: state.filter, sort: state.sort, zoom: state.zoom, outlines: state.outlines, interfaces: state.interfaces,
               contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair }, hist: { ...histView }, cardZoom: state.cardZoom,
-              marker: MKS[MI]?.name, measure, pairs: Object.fromEntries(MKS.map((m, k) => [m.name, k === MI ? { ...pair } : pairOfMarker[k]])),
+              marker: MKS[MI]?.name, measure, projection, pairs: Object.fromEntries(MKS.map((m, k) => [m.name, k === MI ? { ...pair } : pairOfMarker[k]])),
               channels: D.channels.map(c => ({ name: c.name, on: c.on, gain: c.gain ?? 1 })) };
   try { localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (e) {}
 }
@@ -1511,6 +1522,7 @@ recomputeTypes();
 if (MP) {  // the remembered marker and pairs (a view saved before several markers: one pair, of the first marker)
   const k = MKS.findIndex(m => m.name === VIEW?.marker); if (k >= 0) MI = k;
   if (VIEW?.measure === "both") { measure = "both"; document.getElementById("pair-measure").value = "both"; }
+  if (VIEW?.projection === "sum") { projection = "sum"; toggleOn("proj-sum", "proj-max"); }
   MKS.forEach((m, j) => { const v = VIEW?.pairs?.[m.name] || (j === MI && !VIEW?.pairs ? VIEW?.pair : null);
     if (v && typeof v.cells === "string" && typeof v.partners === "string") pairOfMarker[j] = { cells: v.cells, partners: v.partners }; });
   Object.assign(pair, pairOfMarker[MI]); fillMarkerOptions(); fillPairOptions(); computeM();
