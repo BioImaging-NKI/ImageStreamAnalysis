@@ -170,6 +170,12 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
 - **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the
   number of cells and the marker check of each pair. Use this table to compare pairs (see
   [The control](../analysis/membrane.md#the-control)). Click a number to show that pair.
+- **Measure**: *SD above own membrane* (the default) scores the interface against the cell's own membrane that
+  touches no cell. *SD above both membranes* also subtracts the partner's free membrane at every interface position:
+  the excess over both membranes, for a marker that the partner carries too. The histograms, the average profile,
+  the heatmap, *All pairs*, the cell card and the *Cells* table follow the choice, and the page remembers it. Read
+  [the excess over both membranes](../analysis/membrane.md#where-the-marker-is-expressed) before you use it: check it
+  first on contacts between cells of the same type.
 - **The badge** next to the menus shows where the marker of interest is expressed: on the measured cells, also on
   their partners, on both at a similar level, or hardly on the measured cells at all (gray: not informative). Before
   you trust a result with an amber, red or gray badge, read

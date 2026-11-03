@@ -77,7 +77,9 @@ the screenshots, and look at every changed image.
 Small changes to the program whose screenshots are not retaken yet (the user prefers to retake them together, with
 a larger change). Retake them at the next refresh and empty this list.
 
-(Nothing waiting: refreshed 2026-11-02.)
+- 2026-11-03, the excess over both membranes: the membrane card has a *Measure* menu, and the *All pairs* note
+  changed. Retake `dash_membrane` and `dash_pairs` (and `dash_cell` if its rows matter there). Make the example
+  project again first.
 
 ## Refresh, check, publish
 

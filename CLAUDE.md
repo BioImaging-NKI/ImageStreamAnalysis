@@ -188,6 +188,10 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   own, else the global `membrane.cells` / `partners`, else automatic. The import page has one pair row per marker and
   writes only `pairs` (an older global pair becomes an entry per marker); the dashboard's Apply / Copy write the
   pair of the marker shown.
+- **The excess over both membranes** (2026-11-03): beside `stdDevs above mean`, the column `excess stdDevs above both
+  membranes` subtracts the partner's free membrane at the interface; the dashboard has a *Measure* menu. On real
+  data the additivity it assumes failed (same-type contacts clearly negative, see SPEC.md); the comparison of
+  conditions stays on `stdDevs above mean`.
 - The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
   the membrane card has a *Marker* menu. On the import page *Membrane of* / *Interface with* are menus.
 

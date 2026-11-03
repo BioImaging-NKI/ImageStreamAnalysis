@@ -222,6 +222,37 @@ where *B+* cells touched gave 0.7 SD with all immune cells. The *All pairs* tabl
 `Membrane pairs.tsv` give every combination of *Membrane of* and *Interface with* at once. Read them before you conclude
 that there is no enrichment.
 
+??? note "Technical: the excess over both membranes, and why it is no cure either"
+
+    At an interface the band holds both membranes, which lie closer together than the resolution. If the
+    background-subtracted intensities of the two membranes simply add, a partner that carries the marker can be
+    corrected for by subtracting its own membrane as it is elsewhere. For every measured cell with an interface:
+
+    $$\text{excess} = \frac{\overline{\text{interface}} - \overline{\text{free}} -
+    \overline{\text{partner free}}}{\text{SD}(\text{free})}$$
+
+    Here *partner free* is, at every interface position, the mean free-membrane intensity of the partner cell that
+    touches there (the same per-cell value as the [marker check](#where-the-marker-is-expressed)), averaged over the
+    interface. It equals *SD above mean* minus that average divided by SD(free). A partner without any free membrane
+    is left out of the average; if no partner of the cell has a free membrane, the excess is empty. The control
+    windows have no partner, so their excess is the control itself: the same null distribution. The membrane table
+    has the excess in the column `excess stdDevs above both membranes`, the average profile in the column
+    `excess profile`, and `Membrane pairs.tsv` the median per pair (`median excess above both membranes`). The
+    dashboard shows it with *Measure: SD above both membranes*.
+
+    **How to read it.** A positive excess means more marker at the contact than both membranes carry elsewhere. It
+    says nothing about which of the two cells holds it. If the band captures only part of the partner's membrane, the
+    correction subtracts too much: it is conservative, and can hide an enrichment but not invent one.
+
+    **The assumption does not always hold.** The profile is the brightest sample across the band, and two membranes
+    that are blurred together give a peak that is lower than the sum of their two peaks unless they coincide. In a
+    simulation with thin membranes that touch exactly (`tools/stats/simulate_excess.py`), the excess of two evenly
+    stained cells without enrichment was close to 0, where *SD above mean* was clearly positive. On real data, however,
+    contacts between cells of the same type (where both carry the marker and no enrichment is expected) gave a
+    clearly negative excess: there the correction subtracts more than the partner adds. Check this on your own data
+    in the *All pairs* table, with the contacts between cells of the same type, before you read the excess of another
+    pair. The comparison of conditions uses *SD above mean*.
+
 ??? note "Technical: inside only, and why it is no cure"
 
     *Straighten inside the measured cell only* takes the brightest sample only from the part of the band that lies

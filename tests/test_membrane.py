@@ -206,3 +206,22 @@ def test_pair_per_marker_resolution():
     s.partners = ["Immune negative"]  # the global setting fills a side that an entry leaves out
     assert pair_of(s, "Immune", "M2") == (["A+"], ["Immune negative"])
     assert pair_of(s, "Tumor", "M3") == (["Tumor"], ["Immune negative"])
+
+
+def test_excess_over_both_membranes_by_simulation():
+    """tools/stats/simulate_excess.py: a marker on both cells without enrichment raises the score but not the excess;
+    a marker on the measured cell only gives both about the same; an enrichment on the measured side of a marker on
+    both cells is found by the excess."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).parents[1] / "tools" / "stats" / "simulate_excess.py"
+    spec = importlib.util.spec_from_file_location("simulate_excess", path)
+    sim = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sim)
+    score_a, excess_a = sim.simulate("a", n=12)
+    score_b, excess_b = sim.simulate("b", n=12)
+    score_c, excess_c = sim.simulate("c", n=12)
+    assert score_a > 4 and abs(excess_a) < 2  # the partner's membrane alone looks like enrichment; the excess not
+    assert excess_b == pytest.approx(score_b, rel=0.15)
+    assert excess_c > 0.7 * excess_b and excess_c < score_c - 4

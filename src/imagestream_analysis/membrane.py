@@ -49,6 +49,41 @@ class MembraneResult:
     histogram_control: pd.DataFrame
     control_scores: np.ndarray  # all control windows of all cells without interface (the bootstrap distribution)
     window: int  # control window length (pixels along the membrane)
+    # the same profiles minus the partner's free membrane at the interface positions (excess over both membranes)
+    excess_profiles: np.ndarray | None = None
+
+
+EXCESS = "excess stdDevs above both membranes"  # the column of the excess (partner_excess) in the membrane table
+
+
+def free_means(membranes: Profiles) -> dict[int, float]:
+    """The mean of every cell's membrane that touches no cell (background-subtracted), by label; NaN without one.
+    The same per-cell value as the marker check (per_cell_intensity)."""
+    return {int(lab): float(p[t == 0].mean()) if (t == 0).any() else float("nan")
+            for lab, p, t in zip(membranes.labels, membranes.profiles, membranes.tracks, strict=True)}
+
+
+def partner_excess(p: np.ndarray, f: np.ndarray, track: np.ndarray, free_of: dict[int, float]
+                   ) -> tuple[float, np.ndarray]:
+    """The excess over both membranes of one cell (decided 2026-11-03): at an interface the band holds both
+    membranes, closer than the resolution, and background-subtracted intensities add. So
+
+        excess = (mean(p[interface]) - own free mean - mean over the interface positions of the partner's free mean)
+                 / own free sd
+
+    = the score (stdDevs above mean) minus the mean partner free intensity / own free sd. Returns that subtracted
+    mean (in intensity, NaN without an interface or without any partner with a free membrane) and, per position,
+    the partner's free mean to subtract (0 outside the interface; a partner without a free membrane: the mean of the
+    other positions)."""
+    sub = np.zeros(len(p))
+    if not f.any():
+        return float("nan"), sub
+    vals = np.array([free_of.get(int(lab), np.nan) for lab in track[f]], dtype=float)
+    if not np.isfinite(vals).any():
+        return float("nan"), sub
+    m = float(np.nanmean(vals))
+    sub[f] = np.where(np.isfinite(vals), vals, m)
+    return m, sub
 
 
 def outline(mask: np.ndarray, smoothing: float = 2.0) -> np.ndarray | None:
@@ -393,23 +428,28 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
         combos.append((list(run_pair[0]), list(run_pair[1])))
     labels = cells["label"].astype(int)
     index = {int(lab): k for k, lab in enumerate(membranes.labels)}
+    free_of = free_means(membranes)
     out = []
     for rs, cs in combos:
         r, c = " / ".join(rs), " / ".join(cs)
         chosen = [index[int(lab)] for lab in labels[select(cells, rs)] if int(lab) in index]
         partners = np.array(sorted(labels[select(cells, cs)]), dtype=np.int64)
-        scores, ratios = [], []
+        scores, ratios, excesses = [], [], []
         for k in chosen:
             p, track = membranes.profiles[k], membranes.tracks[k]
             f, free = np.isin(track, partners), track == 0
             if f.any() and free.sum() > 1:
                 scores.append(_score(p[f], p[free]))
+                sd = float(p[free].std(ddof=1))
+                excesses.append(scores[-1] - partner_excess(p, f, track, free_of)[0] / sd if sd > 0 else np.nan)
                 mean_free = float(p[free].mean())
                 ratios.append(float(p[f].mean()) / mean_free if mean_free else np.nan)
         check = expression_check(cells, membranes, moi_column, rs, cs)
         out.append({"membrane of": r, "interface with": c, "cells with an interface": len(scores),
                     "median stdDevs above mean": float(np.nanmedian(scores)) if scores else np.nan,
                     "median ratio interface/free": float(np.nanmedian(ratios)) if ratios else np.nan,
+                    "median excess above both membranes": (float(np.nanmedian(excesses))
+                                                           if np.isfinite(excesses).any() else np.nan),
                     "marker check": check["level"], "partners / measured": check["partners / measured"]})
     return pd.DataFrame(out)
 
@@ -430,13 +470,15 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
     (pair_of: carried_by is the cell type that carries the marker; marker: its name, for membrane.pairs)."""
     rng = rng or np.random.default_rng()
     wanted, partners = pair_of(settings, carried_by, marker)
+    free_of = free_means(membranes)
     chosen = set(cells.loc[select(cells, wanted), "label"].astype(int))
     partner_labels = np.array(sorted(cells.loc[select(cells, partners), "label"].astype(int)), dtype=np.int64)
     frame_of = dict(zip(cells["label"].astype(int), cells["frame"].astype(int), strict=True))
-    raw_profiles, iface_flags, free_flags, rows = [], [], [], []
+    raw_profiles, iface_flags, free_flags, rows, tracks = [], [], [], [], []
     for label, p, track in zip(membranes.labels, membranes.profiles, membranes.tracks, strict=True):
         if int(label) in chosen:
             raw_profiles.append(p)
+            tracks.append(track)
             iface_flags.append(np.isin(track, partner_labels))
             free_flags.append(track == 0)
             rows.append((frame_of[int(label)] + 1, int(label)))
@@ -449,8 +491,8 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
     window = int(round(np.median(iface_lengths))) if len(iface_lengths) else 25
     log.info("Membranes of %d %s, %d with an interface; control window %d px", n, names, has.sum(), window)
 
-    table, aligned, control_all = [], [], []
-    for p, f, free, (frame, label) in zip(raw_profiles, iface_flags, free_flags, rows, strict=True):
+    table, aligned, aligned_excess, control_all = [], [], [], []
+    for p, f, free, track, (frame, label) in zip(raw_profiles, iface_flags, free_flags, tracks, rows, strict=True):
         rest = p[free]  # the membrane that touches no cell
         i_mean = float(p[f].mean()) if f.any() else float("nan")
         r_mean = float(rest.mean()) if len(rest) else float("nan")
@@ -459,10 +501,15 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
                "interface Mean": i_mean, "non-interface Mean": r_mean, "non-interface stdDev": r_sd,
                "Ratio interface/non-interface": i_mean / r_mean if r_mean else float("nan"),
                "stdDevs above mean": _score(p[f], rest), "control stdDevs above mean": float("nan")}
-        normalized = (p - r_mean) / r_sd if r_sd and np.isfinite(r_sd) else np.full(len(p), np.nan)
+        partner_mean, sub = partner_excess(p, f, track, free_of)
+        ok_sd = bool(r_sd) and np.isfinite(r_sd)
+        row[EXCESS] = row["stdDevs above mean"] - partner_mean / r_sd if ok_sd else float("nan")
+        normalized = (p - r_mean) / r_sd if ok_sd else np.full(len(p), np.nan)
+        excess = normalized - sub / r_sd if ok_sd else normalized
         if f.any():
             start, run = max(_runs(f), key=lambda r: r[1])  # the longest interface (the macro: the first one)
             normalized = np.roll(normalized, INTERFACE_OFFSET - (start + run // 2))
+            excess = np.roll(excess, INTERFACE_OFFSET - (start + run // 2))
         elif free.sum() > window:  # windows on the membrane that touches no cell, read as one closed line
             q = p[free]
             scores = []
@@ -474,20 +521,27 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
             row["control stdDevs above mean"] = float(np.nanmean(scores))
         table.append(row)
         aligned.append(normalized)
+        aligned_excess.append(excess)
 
     profiles = np.full((n, int(lengths.max(initial=0))), np.nan)
-    for i, a in enumerate(aligned):
+    excess_profiles = profiles.copy()
+    for i, (a, e) in enumerate(zip(aligned, aligned_excess, strict=True)):
         profiles[i, : len(a)] = a
+        excess_profiles[i, : len(e)] = e
     table_df = pd.DataFrame(table)
     with_if = profiles[has]
     length = 0
     if len(with_if) > 1:  # macro: up to round(mean + sd) of the lengths; here of the cells with an interface
         length = min(int(round(lengths[has].mean() + lengths[has].std(ddof=1))), profiles.shape[1])
-    counts = np.isfinite(with_if[:, :length]).sum(axis=0)
-    avg = np.where(counts > 0, np.nansum(with_if[:, :length], axis=0) / np.maximum(counts, 1), np.nan)
-    average = pd.DataFrame({"position (px)": np.arange(length), "profile": avg})
+    def mean_profile(rows_: np.ndarray) -> np.ndarray:
+        counts = np.isfinite(rows_[:, :length]).sum(axis=0)
+        out: np.ndarray = np.where(counts > 0, np.nansum(rows_[:, :length], axis=0) / np.maximum(counts, 1), np.nan)
+        return out
+
+    average = pd.DataFrame({"position (px)": np.arange(length), "profile": mean_profile(with_if),
+                            "excess profile": mean_profile(excess_profiles[has])})
     control = np.array(control_all, dtype=float)
     sd_values = table_df["stdDevs above mean"].to_numpy(dtype=float) if n else np.zeros(0)
     top, _, n_bins = histogram_scale(sd_values, control, settings.max_histogram_value, settings.histogram_bin_width)
     return MembraneResult(table_df, profiles, lengths, has, average, _histogram(sd_values, top, n_bins),
-                          _histogram(control, top, n_bins), control, window)
+                          _histogram(control, top, n_bins), control, window, excess_profiles)

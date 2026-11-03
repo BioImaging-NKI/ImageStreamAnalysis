@@ -456,6 +456,39 @@ Reason: a pair set for all markers did not fit a panel with one marker on the tu
 - Dashboard: *Apply to the project* sends `{marker, cells, partners}` and `apply_from_dashboard` writes
   `membrane.pairs[<marker>]` only; *Copy as settings* gives `[membrane.pairs."<marker>"]`.
 
+## The excess over both membranes (the user, 2026-11-03) ✅
+
+Question: correct the enrichment for a marker that the partner carries too. Assumption: at an interface the band
+holds both membranes (closer than the resolution) and background-subtracted intensities add. Per cell with an
+interface: `excess = (mean(p[interface]) - own free mean - mean over the interface positions of
+partner_free[track]) / own free sd` = `stdDevs above mean - mean(partner_free) / own free sd`, where `partner_free`
+is the partner's mean free membrane (`membrane.free_means`, the marker check's per-cell value).
+
+- Built side by side with today's score: the column `excess stdDevs above both membranes` (membrane table), the
+  aligned excess profile (`MembraneResult.excess_profiles`; the average as `excess profile`), and
+  `median excess above both membranes` per pair in `Membrane pairs.tsv`. The dashboard has a *Measure* menu ("SD
+  above own membrane" / "SD above both membranes") that the histograms, average, heatmap, cell card, *All pairs*
+  and the Cells table follow; remembered in the view. JS parity with Python on the two-marker synthetic run: within
+  the 3 decimals of the TSV (scores, average excess profile, pair medians).
+- Choices: a partner position whose partner has no free membrane is left out of the partner mean (the aligned excess
+  profile subtracts the cell's partner mean there); no partner with a free membrane: the excess is NaN. The control
+  windows have no partner, so their excess is the control: no separate column.
+- Simulation (`tools/stats/simulate_excess.py`, `test_excess_over_both_membranes_by_simulation`): thin membranes
+  drawn on a 4x finer grid (so that touching membranes coincide), blur sigma 1.2 px, width 9 px, reach 3 px.
+  Medians (30 events each): (a) marker on both, uniform: score 7.6, excess -1.0; (b) marker on the measured cell
+  only, enriched 3x at the contact: score 14.9, excess 14.0; (c) on both, enriched 3x on the measured side: score
+  22.4, excess 13.8. With membranes drawn 2 px wide each (side by side, so 2 px apart), (a) gave excess -6.0: the
+  maximum across the band is additive only when the two membranes coincide within the blur.
+- **On real data the assumption failed** (numbers in the local notes): contacts between cells of the same type,
+  where no enrichment is expected, gave a clearly negative median excess, for both markers of interest. At the
+  ImageStream's resolution and with the maximum projection, the partner's free membrane over-corrects. The
+  measure is therefore offered as a conservative check (it can hide an enrichment, not invent one), with the
+  advice in the manual to check same-type contacts first.
+- **Comparison of conditions:** stays on `stdDevs above mean`. The excess should not become a second measure as
+  long as same-type contacts do not give about 0 on real data: a second test of a measure that is biased would add
+  multiple testing without a clear meaning. Revisit if a better correction (for example a scale factor fitted on
+  same-type contacts, or the sum instead of the maximum across the band) makes same-type contacts about 0.
+
 ## Zero intensities in the clustering (2026-11-03)
 
 One IDEAS export had a block of zero pixels in one channel of one object; a cell inside it had a mean tumor intensity
