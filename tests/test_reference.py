@@ -5,7 +5,7 @@ file in ISA_REFERENCE), and is skipped without it:
 
     [reference]
     settings = 'reference.toml'            # run settings for the test data (relative to this file)
-    fiji_output = 'D:/path/to/the/Fiji/output/folder'
+    fiji_output = 'D:/path/to/the/Fiji/output/folder'  # relative to this file, or absolute
 
 The run settings must use the labelmap of the Fiji run (segmentation.method = "labelmap") and the same number of
 events, so that the cells are the same.
@@ -30,7 +30,7 @@ pytestmark = [pytest.mark.reference, pytest.mark.skipif(not CONFIG.exists(), rea
 def _config() -> tuple[Settings, Path]:
     with CONFIG.open("rb") as f:
         ref = tomllib.load(f)["reference"]
-    return Settings.load(CONFIG.parent / ref["settings"]), Path(ref["fiji_output"])
+    return Settings.load(CONFIG.parent / ref["settings"]), CONFIG.parent / ref["fiji_output"]
 
 
 @pytest.fixture(scope="module")
