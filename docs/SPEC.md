@@ -371,6 +371,15 @@ from the import page (served from the project folder, token-protected). No exter
   `interactions.tsv`).
 - Cost on the full test dataset: about 6 s; outlines are traced on each cell's bounding box.
 
+## Zero intensities in the clustering (2026-11-03)
+
+One IDEAS export had a block of zero pixels in one channel of one object; a cell inside it had a mean tumor intensity
+of exactly 0, so log(0) stopped the k-means ("Non-finite features"). `kmeans_classes` now gives a cell with an
+intensity of 0 or less half the lowest positive intensity of that marker, and logs its events; `assign_cell_types`
+skips the infinite marker ratio of such a cell in its cluster sums. In that dataset the cell then clusters as an
+immune cell (its immune intensity is high); nothing changes for data without such cells. The macro would have
+clustered a -Infinity feature (ImageJ k-means behaviour undefined).
+
 ## Merging ClassifyCellTypes 2.8 (decided 2026-10-31; classification and interactions built)
 
 The later macro `ClassifyCellTypes_2_8.ijm` (same upstream repository) classifies several immune subtypes and

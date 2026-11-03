@@ -171,3 +171,16 @@ def test_artefact_rule_ignores_light_from_a_neighbour():
     assert (cells.loc[spill, "Cell type"] == "Immune").all()
     assert (cells.loc[kind == "X", "Cell type"] == "Artefact").all()
     assert set(thresholds["cells"]) == {"artefact rule", "immune cells"}
+
+
+def test_a_cell_without_tumor_marker_does_not_stop_the_clustering(caplog):
+    """A cell in an empty part of the tumor channel (intensity exactly 0, seen in one IDEAS export) has no log: it
+    clusters on its other marker, with a warning, instead of stopping the run."""
+    df, ch, kind, _, _ = measured(np.random.default_rng(2))
+    first_immune = int(np.flatnonzero(kind == "I")[0])
+    df.loc[first_immune, "Tumor intensity"] = 0.0
+    df["Marker ratio"] = df["Immune intensity"] / df["Tumor intensity"]
+    df["Marker ratio over Area"] = df["Marker ratio"] / df["Area"]
+    cells, _ = classify(df, ch, ClassificationSettings(artefact_min_positive=0))
+    assert (cells["Cell type"].to_numpy() == np.where(kind == "T", "Tumor", "Immune")).all()
+    assert "tumor intensity 0 or less" in caplog.text

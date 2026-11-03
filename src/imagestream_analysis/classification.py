@@ -139,9 +139,26 @@ def log_threshold_how(values: np.ndarray, method: str, noise_sds: float = NOISE_
 
 
 def kmeans_classes(df: pd.DataFrame, seed: int = KMEANS_SEED) -> np.ndarray:
-    """Cluster on log(immune intensity), log(tumor intensity) and area, each scaled to mean 0, sd 1."""
-    with np.errstate(divide="ignore", invalid="ignore"):
-        features = np.column_stack([np.log(df["Immune intensity"]), np.log(df["Tumor intensity"]), df["Area"]])
+    """Cluster on log(immune intensity), log(tumor intensity) and area, each scaled to mean 0, sd 1.
+
+    A cell whose mean intensity is 0 or less has no logarithm. This happens when a channel of its event image is
+    empty where the cell lies (seen once: a block of zero pixels in one channel of one IDEAS export). Such a cell
+    gets half the lowest positive intensity of the cells instead, so it clusters by its other marker, and the log
+    names its event."""
+    logs = []
+    for name in ("Immune intensity", "Tumor intensity"):
+        v = df[name].to_numpy(dtype=float)
+        bad = ~(v > 0)
+        if bad.any():
+            positive = v[v > 0]
+            floor = float(positive.min()) / 2 if len(positive) else 1.0
+            where = (f" (events {', '.join(str(int(f) + 1) for f in df.loc[bad, 'frame'].head(10))})"
+                     if "frame" in df else "")
+            log.warning("%d cell(s) with %s 0 or less%s: an empty part of that channel? Clustered with %.3g instead",
+                        bad.sum(), name.lower(), where, floor)
+            v = np.where(bad, floor, v)
+        logs.append(np.log(v))
+    features = np.column_stack([*logs, df["Area"].to_numpy(dtype=float)])
     features = (features - features.mean(axis=0)) / features.std(axis=0, ddof=1)  # ImageJ: sample sd
     if not np.isfinite(features).all():
         raise ValueError("Non-finite features for the clustering (a cell with zero or negative marker intensity?)")
@@ -152,7 +169,8 @@ def kmeans_classes(df: pd.DataFrame, seed: int = KMEANS_SEED) -> np.ndarray:
 def assign_cell_types(df: pd.DataFrame, clusters: np.ndarray) -> pd.Series:
     """The tumor cells are the cluster with the lowest *sum* of 'Marker ratio over Area' (macro lines 405-420;
     the comment there says average, the code sums: issue I4)."""
-    sums = [df.loc[clusters == k, "Marker ratio over Area"].sum() for k in range(N_CLUSTERS)]
+    ratio = df["Marker ratio over Area"].replace([np.inf, -np.inf], np.nan)  # a tumor intensity of 0: no ratio
+    sums = [ratio[clusters == k].sum() for k in range(N_CLUSTERS)]
     tumor_cluster = 0 if sums[0] < sums[1] else 1
     return pd.Series(np.where(clusters == tumor_cluster, "Tumor", "Immune"), index=df.index)
 

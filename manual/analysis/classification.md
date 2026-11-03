@@ -22,6 +22,11 @@ taken to be the tumor cells. This is the classification of the Fiji macro v1.8.
     When there are several immune markers, they are summed after normalization. The immune cells can therefore be
     defined by a panel of markers (for example CD3 and CD56) instead of by a single marker.
 
+    A cell whose mean tumor or immune intensity is 0 or less has no logarithm. This can happen when part of a channel
+    of an event image is empty (all pixels 0) where the cell lies, a defect of the exported image. Such a cell gets
+    half the lowest positive intensity of the other cells instead, so that it is clustered by its other marker, and
+    the log names its event.
+
 ## Immune subtypes
 
 Each **subtype marker** gets a threshold, and an immune cell above the threshold is positive for that marker. The
