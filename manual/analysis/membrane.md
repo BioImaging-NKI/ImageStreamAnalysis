@@ -1,8 +1,9 @@
 # Membrane enrichment
 
-This analysis asks whether the marker of interest is enriched in the membrane of one cell type at the places where it
+This analysis asks whether a marker of interest is enriched in the membrane of one cell type at the places where it
 touches another cell type, compared with the rest of its membrane. Tick *Membrane profiles and enrichment* to switch
-it on.
+it on. With several markers of interest, the analysis is done for each of them (see
+[Several markers of interest](#several-markers-of-interest)).
 
 ## The membrane profile
 
@@ -58,9 +59,31 @@ which cell. This record is the cell's **neighbor track**.
   are negative for every subtype marker);
 - a marker (*Subtype A+*: every immune cell that is positive for that marker, whatever its other markers).
 
-If a field is left empty, the cells that express the marker of interest (set in *Marker of interest expressed in*) are
-measured against the other cell type, as in the macro. In the [dashboard](../guide/dashboard.md#membrane-enrichment)
-you can change the pair directly.
+Anything else (for example *Immune Subtype A* without the +) stops the run before it starts, with a message that
+suggests what was probably meant.
+
+If *Membrane of* is left empty, the measured cells are the cell type that **carries the marker**: the tumor cells or
+the immune cells, whichever has the brighter membrane. This is decided from the data, for each marker of interest
+separately. If *Interface with* is left empty, the partners are the other cell type. A pair that you fill in applies to
+every marker of interest. In the [dashboard](../guide/dashboard.md#membrane-enrichment) you can change the pair
+directly.
+
+The log says which cell type carries each marker. In the example (Donor 1): "Marker: carried by the tumor cells (medians
+tumor 31.64, immune 4.478, membrane that touches no cell): membranes of Tumor with Immune". The same is recorded in `run.json`
+(*markers of interest*), in the column *marker on* of `Membrane pairs.tsv`, and in the overview column *MOI on* of each
+marker.
+
+??? note "Technical: how the carrying cell type is decided"
+
+    The measure is the one of the [marker check](#where-the-marker-is-expressed): the median free-membrane intensity,
+    background-subtracted, of the tumor cells and of the immune cells (all immune cells together, whatever their
+    subtype). The type with the higher median carries the marker. Without the membrane analysis, the mean intensity of
+    the whole cell is used instead. Before November 2026, this choice was a setting (*Marker of interest expressed in*).
+    A settings file or project that still has it (`channels.cell_of_interest`) loads without an error; the setting is
+    ignored, and the log says so.
+
+    Because the default pair always measures the brighter type, the marker check of that pair cannot show "brighter on
+    the partners". It can still show that the partners carry part of the marker, or as much of it.
 
 For the measured cells, the **interface** is the part of the membrane where the neighbor track shows a partner. The
 **free membrane** is the part that touches no cell at all.
@@ -95,8 +118,8 @@ Cells without an interface get **control windows**: *Control windows per cell* (
 on their free membrane. Each window is as long as the median interface and is scored like an interface. The histogram
 of the controls shows how much a stretch of free membrane varies by chance in this dataset.
 
-Both histograms (in the dashboard and in the files `Histogram_interface_stdDevs_above_mean.tsv` and
-`Histogram_control_stdDevs_above_mean.tsv`) start at −5 SD and share one scale. If *Histogram maximum* and
+Both histograms (in the dashboard and in the files `Histogram_interface_stdDevs_above_mean - <marker>.tsv` and
+`Histogram_control_stdDevs_above_mean - <marker>.tsv`) start at −5 SD and share one scale. If *Histogram maximum* and
 *Histogram bin width* are left empty, the scale is automatic. The maximum is the 99th percentile of the interface
 values or of the control windows, whichever is higher, but at least 5 SD, and it is rounded up to a whole number of
 bins. The bin width is the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, and so on, that gives at most 60 bins.
@@ -150,7 +173,7 @@ effect (see the technical note on the straightening width), but not the other ef
     against the rest of that free membrane. The macro used one window of 25 px per membrane; many windows of the
     typical interface length give a better estimate of the null distribution. The windows are random and not seeded,
     so the control differs slightly from run to run (the dashboard uses a fixed seed). All windows are listed in
-    `Control windows stdDevs above mean.tsv`.
+    `Control windows stdDevs above mean - <marker>.tsv`.
 
 ## Where the marker is expressed
 
@@ -167,7 +190,7 @@ the dashboard:
 | below 25 % | ✓ green | The marker is mainly on the measured cells. |
 | 25–80 % | ! amber | The partners carry part of the marker, so part of the interface signal may come from them. |
 | 80–125 % | ! amber | The marker is on both cell types at a similar level. Two stained membranes side by side look like enrichment; compare with contacts between cells of the same type. |
-| 125 % or more | ! red | The marker is brighter on the partners. Check *Marker of interest expressed in* and the pair. |
+| 125 % or more | ! red | The marker is brighter on the partners. Check the pair (*Membrane of*, *Interface with*). |
 | (any) | – gray | The measured cells hardly carry the marker (below 25 % of the brightest cell type), so their enrichment is not informative. |
 
 ??? note "Technical: the marker check, exactly"
@@ -191,7 +214,7 @@ the dashboard:
 If the badge is amber or red, you can choose the pair the other way round (if the marker is on the partners), compare
 the enrichment with that of a pair whose partners do not carry the marker, or treat the result as an upper limit.
 
-**Look at the subsets, on both sides.** The default pair (all cells of the type that expresses the marker, with all
+**Look at the subsets, on both sides.** The default pair (all cells of the type that carries the marker, with all
 cells of the other type) can hide an effect that only one subset shows. In one test, a receptor that was strongly
 polarized on *A+* immune cells gave a median of only 0.2 SD over all immune cells, and a ligand that was enriched only
 where *B+* cells touched gave 0.7 SD with all immune cells. The *All pairs* table in the dashboard and
@@ -207,16 +230,33 @@ that there is no enrichment.
     clearly with *inside only*, part of it comes from the partner side. If it stays the same, that is reassuring but
     not proof.
 
+## Several markers of interest
+
+You can tick more than one channel as *MOI* on the import page (`channels.marker_of_interest` is a list). Every marker
+of interest is analyzed in the same way, on the same outlines and neighbor tracks. Each marker gets its own pair: by
+default, the cell type that carries that marker against the other type. A marker on the tumor cells and a marker on
+the immune cells are therefore each measured on the cells that carry them.
+
+All markers of interest are treated alike, also when there is only one: the name of the marker is part of the names
+of its files and columns. The membrane files get " - " and the name before the extension, for example
+`Membrane intensity analysis - Marker.tsv`. The per-event columns and the overview columns get the name in brackets,
+for example `mean tumor interface (Marker)`. `Membrane pairs.tsv` stays one file, with the marker in its first column.
+See [The output folder](../guide/output-folder.md).
+
+In the dashboard, the menu *Marker* in the membrane card switches between the markers. The comparison of conditions
+tests each marker separately (see [Comparing conditions](comparing-conditions.md)).
+
 ## The per-event table
 
-Independently of the profiles, every event gets the mean of the marker of interest at the interface and on the rest of
-the membrane, for each cell type. These values are in `All cell combinations.tsv`, and for the events with one tumor
-cell and one immune cell also in `Single Tumor Single Immune cell.tsv`, as in the macro. They are measured in the
-membrane band of each cell type (*Membrane / interface width*), not in the straightened profiles.
+Independently of the profiles, every event gets the mean of each marker of interest at the interface and on the rest
+of the membrane, for each cell type. These values are in `All cell combinations.tsv`, and for the events with
+one tumor cell and one immune cell also in `Single Tumor Single Immune cell.tsv`, as in the macro. They are measured
+in the membrane band of each cell type (*Membrane / interface width*), not in the straightened profiles.
 
 This is the macro's measure, and it has none of the safeguards described above. It takes all partners of the other
 type together, has no control, and does not follow the chosen membrane pair. A partner that carries the marker, or two
 stained membranes side by side, raise it as much as a real enrichment does (in a test without any enrichment it was
-1.27). The overview column *median … membrane ratio (doublets)* and the dashboard card *Marker of interest at the
-interface* show this measure. Read them together with the marker check, and base your conclusions on the pair
-comparisons.
+1.27). The overview column *median … membrane ratio, doublets* shows this measure for the cell type that carries the
+marker, and the dashboard shows it in the *Events* table and in the sort *membrane ratio per event*. Read it together with
+the marker check, and base your conclusions on the pair comparisons. The pair comparisons replace the per-event plot
+that earlier versions of the dashboard showed.

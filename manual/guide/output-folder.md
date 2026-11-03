@@ -7,7 +7,7 @@
 | `project.toml` | the project: the exports, channel names, roles and settings (see [Settings files](../reference/command-line.md)) |
 | `overview.tsv` | one row per dataset (the [overview](overview.md)) |
 | `interactions.tsv` | the contact tables of all datasets, and their sums per experiment |
-| `membrane pairs.tsv` | the membrane pairs of all datasets |
+| `membrane pairs.tsv` | the membrane pairs of all datasets, for every marker of interest |
 | `condition comparison.tsv` | the comparison of the conditions (only when every dataset has a condition and a replicate): one row per measure, pair and condition, with the change, its 95 % interval, *p*, *q*, the value per replicate, and notes; see [Comparing conditions](../analysis/comparing-conditions.md) |
 | `subset preference.tsv` | the subset preference of all datasets (with intervals), and its sums per experiment (without intervals) |
 | `<experiment>/<dataset>/` | the results of one dataset (see below) |
@@ -21,25 +21,29 @@ which holds the IDEAS object number.
 | File | Contents |
 |---|---|
 | `Cell classification.tsv` | one row per cell: the measurements, cell type, subtype and neighbors (see below) |
-| `All cell combinations.tsv` | one row per event: the number of cells of each type, the marker of interest at the interfaces (left out when there is no marker of interest), whether a tumor cell and an immune cell touch (`Tumor-immune interface`), and the contacts |
+| `All cell combinations.tsv` | one row per event: the number of cells of each type, each marker of interest at the interfaces (its columns end in the marker's name, for example `mean tumor interface (Marker)`; none without a marker of interest), whether a tumor cell and an immune cell touch (`Tumor-immune interface`), and the contacts |
 | `Single Tumor Single Immune cell.tsv` | the events with exactly one tumor cell and one immune cell that touch |
 | `Marker thresholds.tsv` | the threshold of every subtype marker, both for the artefact rule and on the immune cells, as background-subtracted intensity (on the same scale as `Mean ch<N>`), and how it was found (`how`) |
 | `Interactions.tsv` | the contacts per cell type and neighbor type, compared with chance |
-| `Membrane pairs.tsv` | every pair of *Membrane of* and *Interface with*: the cells with an interface, the median enrichment and ratio, and the marker check (only with the membrane analysis) |
+| `Membrane pairs.tsv` | for every marker of interest (column `marker`, and in `marker on` the cell type that carries it), every pair of *Membrane of* and *Interface with*: the cells with an interface, the median enrichment and ratio, and the marker check (only with the membrane analysis) |
 | `Subset preference.tsv` | per immune subtype and partner: the contacts compared with those when the subtypes are shuffled among the immune cells of each event, with the 95 % interval (only with two or more immune subtypes) |
 | `Multiplets.tsv` | the number of events with n cells and with n contacts |
-| `Membrane intensity analysis.tsv` | one row per measured cell: the interface and membrane means, the enrichment, and the control |
-| `Average normalized membrane profile values - interfaces centered at 20.tsv` | the average aligned profile |
-| `Histogram_interface_stdDevs_above_mean.tsv`, `Histogram_control_stdDevs_above_mean.tsv` | the histograms |
-| `Control windows stdDevs above mean.tsv` | every random control window |
-| `membrane_profiles_normalized.tif` | the aligned profiles, with one row for each row of the membrane table |
+| `Membrane intensity analysis - <marker>.tsv` | one row per measured cell: the interface and membrane means, the enrichment, and the control |
+| `Average normalized membrane profile values - interfaces centered at 20 - <marker>.tsv` | the average aligned profile |
+| `Histogram_interface_stdDevs_above_mean - <marker>.tsv`, `Histogram_control_stdDevs_above_mean - <marker>.tsv` | the histograms |
+| `Control windows stdDevs above mean - <marker>.tsv` | every random control window |
+| `membrane_profiles_normalized - <marker>.tif` | the aligned profiles, with one row for each row of the membrane table |
 | `labelmap_cells.tif`, `labelmap_cells.json` | the labels as Cellpose made them (the montage), and what produced them; the next run reuses them when nothing has changed (see [Segmentation](../analysis/segmentation.md#running-again-without-cellpose)) |
 | `labelmap_final.tif`, `labelmap_classes.tif` | the cleaned-up labels per event; the cell type per pixel (1 immune, 2 tumor, 3 artefact) |
 | `dashboard.html`, `dashboard_files/` | the [dashboard](dashboard.md) |
 | `settings.toml` | the complete settings of the run (with channels by number) |
-| `run.json`, `summary.json`, `log.txt` | the version, counts, Cellpose version and device, timing and marker check; the log |
+| `run.json`, `summary.json`, `log.txt` | the version, counts, Cellpose version and device, timing, and for every marker of interest the cell type that carries it, its membrane pair and its marker check; the log |
 
-The membrane files exist only when the membrane analysis was run.
+The membrane files exist only when the membrane analysis was run. The files from `Membrane intensity analysis` to
+`membrane_profiles_normalized` exist once for each marker of interest, with " - " and the marker's name before the
+extension, for example `Membrane intensity analysis - Marker.tsv` and `membrane_profiles_normalized - Marker.tif`
+(characters that a file name cannot hold are replaced by `_`). Results written before November 2026 have these names
+without the marker; the overview still reads such folders, but run them again to compare their membranes.
 
 ## The cell table
 

@@ -147,7 +147,9 @@ The overlays on the montage (lines 555-631) are display only. ⬜ (dashboard)
 `Single Tumor Single T cell` (port: `Single Tumor Single Immune cell`): the rows with 1 T cell, 1 tumor cell and a
 non-NaN T-cell interface.
 
-Plots of interface vs non-interface MOI for the cell of interest (all events, doublets). ⬜ (dashboard)
+Plots of interface vs non-interface MOI for the cell of interest (all events, doublets): not ported (superseded by
+the pair analysis, 2026-11-03). Port (2026-11-03): these columns exist once per marker of interest, with the marker's
+name in brackets (`mean tumor interface (<marker>)`); see "Several markers of interest" below.
 
 ## 8. Straightened membrane profiles (lines 700-827) ✅ (distributions; optional: `membrane.analysis`)
 
@@ -193,7 +195,8 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   for each position, the label of the nearest other cell within `membrane.thickness` (4-connected steps, the reach
   of the interfaces) of the cell's own pixels there, straightened along the same line (nearest sample, maximum
   across), 0 = none. `membrane.cells` and `membrane.partners` choose the pair (a cell type, an immune subtype
-  "Immune A+ B+", or a marker "A+"; empty: `channels.cell_of_interest` against the other type). Interface = the
+  "Immune A+ B+", or a marker "A+"; empty: the cell type that carries the marker, from the data (2026-11-03),
+  against the other type). Interface = the
   positions whose neighbour is a partner. **Non-interface = the membrane that touches no cell** (v1.8: all of the
   membrane outside the interface, so also contacts with cells of the same type); the control windows are taken on
   that free membrane too, read as one closed line. Reason: a contact with another cell that carries the marker
@@ -205,7 +208,7 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   their membrane lies against the measured one at the interface (half the straightened band lies in the partner)
   and looks like enrichment even when the staining is even. `expression_check` compares the median free-membrane
   intensity of the partners with that of the measured cells (without profiles: the whole-cell means): ≥ 1 is a
-  WARNING (expressed in the partners? check `channels.cell_of_interest` / `membrane.cells`), ≥ 0.25 a CAUTION.
+  WARNING (expressed in the partners? check `membrane.cells` / `membrane.partners`), ≥ 0.25 a CAUTION.
   In the log, `run.json` ("marker of interest") and the overview (`MOI partners / measured`).
   `membrane.inside_only` (default off, as the macro) takes the maximum across the band only over the samples inside
   the measured cell. On the test data the check says CAUTION, and inside_only lowers the median `stdDevs above
@@ -266,7 +269,7 @@ of the rings with an interface. (These are the checks of `tests/test_reference.p
 
 Four agents used the tool from the manual alone, on synthetic exports with a known truth (scenarios outside the
 repository). Fixed from their reports:
-- **No marker of interest needed** for cell types and contacts (`channels.marker_of_interest = ""`): the event table
+- **No marker of interest needed** for cell types and contacts (`channels.marker_of_interest = []`): the event table
   leaves out the marker columns and gets `Tumor-immune interface` (doublets use it), no marker check, the dashboard
   hides the marker cards; the membrane analysis then refuses to run.
 - **Marker check**: partners / measured 0.8–1.25 = "on both at a similar level" (membrane doubling; compare with
@@ -313,7 +316,9 @@ Round 2: three of four users reached the right conclusion; counts matched the tr
 
 `comparison.py`; per dataset `condition` and `replicate` in project.toml, `[comparison] reference`. Units =
 replicate × condition (datasets pooled). Subset preference: y = ln((O+.5)/(E+.5)), tested when E >= 5 in every unit;
-membrane enrichment: cell-weighted median SD, pairs of the cell of interest with the other type, >= 10 interfaces.
+membrane enrichment: cell-weighted median SD, pairs of the cell type that carries the marker with the other type
+(per marker of interest, from the column `marker on`; majority of the datasets, with a note, 2026-11-03), >= 10
+interfaces.
 Paired t over replicates with both conditions (>= 2), else Welch (>= 2 per side), else no test; BH q per measure and
 condition. Written to `condition comparison.tsv` (run end, Save, `imagestream-cli overview`); the overview computes it
 live from the page's labels. Decided **no test per donor** (two samples of one donor against each other with the
@@ -354,8 +359,8 @@ from the import page (served from the project folder, token-protected). No exter
   filter row clears it) and draws those contacts. Partner bars: per cell type, its contacts by neighbour type
   (share or number), and the share of its cells that touch any cell. A Contacts tab in the table.
 - Cell classes: area against marker ratio, log-log (the macro's `cell Classes.png`).
-- Per event: MOI at the interface against the rest of the membrane of the cell of interest (the macro's
-  `Channel N in ... membrane plot`), with the identity line.
+- (Removed 2026-11-03.) The per-event plot of the MOI at the interface against the rest of the membrane (the
+  macro's `Channel N in ... membrane plot`); its values stay in the Events table and the sort.
 - **Membrane analysis (any pair, live)**: "membrane of" and "interface with" (a cell type, an immune subtype, or a
   marker); the page computes the enrichment from every cell's profile and neighbour track as `membrane.py` does
   (the control windows with a seeded generator, so they differ from the TSV's random ones; on the test data the
@@ -370,6 +375,61 @@ from the import page (served from the project folder, token-protected). No exter
 - Project overview (import page): the contact matrix of each experiment against chance, side by side (from
   `interactions.tsv`).
 - Cost on the full test dataset: about 6 s; outlines are traced on each cell's bounding box.
+
+## Several markers of interest; the measured cells from the data (the user, 2026-11-03) ✅
+
+Decisions by the user, 2026-11-03, and their reasons:
+
+- **Enrichment for any marker.** `channels.marker_of_interest` is a list (old files: a number or a name becomes
+  `[x]`, `""` becomes `[]`). Every marker gets the whole membrane analysis (profiles, `analyze_membranes`,
+  `pair_table`, `expression_check`). The outlines and neighbour tracks are computed once
+  (`membrane.membrane_profiles_of`; the tracks are shared objects); only the profiles differ per marker.
+- **No compatibility with the macro's names needed** ("as long as it's scientifically sound"). There is no primary
+  marker: every marker is treated alike, also when there is only one. Membrane files:
+  `<macro name> - <marker>.<ext>` (`Membrane intensity analysis - <marker>.tsv`, the average profile, both
+  histograms, the control windows, `membrane_profiles_normalized - <marker>.tif`; the name made safe for the file
+  system; a name that two markers share gets ` (ch<N>)`). `Membrane pairs.tsv` stays one file with the columns
+  `marker` and `marker on` in front. `run.json` lists every marker ("markers of interest": carrier, medians, pair,
+  marker check, membranes); the former single "marker of interest" entry is gone. Overview: the columns of each
+  marker end in ` (<marker>)` (`MOI on`, `MOI partners / measured`, `marker check`, `median <type> membrane ratio,
+  doublets`, `membrane pair`, `membranes`, `with interface`, `median stdDevs above mean`, `median control (windows)`).
+- **Per-event columns kept, per marker.** `All cell combinations.tsv` and the doublet table have the six MOI columns
+  once per marker, as `<macro column> (<marker>)`. Reason: they cost nothing, keep the Fiji comparison of the event
+  tables possible (the reference test maps the names back), and stay useful as a quick look; but they are the
+  macro's measure (all partners together, no control), so nothing else depends on them.
+- **The measured cells follow from the data.** `channels.cell_of_interest` is removed (an old file loads; the value
+  is dropped with an info line). Empty `membrane.cells` means, per marker, the cell type (Tumor or Immune) with the
+  higher median of the measure of `expression_check` (free membrane, background subtracted; without profiles the
+  whole-cell mean): `membrane.carrier`. Empty `membrane.partners`: the other type. Explicit cells / partners apply to
+  every marker. Recorded in the log ("<marker>: carried by the tumor cells (medians ...): membranes of Tumor with
+  Immune"), in `run.json`, in `Membrane pairs.tsv` (`marker on`) and in the overview (`MOI on (<marker>)`). Reason:
+  a wrong setting measured the partners' membrane; the data say where the marker is. On the test data the carrier
+  is the macro's CellOfInterest (checked in `test_reference.py` from the macro's `settings.txt`), so the
+  reference comparison is unchanged. Consequence: with the default pair the marker check cannot say "brighter on the
+  partners".
+- **Comparison of conditions:** one measure per marker, `membrane enrichment (<marker>)`, on the side of the type
+  that carries it (column `marker on` of each dataset; when the datasets disagree, the majority, with a note on its
+  rows). Results without the column (before 2026-11-03) are not compared, with a note; the statistics are unchanged
+  (no recalibration needed: the test itself did not change, q stays per measure).
+- **The dashboard's per-event panel ("Marker of interest at the interface") is removed:** superseded by the pair
+  analysis (all partners together and no control made it misleading). Its values stay in the Events table (per
+  marker) and in the sort "membrane ratio per event" (of the marker shown). The membrane card has a *Marker* menu
+  (two or more markers); the tracks are embedded once, a float32 profile per marker; each marker keeps its own pair
+  on the page (default: that of the run); the chosen marker and the pairs are remembered in the view. Apply /
+  Copy as settings write one pair, which applies to every marker (said in a tooltip and the exported text).
+- **Import page:** the MOI role takes several channels; *Marker of interest expressed in* is gone; *Membrane of* /
+  *Interface with* are menus (automatic first, stored as `[]`; Tumor, Immune, every combination of the ticked subtype
+  markers as `Immune A+ B+` / `Immune negative`, and with two or more markers `A+`: the strings of
+  `membrane.select` and of the dashboard's `selectorOptions`; the dashboard lists only the combinations present).
+  A stored value not offered stays as its own option "(from the settings file)".
+- **The pair is validated** (a bug the user hit: `membrane.cells = ['Immune A']`, typed by hand, matched no
+  cell silently, and saving an empty profile stack crashed). `membrane.selector_problem`: after "Immune " come
+  subtype markers of the panel as "<m>+" in the panel's order, or "negative"; otherwise an error with the likely
+  meaning ("did you mean 'A+' ... or 'Immune A+' ...?"), in `pipeline.start` (before segmentation) and in
+  `Project.problems()` (the import page lists it too). A valid subset without cells in a dataset only warns; that
+  marker then writes no membrane files (and removes those of an earlier run), and the dataset finishes normally.
+- Old project folders: the overview reads them (their `Membrane pairs.tsv` gets an empty `marker`, with a log
+  line); the comparison skips their membranes with a note.
 
 ## Zero intensities in the clustering (2026-11-03)
 
@@ -479,14 +539,14 @@ Settings file ↔ macro parameters:
 | (2.8: `thresholdingMethod` automatic / manual) | `classification.threshold_method`, `classification.thresholds` |
 | (2.8: `removeBadDetections`, constant) | `classification.artefact_min_positive` |
 | (2.8: several input stacks, concatenated) | a project with `classification.pool = "experiment"` |
-| `markerLoc`, `CellOfInterest` | `channels.marker_location`, `channels.cell_of_interest` |
+| `markerLoc`, `CellOfInterest` | `channels.marker_location`; `CellOfInterest` follows from the data (removed 2026-11-03) |
 | `CellposeModel`, `cellDiameter` | `segmentation.model`, `segmentation.diameter` |
 | `bool_loadLabelmap`, `labelmapFile` | `segmentation.method = "labelmap"`, `segmentation.labelmap_file` |
 | `erosionSteps`, `minCellSize`, `maxCellSize` | `segmentation.erosion`, `.min_cell_size`, `.max_cell_size` |
 | (new) | `segmentation.exclude_edge_cells` |
 | `CellposeFlowThreshold` (constant) | `segmentation.flow_threshold` |
 | `membraneThickness`, `membraneThicknessForStraightening` | `membrane.thickness`, `membrane.straightening_width` |
-| `CellOfInterest` (the interface with the other class) | `channels.cell_of_interest`, or the pair `membrane.cells`, `membrane.partners` |
+| `CellOfInterest` (the interface with the other class) | the cell type that carries the marker (from the data), or the pair `membrane.cells`, `membrane.partners` |
 | (new) | `membrane.inside_only` |
 | `maxHistValue`, `binWidth` | `membrane.max_histogram_value`, `membrane.histogram_bin_width` |
 

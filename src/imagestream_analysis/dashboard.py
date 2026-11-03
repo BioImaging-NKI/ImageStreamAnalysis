@@ -24,8 +24,8 @@ from scipy import ndimage as ndi
 from skimage import measure
 
 from . import __version__
-from .config import CellOfInterest, Settings
-from .membrane import pair_of
+from .config import Settings
+from .interfaces import moi_column
 
 if TYPE_CHECKING:
     from .pipeline import Result
@@ -169,7 +169,6 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
     cells = result.cells
     labels = result.labels
     ids = stack.object_ids
-    of_interest = "Tumor" if settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL else "Immune"
 
     outlines = cell_outlines(labels, cells["frame"].to_numpy(), cells["label"].to_numpy())
     interface = result.masks.immune_interface | result.masks.tumor_interface
@@ -187,18 +186,21 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "sheet": [SHEET_COLUMNS, SHEET_ROWS],
         "files": FILES,
         "channels": channels,
-        "cell_of_interest": of_interest,
-        "has_moi": settings.channels.has_marker_of_interest,
-        "marker_check": result.expression.get("level", ""),  # of the project's pair (the per-event card)
+        "has_moi": bool(result.markers),
         "artefact_min_positive": settings.classification.artefact_min_positive,
         "events": {
             "object": _column(ids) if ids is not None else None,
             "t_cells": _column(ev["Immune cells"]), "tumor_cells": _column(ev["Tumor cells"]),
             "interface": _column(ev["Tumor-immune interface"].astype(int)),
-            **{key: _column(ev[col]) if col in ev else None
-               for key, col in [("t_interface", "mean immune interface"), ("t_rest", "mean immune NOT in interface"),
-                                ("tu_interface", "mean tumor interface"), ("tu_rest", "mean tumor NOT in interface"),
-                                ("t_ratio", "Immune membrane ratio"), ("tu_ratio", "Tumor membrane ratio")]},
+            # the macro's per-event measure, for every marker of interest (interfaces.event_table)
+            "moi": [{"name": mk.name, "carried_by": mk.carried_by or "Tumor",
+                     **{key: _column(ev[moi_column(col, mk.name)])
+                        for key, col in [("t_interface", "mean immune interface"),
+                                         ("t_rest", "mean immune NOT in interface"),
+                                         ("tu_interface", "mean tumor interface"),
+                                         ("tu_rest", "mean tumor NOT in interface"),
+                                         ("t_ratio", "Immune membrane ratio"), ("tu_ratio", "Tumor membrane ratio")]}}
+                    for mk in result.markers],
             "interfaces": interfaces,
         },
         "cells": {
@@ -211,20 +213,25 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "pairs": [row_of[int(v)] for v in result.pairs.ravel()],  # cells that touch, as rows of the cell table
         "membranes": None,
     }
-    if result.profiles is not None:  # every cell's membrane: the page computes the enrichment of any pair
-        prof = result.profiles
+    measured = [mk for mk in result.markers if mk.profiles is not None]
+    if measured:  # every cell's membrane: the page computes the enrichment of any pair, for each marker of interest
+        prof = measured[0].profiles
+        assert prof is not None
         m = settings.membrane
-        wanted, partners = pair_of(m, settings.channels.cell_of_interest)
+        # the outlines and neighbour tracks are the same for every marker: once; a profile per marker
         track_rows = [np.array([row_of.get(int(v), -1) for v in t], dtype=np.int32) for t in prof.tracks]
         data["membranes"] = {
             "cell": [row_of[int(lab)] for lab in prof.labels],
             "length": [len(p) for p in prof.profiles],
-            "profile": float32_b64(np.concatenate(prof.profiles) if prof.profiles else np.zeros(0)),
             "track": base64.b64encode(np.concatenate(track_rows).astype("<i4").tobytes() if track_rows
                                       else b"").decode("ascii"),
-            "cells": wanted, "partners": partners, "control_repeats": m.control_repeats,
-            "max_histogram_value": m.max_histogram_value, "bin_width": m.histogram_bin_width,
-            "inside_only": m.inside_only, "expression": result.expression,
+            "markers": [{"name": mk.name, "carried_by": mk.carried_by, "cells": mk.cells, "partners": mk.partners,
+                         "expression": mk.expression,
+                         "profile": float32_b64(np.concatenate(mk.profiles.profiles) if mk.profiles.profiles
+                                                else np.zeros(0))}
+                        for mk in measured if mk.profiles is not None],
+            "control_repeats": m.control_repeats, "max_histogram_value": m.max_histogram_value,
+            "bin_width": m.histogram_bin_width, "inside_only": m.inside_only,
         }
     return data
 

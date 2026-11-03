@@ -27,7 +27,7 @@ import pandas as pd
 
 from . import __version__, ideas
 from .comparison import compare, write_comparison
-from .config import THRESHOLD_METHODS, CellOfInterest, ChannelSettings, MarkerLocation, Pool, Settings
+from .config import THRESHOLD_METHODS, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
 from .launcher import STATE_DIR
 from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview, select_samples
@@ -72,7 +72,8 @@ def project_from_json(data: dict[str, Any]) -> Project:
         raise ValueError("Choose an output folder for the project")
     settings = {k: {kk: vv for kk, vv in v.items() if vv is not None and vv != ""}
                 for k, v in (data.get("settings") or {}).items()}
-    # a role without a channel stays empty (not the default channel number of a settings file)
+    # a role without a channel stays empty (not the default channel number of a settings file); the markers of
+    # interest are a list (an empty one is kept above), "" from an older page means none
     channels = (data.get("settings") or {}).get("channels") or {}
     for role in ("brightfield", "marker_of_interest", "tumor"):
         if role in channels and channels[role] in (None, ""):
@@ -290,7 +291,6 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         return {"version": __version__, "theme": prefs.get("theme", ""), "project": project,
                 "defaults": Settings().to_dict(), "roles": list(ChannelSettings().roles()),
                 "marker_locations": [str(m) for m in MarkerLocation],
-                "cells_of_interest": [str(c) for c in CellOfInterest],
                 "threshold_methods": THRESHOLD_METHODS, "pools": [str(p) for p in Pool]}
     if api == "prefs":
         return save_prefs({k: v for k, v in data.items() if k in ("theme",)})

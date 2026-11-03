@@ -34,7 +34,9 @@ the repository.
 | Baseline of the enrichment | all of the membrane outside the interface | the membrane that touches no other cell | in the macros, contacts with other marked cells raise the baseline |
 | Control | one window of 25 px per membrane, unseeded | 10 windows as long as the median interface, on free membrane | a better null distribution |
 | Average profile | all rings, including those without an interface | only cells with an interface | rings without an interface halve the peak |
-| Pair of cell types | the cell of interest against the other class | any pair, including subtypes, with a check of where the marker is expressed | — |
+| Pair of cell types | the cell of interest (a setting) against the other class | by default the cell type that carries the marker (found in the data) against the other type; any pair, including subtypes, with a check of where the marker is expressed | a wrong setting measured the partners' membrane |
+| Markers of interest | one | one or more, each with its own pair; files and columns carry the marker's name (`Membrane intensity analysis - <marker>.tsv`, `mean tumor interface (<marker>)`) | all markers alike; compatibility with the macro's names was not needed (the user, 2026-11-03) |
+| Per-event plot of the marker at the interface | plots of interface against non-interface per event | the values stay in `All cell combinations.tsv`; the dashboard compares pairs instead | the per-event measure takes all partners together and has no control |
 | Several images | concatenated (2.8), with the background of the last image | pooled per experiment, with each dataset's own background | 2.8 used the background of the last image for all images |
 | Record of the settings | `settings.txt`, incomplete | the complete `settings.toml` | — |
 

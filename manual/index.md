@@ -69,9 +69,10 @@ conditions across donors.
    too many subtype markers are set aside as artefacts. The datasets of one experiment are classified together.
 4. **It finds the cells that touch** and compares these contacts with what is expected by chance, which shows which
    cell types prefer each other within the events.
-5. **It measures the marker of interest along the membrane** of one cell type, at its interface with another cell
-   type. The interface is compared with the rest of the membrane and with random control windows. The program also
-   checks that the marker is on the measured cells rather than on their partners.
+5. **It measures each marker of interest along the membrane** of one cell type, at its interface with another cell
+   type. By default, that is the cell type that carries the marker, which the program finds in the data. The
+   interface is compared with the rest of the membrane and with random control windows. The program also checks that
+   the marker is on the measured cells rather than on their partners.
 6. **It shows the results** in a dashboard for each dataset, in which you can change the subtype thresholds and the
    pair of cell types live, and in an overview of the project.
 

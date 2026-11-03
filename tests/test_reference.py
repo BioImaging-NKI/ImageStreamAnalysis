@@ -5,7 +5,7 @@ file in ISA_REFERENCE), and is skipped without it:
 
     [reference]
     settings = 'reference.toml'            # run settings for the test data (relative to this file)
-    fiji_output = 'D:/path/to/the/Fiji/output/folder'  # relative to this file, or absolute
+    fiji_output = 'D:/path/to/the/Fiji/output/folder'
 
 The run settings must use the labelmap of the Fiji run (segmentation.method = "labelmap") and the same number of
 events, so that the cells are the same.
@@ -19,7 +19,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from imagestream_analysis.config import CellOfInterest, Settings
+from imagestream_analysis.config import Settings
+from imagestream_analysis.interfaces import MOI_COLUMNS, moi_column
 from imagestream_analysis.pipeline import AVERAGE_PROFILE, CELL_TABLE, DOUBLETS_TABLE, EVENT_TABLE, MEMBRANE_TABLE, run
 
 CONFIG = Path(os.environ.get("ISA_REFERENCE", Path(__file__).parents[1] / "data" / "reference_test.toml"))
@@ -30,7 +31,7 @@ pytestmark = [pytest.mark.reference, pytest.mark.skipif(not CONFIG.exists(), rea
 def _config() -> tuple[Settings, Path]:
     with CONFIG.open("rb") as f:
         ref = tomllib.load(f)["reference"]
-    return Settings.load(CONFIG.parent / ref["settings"]), CONFIG.parent / ref["fiji_output"]
+    return Settings.load(CONFIG.parent / ref["settings"]), CONFIG.parent / ref["fiji_output"]  # relative: to CONFIG
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +58,15 @@ def _read(folder, name):
     return pd.read_csv(Path(folder) / f"{name}.tsv", sep="\t")
 
 
+def _read_own(result, name):
+    """A table of the port, with the names of the macro: the per-event columns and the membrane files of the (only)
+    marker of interest carry its name here (every marker alike, 2026-11-03)."""
+    marker = result.markers[0]
+    if name in (MEMBRANE_TABLE, AVERAGE_PROFILE, "Control windows stdDevs above mean"):
+        return _read(result.out_dir, name + marker.suffix)
+    return _read(result.out_dir, name).rename(columns={moi_column(c, marker.name): c for c in MOI_COLUMNS})
+
+
 def _read_reference(folder, name):
     return _read(folder, MACRO_NAMES.get(name, name)).rename(columns=RENAMED)
 
@@ -81,7 +91,7 @@ def test_cells_match_reference(result, reference):
 @pytest.mark.parametrize("name", [EVENT_TABLE, DOUBLETS_TABLE])
 def test_event_tables_match_reference(result, reference, name):
     ref = _read_reference(reference, name)
-    own = _read(result.out_dir, name)
+    own = _read_own(result, name)
     assert list(own.columns[: len(ref.columns)]) == list(ref.columns)  # the port adds columns at the end
     assert len(own) == len(ref)
     for col in ref.columns:
@@ -92,9 +102,12 @@ def test_membrane_distributions_match_reference(result, reference):
     """Not cell by cell: the port measures one membrane per cell (the macro one per ring of touching cells, I8) and
     a bootstrapped control (I10), so the distributions are compared."""
     ref = _read(reference, MEMBRANE_TABLE)
-    own = _read(result.out_dir, MEMBRANE_TABLE)
-    of_interest = _config()[0].channels.cell_of_interest
-    wanted = "Immune" if of_interest == CellOfInterest.IMMUNE_CELL else "Tumor"
+    own = _read_own(result, MEMBRANE_TABLE)
+    # the measured cells follow from the data (the type that carries the marker): the macro's CellOfInterest
+    macro = dict(line.split("=", 1) for line in (reference / "settings.txt").read_text().splitlines() if "=" in line)
+    wanted = macro["CellOfInterest"].split()[0]  # "Tumor cell" or "T cell"
+    wanted = "Immune" if wanted == "T" else wanted
+    assert result.markers[0].carried_by == wanted
     assert len(own) == (result.cells["Cell type"] == wanted).sum()  # one row per cell of interest
     ref_if, own_if = ref["interface Mean"].notna(), own["interface Mean"].notna()
     assert abs(own_if.sum() - ref_if.sum()) / ref_if.sum() < 0.1
@@ -103,7 +116,7 @@ def test_membrane_distributions_match_reference(result, reference):
         assert own[col].median() == pytest.approx(ref[col].median(), rel=tol), col
     for q in (0.25, 0.5, 0.75):
         assert own["stdDevs above mean"].quantile(q) == pytest.approx(ref["stdDevs above mean"].quantile(q), abs=0.5)
-    control = _read(result.out_dir, "Control windows stdDevs above mean").iloc[:, 0].dropna()
+    control = _read_own(result, "Control windows stdDevs above mean").iloc[:, 0].dropna()
     for q in (0.25, 0.5, 0.75):
         assert control.quantile(q) == pytest.approx(ref["control stdDevs above mean"].quantile(q), abs=0.25)
 
@@ -114,7 +127,7 @@ def test_average_profile_matches_reference_cells_with_interface(result, referenc
 
     profiles = tifffile.imread(reference / "membrane_profiles_normalized.tif").astype(float)
     has = _read(reference, MEMBRANE_TABLE)["interface Mean"].notna().to_numpy()
-    own_avg = _read(result.out_dir, AVERAGE_PROFILE)["profile"].to_numpy()
+    own_avg = _read_own(result, AVERAGE_PROFILE)["profile"].to_numpy()
     n = min(len(own_avg), profiles.shape[1])
     ref_avg = np.nanmean(profiles[has][:, :n], axis=0)
     assert np.corrcoef(own_avg[:n], ref_avg)[0, 1] > 0.99

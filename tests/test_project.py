@@ -10,7 +10,7 @@ import pytest
 
 from conftest import IDEAS_IDS, write_ideas_zip
 from imagestream_analysis import gui
-from imagestream_analysis.config import CellOfInterest, ChannelSettings, Pool
+from imagestream_analysis.config import ChannelSettings, Pool
 from imagestream_analysis.pipeline import CELL_TABLE, EVENT_TABLE
 from imagestream_analysis.project import OVERVIEW_FILE, DatasetEntry, Project, ZipEntry, run_project
 
@@ -22,11 +22,10 @@ def make_project(ideas_zip, folder) -> Project:
     p = Project(folder)
     p.settings.segmentation.method = "labelmap"  # no Cellpose in the tests
     p.settings.segmentation.labelmap_file = ideas_zip["labelmap"]
-    p.settings.channels.cell_of_interest = CellOfInterest.TUMOR_CELL
     p.settings.membrane.thickness = 2
     p.settings.membrane.analysis = True
     ch = p.settings.channels  # the panel, by name
-    ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor = "BF", "MOI's name", ["T cells"], "Tumor"
+    ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor = "BF", ["MOI's name"], ["T cells"], "Tumor"
     p.zips.append(ZipEntry(ideas_zip["zip"], 0.5, [1, 3, 6, 9], list(NAMES), {},
                            [DatasetEntry("Sample A", "Experiment 1")]))
     return p
@@ -38,8 +37,8 @@ def test_panel_by_name_gives_the_numbers_of_each_zip(ideas_zip):
     p.zips.append(ZipEntry(ideas_zip["zip"], 0.5, [2, 4, 5, 8], ["Tumor", "BF", "MOI's name", "T cells"], {},
                            [DatasetEntry("Sample A", "Experiment 2")]))
     first, second = (p.channels_of(z) for z in p.zips)
-    assert (first.brightfield, first.marker_of_interest, first.immune, first.tumor) == (1, 3, [6], 9)
-    assert (second.brightfield, second.marker_of_interest, second.immune, second.tumor) == (4, 5, [8], 2)
+    assert (first.brightfield, first.marker_of_interest, first.immune, first.tumor) == (1, [3], [6], 9)
+    assert (second.brightfield, second.marker_of_interest, second.immune, second.tumor) == (4, [5], [8], 2)
 
 
 def test_old_projects_with_roles_per_zip(ideas_zip):
@@ -50,13 +49,14 @@ def test_old_projects_with_roles_per_zip(ideas_zip):
     assert "t_cell = 6" in text
     loaded = Project.from_dict(tomllib.loads(text), p.folder)  # all zips agree: a panel by name
     ch = loaded.settings.channels
-    assert (ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor) == ("BF", "MOI's name", ["T cells"], "Tumor")
+    assert (ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor) == ("BF", ["MOI's name"], ["T cells"],
+                                                                           "Tumor")
     assert loaded.zips[0].roles == {} and loaded.problems() == []
     # an unnamed role channel: the roles stay as numbers, and still work
     data = tomllib.loads(text)
     data["zip"][0]["channel_names"][0] = ""
     loaded = Project.from_dict(data, p.folder)
-    assert loaded.zips[0].roles == {"brightfield": 1, "marker_of_interest": 3, "immune": [6], "tumor": 9}
+    assert loaded.zips[0].roles == {"brightfield": 1, "marker_of_interest": [3], "immune": [6], "tumor": 9}
     assert loaded.channels_of(loaded.zips[0]).immune == [6]
 
 
@@ -84,6 +84,16 @@ def test_problems(ideas_zip):
     assert "No datasets selected" in p.problems()
 
 
+def test_problems_list_a_membrane_pair_that_is_no_selection(ideas_zip):
+    """A pair typed by hand (old projects) that matches no subset: listed, with the likely meaning."""
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    p.settings.channels.functional = ["T cells"]
+    p.settings.membrane.cells = ["Immune T cells"]
+    assert any("did you mean 'T cells+'" in m and "'Immune T cells+'" in m for m in p.problems())
+    p.settings.membrane.cells = ["Immune T cells+"]
+    assert p.problems() == []
+
+
 def test_run_project_writes_results_and_overview(ideas_zip):
     folder = ideas_zip["tmp"] / "project"
     make_project(ideas_zip, folder).save()
@@ -92,13 +102,62 @@ def test_run_project_writes_results_and_overview(ideas_zip):
     row = table.iloc[0]
     assert row["experiment"] == "Experiment 1" and row["dataset"] == "Sample A"
     assert row["cells"] == 20 and row["immune cells"] == 10 and row["single tumor + single immune cell"] == 10
-    assert row["with interface"] == 10
+    assert row["with interface (MOI's name)"] == 10
+    assert row["MOI on (MOI's name)"] == "Tumor" and row["membrane pair (MOI's name)"] == "Tumor with Immune"
+    assert row["median Tumor membrane ratio, doublets (MOI's name)"] > 1
     out = folder / "Experiment 1" / "Sample A"
     cells = pd.read_csv(out / f"{CELL_TABLE}.tsv", sep="\t")
     assert sorted(set(cells["Object ID"])) == sorted(IDEAS_IDS)
     events = pd.read_csv(out / f"{EVENT_TABLE}.tsv", sep="\t")
     assert events["Object ID"].tolist() == sorted(IDEAS_IDS)
     assert (folder / OVERVIEW_FILE).exists()
+
+
+def test_two_markers_of_interest_in_a_project(ideas_zip):
+    """A second marker of interest (on the immune cells): its own pair from the data, its enrichment in the overview,
+    and its rows in the project's membrane pairs.tsv."""
+    from conftest import make_events
+
+    data, _ = make_events(second_marker=True)
+    path = write_ideas_zip(ideas_zip["tmp"] / "two.zip", data[:, [0, 1, 3, 2, 4]], IDEAS_IDS, [1, 3, 6, 9, 11])
+    folder = ideas_zip["tmp"] / "project"
+    p = make_project(ideas_zip, folder)
+    p.zips[0] = ZipEntry(path, 0.5, [1, 3, 6, 9, 11], [*NAMES, "Second"], {},
+                         [DatasetEntry("Sample A", "Experiment 1")])
+    p.settings.channels.marker_of_interest = ["MOI's name", "Second"]
+    p.save()
+    assert Project.load(folder).settings.channels.marker_of_interest == ["MOI's name", "Second"]
+    row = run_project(folder).iloc[0]
+    assert row["MOI on (MOI's name)"] == "Tumor" and row["membrane pair (MOI's name)"] == "Tumor with Immune"
+    assert row["MOI on (Second)"] == "Immune" and row["membrane pair (Second)"] == "Immune with Tumor"
+    assert row["median stdDevs above mean (Second)"] > 1 and row["median Immune membrane ratio, doublets (Second)"] > 1
+    pairs = pd.read_csv(folder / "membrane pairs.tsv", sep="\t")
+    assert list(pairs.columns[:4]) == ["experiment", "dataset", "marker", "marker on"]
+    assert pairs.groupby("marker")["marker on"].first().to_dict() == {"MOI's name": "Tumor", "Second": "Immune"}
+    assert (folder / "Experiment 1" / "Sample A" / "Membrane intensity analysis - Second.tsv").exists()
+
+
+def test_older_results_in_the_overview(ideas_zip):
+    """A dataset folder written before 2026-11-03 (Membrane pairs.tsv without marker columns) is still read."""
+    from imagestream_analysis.project import write_overview
+
+    folder = ideas_zip["tmp"] / "project"
+    make_project(ideas_zip, folder).save()
+    run_project(folder)
+    f = folder / "Experiment 1" / "Sample A" / "Membrane pairs.tsv"
+    pd.read_csv(f, sep="\t").drop(columns=["marker", "marker on"]).to_csv(f, sep="\t", index=False)
+    assert len(write_overview(folder)) == 1
+    pairs = pd.read_csv(folder / "membrane pairs.tsv", sep="\t", keep_default_na=False)
+    assert (pairs["marker"] == "").all() and "membrane of" in pairs
+
+
+def test_markers_of_interest_from_the_page(ideas_zip):
+    """The page sends a list; an empty field (None or "") means no marker of interest, not the default channel."""
+    data = gui.project_to_json(make_project(ideas_zip, ideas_zip["tmp"] / "p"))
+    assert data["settings"]["channels"]["marker_of_interest"] == ["MOI's name"]
+    for value, expected in ((["MOI's name", "T cells"], ["MOI's name", "T cells"]), ([], []), (None, []), ("", [])):
+        data["settings"]["channels"]["marker_of_interest"] = value
+        assert gui.project_from_json(data).settings.channels.marker_of_interest == expected
 
 
 def test_a_failing_dataset_does_not_stop_the_others(ideas_zip):
@@ -261,7 +320,7 @@ def test_datasets_of_an_experiment_are_classified_together(ideas_zip, pool):
 
 def test_one_immune_marker_per_zip_is_enough():
     """The immune markers are summed: a zip needs one of them, not all (another zip may name its marker otherwise)."""
-    ch = ChannelSettings(brightfield="BF", marker_of_interest="", tumor="Tumor", immune=["CD3", "T cells"],
+    ch = ChannelSettings(brightfield="BF", marker_of_interest=[], tumor="Tumor", immune=["CD3", "T cells"],
                          functional=[])
     numbers, names = [1, 2, 3], ["BF", "Tumor", "T cells"]
     assert ch.resolved(numbers, names).immune == [3]

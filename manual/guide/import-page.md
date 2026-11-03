@@ -46,11 +46,13 @@ following:
     | **Tumor** | the tumor-cell marker | one |
     | **Immune** | an immune-cell marker; if there are several, they are summed | one or more |
     | **Subtype** | an immune subtype marker; each cell is called positive or negative for it | none or more |
-    | **MOI** | the marker of interest, which is measured along the membrane | one, or none |
+    | **MOI** | a marker of interest, which is measured along the membrane | one or more, or none |
 
-    A channel can have two roles, for example a subtype marker that is also the marker of interest. Without a marker
-    of interest, the analysis gives only the cell types, subtypes and contacts. In that case, leave *MOI* unticked and
-    switch *Membrane profiles and enrichment* off.
+    A channel can have two roles, for example a subtype marker that is also a marker of interest. With several markers
+    of interest, the membrane enrichment is measured for each of them in the same way (see
+    [Several markers of interest](../analysis/membrane.md#several-markers-of-interest)). Without a marker of interest,
+    the analysis gives only the cell types, subtypes and contacts. In that case, leave *MOI* unticked and switch
+    *Membrane profiles and enrichment* off.
 
     When two or more exports have been added, a *Copy setup to all* button appears at the bottom of each export's
     card, below the channel table. It copies the pixel size and the channel names of that export to the other
@@ -78,8 +80,6 @@ These settings apply to all datasets of the project. The most important ones are
 
 - **Tumor / immune markers**: *nuclear* or *membrane*. This tells the program where the tumor and immune markers
   stain, which determines how the image for Cellpose is made (see [Segmentation](../analysis/segmentation.md)).
-- **Marker of interest expressed in**: the cell type that carries the marker of interest. The membrane enrichment is
-  measured on these cells (see [Membrane enrichment](../analysis/membrane.md)).
 - **Python with Cellpose**, **Model** and **Cell diameter (px)** control the segmentation. *Python with Cellpose* can
   be the `python.exe` of an environment or the folder of that environment (a venv, conda or pixi environment, or a
   project folder with `.venv` or `.pixi` in it). A chip in the heading of *Segmentation (Cellpose)* shows what the
@@ -93,7 +93,24 @@ These settings apply to all datasets of the project. The most important ones are
   [cell types](../analysis/classification.md) are assigned. **Thresholds set by hand** lists the thresholds that were
   applied from a [dashboard](dashboard.md#subtype-markers); *Automatic again* removes them.
 - **Membrane profiles and enrichment**, **Membrane of** and **Interface with** control the
-  [membrane enrichment](../analysis/membrane.md).
+  [membrane enrichment](../analysis/membrane.md). *Membrane of* and *Interface with* are menus. Their first choice is
+  automatic: *where the marker is expressed* means the cell type that carries the marker of interest, which the
+  program finds in the data for each marker, and *the other cell type* means the other one. The other choices are the
+  tumor cells, all immune cells, every combination of the subtype markers ticked in step 2 (for example *immune A+
+  cells* or *immune negative cells*), and with two or more subtype markers each marker on its own (*immune cells A+
+  (any other markers)*). These are the same choices as in the dashboard's membrane card, which shows only the
+  combinations that occur in the data. The menus follow the roles: when you tick, untick or rename a subtype marker,
+  they change with it. A pair that you choose applies to every marker of interest. The run check asks for at least
+  one *MOI* channel when *Membrane profiles and enrichment* is on.
+
+    A value that the menus do not offer, for example from an older project or a settings file edited by hand, is
+    kept and shown as its own choice, marked *(from the settings file)*, so that saving the project does not change
+    it. If it is not a selection of the panel, the list above the *Run* button says so, with the likely meaning: for
+    example, `Immune A` is no subset, and the program asks whether you meant `A+` (every A-positive immune cell) or
+    `Immune A+` (A positive only). The run does not start until you choose a pair in the menu. A valid subset that
+    has no cells in a dataset only gives a warning in the log, and that dataset gets no membrane files for it. In a
+    settings file, both are lists (`cells = ['Tumor']`); the menus write one entry, or none for the automatic
+    choice.
 
 [All settings](../reference/settings.md) lists every setting with its default value.
 

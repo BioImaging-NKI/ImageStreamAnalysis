@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from scipy import ndimage as ndi
 
-from imagestream_analysis.config import CellOfInterest, MembraneSettings
+from imagestream_analysis.config import MembraneSettings
 from imagestream_analysis.membrane import (
     INTERFACE_OFFSET,
     _nice_step,
@@ -14,6 +14,7 @@ from imagestream_analysis.membrane import (
     membrane_profiles,
     outline,
     select,
+    selector_problem,
     straighten,
 )
 
@@ -85,7 +86,7 @@ def test_enrichment_alignment_and_control():
     labels, cells, moi = make_cells()
     settings = MembraneSettings(control_repeats=10)
     # background 50: the membrane is at 50 above it, the interface at 90
-    res = analyze_membranes(cells, profiles(labels, cells, moi), CellOfInterest.TUMOR_CELL, settings)
+    res = analyze_membranes(cells, profiles(labels, cells, moi), "Tumor", settings)
     t = res.table
     assert len(t) == 2 and res.has_interface.tolist() == [True, False]
     assert 4 < t.loc[0, "stdDevs above mean"] < 30 and t.loc[0, "Ratio interface/non-interface"] > 1.4
@@ -103,12 +104,12 @@ def test_enrichment_alignment_and_control():
 def test_any_pair_of_cell_types():
     labels, cells, moi = make_cells()
     p = profiles(labels, cells, moi)
-    other_way = analyze_membranes(cells, p, CellOfInterest.IMMUNE_CELL, MembraneSettings())  # immune vs tumor
+    other_way = analyze_membranes(cells, p, "Immune", MembraneSettings())  # immune vs tumor
     assert other_way.table["Label"].tolist() == [3] and other_way.has_interface.tolist() == [True]
     by_subtype = MembraneSettings(cells=["Tumor"], partners=["Immune negative"])
-    assert analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, by_subtype).has_interface.tolist() == [True, False]
+    assert analyze_membranes(cells, p, "Tumor", by_subtype).has_interface.tolist() == [True, False]
     nobody = MembraneSettings(cells=["Tumor"], partners=["Artefact"])
-    assert not analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, nobody).has_interface.any()
+    assert not analyze_membranes(cells, p, "Tumor", nobody).has_interface.any()
     with pytest.raises(ValueError, match="Unknown cell selection"):
         select(cells, ["Macrophage"])
 
@@ -116,8 +117,8 @@ def test_any_pair_of_cell_types():
 def test_control_is_not_seeded():
     labels, cells, moi = make_cells()
     p = profiles(labels, cells, moi, 100.0)
-    a = analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, MembraneSettings()).control_scores
-    b = analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, MembraneSettings()).control_scores
+    a = analyze_membranes(cells, p, "Tumor", MembraneSettings()).control_scores
+    b = analyze_membranes(cells, p, "Tumor", MembraneSettings()).control_scores
     assert not np.array_equal(a, b)
 
 
@@ -128,9 +129,9 @@ def test_a_bright_partner_looks_like_enrichment_and_is_caught():
     cells["Mean ch2 (MOI)"] = [50.0, 50.0, 250.0]
     s = MembraneSettings(cells=["Tumor"], partners=["Immune"])
     p = profiles(labels, cells, moi)
-    fooled = analyze_membranes(cells, p, CellOfInterest.TUMOR_CELL, s).table.loc[0, "stdDevs above mean"]
+    fooled = analyze_membranes(cells, p, "Tumor", s).table.loc[0, "stdDevs above mean"]
     inside = profiles(labels, cells, moi, inside_only=True)
-    honest = analyze_membranes(cells, inside, CellOfInterest.TUMOR_CELL, s).table.loc[0, "stdDevs above mean"]
+    honest = analyze_membranes(cells, inside, "Tumor", s).table.loc[0, "stdDevs above mean"]
     assert fooled > 5 and abs(honest) < 2
     check = expression_check(cells, p, "Mean ch2 (MOI)", ["Tumor"], ["Immune"])
     assert check["check"].startswith("WARNING") and check["partners / measured"] > 1
@@ -174,9 +175,21 @@ def test_histogram_scale_explicit_values_are_honoured():
 
 def test_histogram_tables_follow_the_settings():
     labels, cells, moi = make_cells()
-    res = analyze_membranes(cells, profiles(labels, cells, moi), CellOfInterest.TUMOR_CELL,
+    res = analyze_membranes(cells, profiles(labels, cells, moi), "Tumor",
                             MembraneSettings(control_repeats=10, max_histogram_value=20.0, histogram_bin_width=0.25))
     assert len(res.histogram_interface) == 100 and res.histogram_interface["bin_start"].iloc[0] == -5
-    auto = analyze_membranes(cells, profiles(labels, cells, moi), CellOfInterest.TUMOR_CELL,
+    auto = analyze_membranes(cells, profiles(labels, cells, moi), "Tumor",
                              MembraneSettings(control_repeats=10))
     assert len(auto.histogram_interface) <= 60 and auto.histogram_interface["counts"].sum() == 1
+
+
+def test_selector_problems():
+    """The selections of membrane.cells / partners: subsets as the tables name them, with a suggestion otherwise."""
+    markers = ["CD1", "Subtype B"]
+    for ok in ("Tumor", "Immune", "Immune negative", "Immune CD1+", "Immune CD1+ Subtype B+", "Subtype B+", "CD1+"):
+        assert selector_problem(ok, markers) == "", ok
+    assert "did you mean 'CD1+' (every CD1-positive immune cell) or 'Immune CD1+'" in selector_problem("Immune CD1",
+                                                                                                      markers)
+    assert "did you mean 'Immune CD1+ Subtype B+'" in selector_problem("Immune Subtype B+ CD1+", markers)
+    assert "after 'Immune '" in selector_problem("Immune T cells", markers)
+    assert "is not a selection" in selector_problem("Macrophage", markers)

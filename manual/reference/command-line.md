@@ -36,11 +36,10 @@ output = 'results'
 
 [channels]
 brightfield = 'BF'           # a channel by name (or by number: brightfield = 1)
-marker_of_interest = 'Marker'
+marker_of_interest = ['Marker']  # one or more, or [] for none
 tumor = 'Tumor'
 immune = ['Immune']
 functional = ['Subtype A', 'Subtype B']
-cell_of_interest = 'Tumor cell'
 
 [segmentation]
 cellpose_python = 'D:/envs/cellpose3/Scripts/python.exe'
@@ -62,11 +61,10 @@ datasets:
 ```toml
 [channels]
 brightfield = 'BF'
-marker_of_interest = 'Marker'
+marker_of_interest = ['Marker']
 tumor = 'Tumor'
 immune = ['Immune']
 functional = ['Subtype A', 'Subtype B']
-cell_of_interest = 'Tumor cell'
 
 [classification]
 pool = 'experiment'
@@ -95,7 +93,10 @@ reference = 'control'
 
 ??? note "Technical: older files"
 
-    Settings files from before November 2026 name the immune marker `t_cell = 4` and the cell of interest
-    `'T cell'`. They are read as `immune = [4]` and `'Immune cell'`. Older project files, which set the roles for each
-    export by channel number, are converted to roles by name when all exports agree (see
+    Settings files from before November 2026 name the immune marker `t_cell = 4`; it is read as `immune = [4]`. They
+    give one marker of interest (`marker_of_interest = 2` or `'Marker'`, or `''` for none), which is read as a list
+    (`[2]`, `['Marker']` or `[]`). Their `cell_of_interest` (*Marker of interest expressed in*) is ignored with a
+    note in the log: the measured cells now follow from the data (see
+    [A pair of cell types](../analysis/membrane.md#a-pair-of-cell-types)). Older project files, which set the roles
+    for each export by channel number, are converted to roles by name when all exports agree (see
     [The import page](../guide/import-page.md#2-ideas-exports)).

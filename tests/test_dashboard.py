@@ -36,13 +36,34 @@ def test_dashboard_is_written_with_data_and_image_sheets(synthetic):
     assert all(len(o) >= 8 for o in data["cells"]["outline"])
     assert sum(len(i) for i in data["events"]["interfaces"]) >= 10  # every event has an interface
     m = data["membranes"]  # every cell's membrane; the page computes the enrichment of any pair
-    assert sorted(m["cell"]) == list(range(20)) and m["cells"] == ["Tumor"] and m["partners"] == ["Immune"]
-    profile = np.frombuffer(base64.b64decode(m["profile"]), "<f4")
+    assert sorted(m["cell"]) == list(range(20)) and len(m["markers"]) == 1
+    first = m["markers"][0]  # the pair of the run: the marker is on the tumor cells
+    assert (first["name"], first["carried_by"], first["cells"], first["partners"]) == ("MOI", "Tumor", ["Tumor"],
+                                                                                        ["Immune"])
+    profile = np.frombuffer(base64.b64decode(first["profile"]), "<f4")
     track = np.frombuffer(base64.b64decode(m["track"]), "<i4")
     assert len(profile) == len(track) == sum(m["length"])
     assert set(np.unique(track)) <= set(range(-1, 20)) and (track >= 0).any()
-    assert m["expression"]["check"]
+    assert first["expression"]["check"]
     assert len(data["pairs"]) == 20 and data["markers"] == []  # 10 touching pairs, as rows of the cell table
+
+
+def test_dashboard_data_with_two_markers_of_interest(synthetic_two_markers):
+    """The tracks once, a profile per marker, each with the pair of the run (the type that carries it)."""
+    s = settings_for(synthetic_two_markers)
+    s.channels.marker_of_interest = [2, 5]
+    result = run(s)
+    data = embedded_data((result.out_dir / "dashboard.html").read_text(encoding="utf-8"))
+    m = data["membranes"]
+    assert [(k["name"], k["carried_by"], k["cells"], k["partners"]) for k in m["markers"]] == [
+        ("MOI", "Tumor", ["Tumor"], ["Immune"]), ("Second", "Immune", ["Immune"], ["Tumor"])]
+    track = np.frombuffer(base64.b64decode(m["track"]), "<i4")
+    for k in m["markers"]:
+        assert len(np.frombuffer(base64.b64decode(k["profile"]), "<f4")) == len(track) == sum(m["length"])
+    # the macro's per-event measure, per marker, on the side of the type that carries it
+    assert [(e["name"], e["carried_by"]) for e in data["events"]["moi"]] == [("MOI", "Tumor"), ("Second", "Immune")]
+    assert len(data["events"]["moi"][1]["t_ratio"]) == 10
+    assert "iface-card" not in (result.out_dir / "dashboard.html").read_text(encoding="utf-8")
 
 
 def test_outline_of_a_square_is_its_four_corners_on_pixel_edges():

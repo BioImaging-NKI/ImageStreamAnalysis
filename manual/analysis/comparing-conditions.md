@@ -7,7 +7,8 @@ experiment (usually donors). It compares two measures between conditions:
 - the [subset preference](interactions.md#subset-preference-which-immune-cells-touch): the ratio observed / expected
   of the contacts of each immune subtype with tumor cells and with the other subtypes;
 - the [membrane enrichment](membrane.md): the median enrichment (in SD above the mean) of every membrane pair of the
-  cell of interest with the other cell type.
+  cell type that carries the marker with the other cell type. With several markers of interest, each marker is a
+  measure of its own, for example *membrane enrichment (Marker)*.
 
 ## Labeling the datasets
 
@@ -83,9 +84,13 @@ evidence that nothing changed. Look at the interval instead: it shows which chan
     with 0.5 added to both so that a pair without contacts still has a value. Each immune–immune pair is tested
     once, because *S*–*T* and *T*–*S* are the same contacts. For the membrane enrichment, the value of the unit is
     the median SD above mean of its datasets, weighted by their numbers of cells with an interface. Only the pairs of
-    the cell of interest with the other cell type are tested (*Membrane of* the cell of interest or one of its
+    the cell type that carries the marker with the other cell type are tested (*Membrane of* that type or one of its
     subsets, and *Interface with* the other cell type or one of its subsets). The pairs within one cell type are
-    controls, not hypotheses.
+    controls, not hypotheses. Each marker of interest is tested on its own, and the cell type that carries it comes from
+    the column *marker on* of each dataset's `Membrane pairs.tsv`. When the datasets disagree, the type named by most
+    of them is used, and a note on every row of that marker says so. Results from before November 2026 lack this
+    column; run the analysis again to compare them. Testing several markers does not change the test itself: the
+    *q* values are adjusted within each measure, as for one marker.
 
     **Paired** (two or more replicates with both conditions): for each replicate the difference is $d_i =
     y_i^{\,\mathrm{cond}} - y_i^{\,\mathrm{ref}}$, and a one-sample t-test compares the mean $\bar d$ with 0, with

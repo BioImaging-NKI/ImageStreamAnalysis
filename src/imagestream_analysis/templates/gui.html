@@ -207,12 +207,12 @@ function withIcon(button, name) {  // put the icon in front of the label (once)
 }
 document.querySelectorAll("button[data-icon]").forEach(b => withIcon(b, b.dataset.icon));
 
-// the roles of the panel: [key, column, description]; immune and functional take several markers
+// the roles of the panel: [key, column, description]; immune, functional and the marker of interest take several
 const ROLES = [["brightfield", "BF", "Brightfield"], ["tumor", "Tumor", "Tumor marker"],
                ["immune", "Immune", "Immune-cell marker (several are summed)"],
                ["functional", "Subtype", "Immune subtype marker (positive / negative per marker)"],
-               ["marker_of_interest", "MOI", "Marker of interest (membrane enrichment; not needed for cell types and contacts only)"]];
-const MULTI = new Set(["immune", "functional"]);
+               ["marker_of_interest", "MOI", "Marker of interest: one or more, or none (membrane enrichment of each; not needed for cell types and contacts only)"]];
+const MULTI = new Set(["immune", "functional", "marker_of_interest"]);
 const REQUIRED = ["brightfield", "tumor", "immune", "marker_of_interest"];
 const MAGNIFICATIONS = [["1", "20× (1 µm)"], ["0.5", "40× (0.5 µm)"], ["0.33", "60× (0.33 µm)"]];
 let state = { folder: "", settings: null, zips: [], reference: "" };  // zips: {path, name, pixel_size, channels, channel_names, roles, datasets, info}
@@ -431,8 +431,7 @@ function copySetup(src) {
 // alone in its row takes the whole width
 const FIELDS = [
   ["Cells", "analysis/classification#tumor-or-immune-cell", [
-    [["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"],
-     ["channels.cell_of_interest", "Marker of interest expressed in", "choice", "cells_of_interest"]],
+    [["channels.marker_location", "Tumor / immune markers", "choice", "marker_locations"]],
     [["input.max_events", "Only the first N events (empty = all)", "int", null, "all"]]]],
   ["Segmentation (Cellpose)", "analysis/segmentation", [
     [["segmentation.cellpose_python", "Python with Cellpose", "text", null, "this environment"]],
@@ -453,8 +452,8 @@ const FIELDS = [
   ["Membranes", "analysis/membrane", [
     [["membrane.analysis", "Membrane profiles and enrichment", "bool"],
      ["membrane.thickness", "Membrane / interface width (px)", "int", null, "about 1.5 µm"]],
-    [["membrane.cells", "Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed)", "list", null, "where the marker is expressed"]],
-    [["membrane.partners", "Interface with (empty = the other cell type)", "list", null, "the other cell type"]],
+    [["membrane.cells", "Membrane of", "pair", null, "where the marker is expressed"],
+     ["membrane.partners", "Interface with", "pair", null, "the other cell type"]],
     [["membrane.straightening_width", "Straightening width (px)", "int", null, "about 4.5 µm"],
      ["membrane.inside_only", "Straighten inside the measured cell only", "bool"]],
     [["membrane.control_repeats", "Control windows per cell", "int"],
@@ -463,7 +462,7 @@ const FIELDS = [
 function getS(path) { const [a, b] = path.split("."); return state.settings[a][b]; }
 function setS(path, v) {
   const [a, b] = path.split("."); state.settings[a][b] = v;
-  if (path === "membrane.analysis") renderProblems();
+  if (["membrane.analysis", "membrane.cells", "membrane.partners"].includes(path)) renderProblems();
   if (path === "segmentation.cellpose_python" || path === "segmentation.use_gpu") showCellpose();
 }
 
@@ -493,6 +492,36 @@ function showCellpose() {
   const box = document.getElementById("cp-status");
   if (box) box.replaceChildren(cellposeChip());
 }
+// the membrane pair menus: the selections that membrane.select() accepts, as the dashboard offers them in its pair
+// menus (selectorOptions): the cell types, every combination of the subtype markers ticked in step 2 (in their order,
+// as the tables name the subtypes), and with two or more markers each marker on its own ("A+")
+function subtypeMarkerNames() {
+  return (panel().functional || []).map(n => typeof n === "string" ? n
+    : (state.zips.map(z => z.channel_names[z.channels.indexOf(n)]).find(Boolean) || "")).filter(Boolean);
+}
+function pairSelections() {
+  const names = subtypeMarkerNames(), opts = [["Tumor", "tumor cells"], ["Immune", "immune cells (all)"]];
+  if (names.length) {
+    for (let b = 0; b < 2 ** names.length; b++) {
+      const pos = names.filter((_, k) => b & (1 << k)).map(m => m + "+"), t = "Immune " + (pos.length ? pos.join(" ") : "negative");
+      opts.push([t, t.replace(/^Immune /, "immune ") + " cells"]);
+    }
+    if (names.length > 1) for (const m of names) opts.push([m + "+", `immune cells ${m}+ (any other markers)`]);
+  }
+  return opts;
+}
+function fillPairMenu(sel) {  // a stored value that is not offered (an old or hand-edited file) stays, as its own option
+  const v = getS(sel.dataset.pair) || [], key = v.length === 1 ? v[0] : v.length ? v.join(", ") : "";
+  const opts = [["", sel.dataset.auto], ...pairSelections()];
+  const options = opts.map(([value, text]) => el("option", { value, selected: value === key }, text));
+  sel._stale = null;
+  if (!opts.some(([value]) => value === key) && v.length) {
+    sel._stale = [...v];
+    options.push(el("option", { value: key, "data-stale": "1", selected: true }, `${key} (from the settings file)`));
+  }
+  sel.replaceChildren(...options);
+}
+function refreshPairMenus() { if (state.settings) document.querySelectorAll("select[data-pair]").forEach(fillPairMenu); }
 function settingInput(path, kind, list, placeholder) {
   const v = getS(path);
   if (kind === "thresholds") {  // set from a dashboard; shown, and back to automatic with the button
@@ -505,6 +534,10 @@ function settingInput(path, kind, list, placeholder) {
   if (kind === "choice") return el("select", { onchange: e => setS(path, e.target.value) },
     (choices[list] || []).map(o => el("option", { value: o, selected: o === v }, o)));
   if (kind === "bool") return el("input", { type: "checkbox", checked: !!v, onchange: e => setS(path, e.target.checked) });
+  if (kind === "pair") { const sel = el("select", { "data-pair": path, "data-auto": placeholder || "",
+      onchange: e => { const o = e.target.selectedOptions[0];
+        setS(path, o.dataset.stale ? [...(sel._stale || [])] : (o.value ? [o.value] : [])); } });
+    fillPairMenu(sel); return sel; }
   if (kind === "list") return el("input", { type: "text", value: (v || []).join(", "), placeholder: placeholder || "",
     onchange: e => setS(path, e.target.value.split(",").map(t => t.trim()).filter(t => t)) });
   if (kind === "text") return el("input", { type: "text", value: v ?? "", placeholder: placeholder || "",
@@ -530,9 +563,21 @@ function renderSettings() {
 }
 
 // ---------- run
+function pairProblems() {  // a membrane pair that the menus do not offer (an old or hand-edited file), as membrane.selector_problem
+  const offered = new Set(pairSelections().map(([v]) => v)), names = subtypeMarkerNames(), out = [];
+  for (const [path, label] of [["membrane.cells", "Membrane of"], ["membrane.partners", "Interface with"]])
+    for (const sel of getS(path) || []) {
+      if (offered.has(sel) || (sel.endsWith("+") && names.includes(sel.slice(0, -1)))) continue;
+      const m = sel.replace(/^Immune /, "").replace(/\+$/, "");
+      out.push(`${label}: '${sel}' is not a selection of this panel` + (names.includes(m)
+        ? ` (did you mean '${m}+', every ${m}-positive immune cell, or 'Immune ${m}+', ${m} positive only?)` : "") + "; choose one in the menu (step 3)");
+    }
+  return out;
+}
 function problems() {
   const p = [];
   if (!document.getElementById("folder").value.trim()) p.push("Choose an output folder (step 1)");
+  if (state.settings) p.push(...pairProblems());
   if (!state.zips.length) p.push("Add at least one zip (step 2)");
   for (const z of state.zips) {
     if (z.info?.error) p.push(`${z.name}: ${z.info.error}`);
@@ -567,6 +612,7 @@ function pruneRoles() {  // a role name that no zip has any more (renamed, zip r
 }
 function renderProblems() {
   pruneRoles();
+  refreshPairMenus();  // the subtype markers may have changed (ticked, unticked, renamed)
   const p = problems();
   document.getElementById("problems").replaceChildren(...p.map(m => el("li", {}, m)));
   document.getElementById("run").disabled = p.length > 0 || !!polling;
@@ -628,19 +674,23 @@ const COLUMN_HELP = {
   "artefacts": "detections positive in too many subtype markers: not counted as cells of a type",
   "single tumor + single immune cell": "events with exactly one tumor and one immune cell that touch",
   "interactions": "pairs of touching cells (all types)",
+  "MOI on": "the cell type that carries this marker of interest, found in the data: its membranes are measured unless Membrane of is set",
   "MOI partners / measured": "the marker check: median marker of interest on the partners divided by that on the measured cells (empty: no marker of interest)",
-  "marker check": "the marker check of the project's membrane pair, in words (see the manual: where the marker is expressed)",
+  "marker check": "the marker check of this marker's membrane pair, in words (see the manual: where the marker is expressed)",
   "tumor–immune contacts": "pairs of a tumor and an immune cell that touch",
   "doublet fraction": "single tumor + single immune cell events divided by all events",
   "immune negative": "immune cells negative for every subtype marker",
-  "membrane pair": "the membrane pair of the enrichment columns that follow (Membrane of ... with ...)",
+  "membrane pair": "the membrane pair of this marker, for its enrichment columns that follow (Membrane of ... with ...)",
   "membranes": "measured cells of the membrane pair", "with interface": "of those, the cells that touch a partner",
   "median stdDevs above mean": "median enrichment at the interface, in SD of the free membrane, of the cells with an interface (membrane pair)",
   "median control (windows)": "the same for random windows on the free membrane of cells without an interface",
 };
 function columnHelp(c) {
   if (COLUMN_HELP[c]) return COLUMN_HELP[c];
-  if (/^median .* membrane ratio \(doublets\)$/.test(c)) return "in single tumor + single immune cell events: mean marker of interest in the measured cell's membrane band at the interface over the rest of its band (as macro 1.8; all immune cells, whatever the membrane pair; no control: a partner that carries the marker, or two stained membranes, raise it too)";
+  // the columns of a marker of interest end in " (<marker>)"
+  const m = /^(.*) \(([^()]*)\)$/.exec(c);
+  if (m && COLUMN_HELP[m[1]] && !c.startsWith("immune ")) return `${m[2]}: ${COLUMN_HELP[m[1]]}`;
+  if (/^median .* membrane ratio, doublets \(.*\)$/.test(c)) return "in single tumor + single immune cell events: mean marker of interest in the measured cell's membrane band at the interface over the rest of its band (as macro 1.8; all immune cells, whatever the membrane pair; no control: a partner that carries the marker, or two stained membranes, raise it too)";
   if (/^immune .*\+/.test(c)) return "immune cells with exactly this combination of positive subtype markers (and negative for the others)";
   return null;
 }
@@ -684,8 +734,10 @@ function comparisonTables(c) {
   const short = t => String(t).replace(/^Immune /, "");
   const fmt = (v, d = 2) => v == null ? "" : Number(v).toFixed(d);
   const pv = v => v == null ? "" : v < 0.001 ? "< 0.001" : Number(v).toFixed(3);
+  // the subset preference, then the membrane enrichment of each marker of interest ("membrane enrichment (<marker>)")
+  const membrane = [...new Set(c.rows.map(r => r.measure).filter(m => m.startsWith("membrane enrichment")))];
   for (const [measure, effect, help] of [["subset preference", "ratio (condition / reference)", "observed / expected of the condition divided by that of the reference"],
-                                         ["membrane enrichment", "difference (median SD)", "median SD above mean of the condition minus that of the reference"]]) {
+                                         ...membrane.map(m => [m, "difference (median SD)", "median SD above mean of the condition minus that of the reference"])]) {
     const rows = c.rows.filter(r => r.measure === measure);
     if (!rows.length) continue;
     const tested = rows.filter(r => r.p != null).sort((a, b) => a.p - b.p);
@@ -791,7 +843,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) saveD
 
 (async () => {
   const s = await api("state");
-  defaults = s.defaults; choices = { marker_locations: s.marker_locations, cells_of_interest: s.cells_of_interest,
+  defaults = s.defaults; choices = { marker_locations: s.marker_locations,
              threshold_methods: s.threshold_methods, pools: s.pools };
   if (s.theme) document.documentElement.dataset.theme = s.theme;
   if (s.project) loadProject(s.project);

@@ -37,6 +37,10 @@ dashboard, drag the slider into the gap between the two peaks, and click *Apply 
 **I only want cell types and contacts.** Leave the *MOI* role unticked and *Membrane profiles and enrichment* off.
 The run then does not need a marker of interest.
 
+**I have several markers of interest.** Tick *MOI* for each of them. Each is measured on the cell type that carries it,
+and the dashboard's membrane card gets a *Marker* menu. See
+[Several markers of interest](../analysis/membrane.md#several-markers-of-interest).
+
 **Does a subtype prefer the tumor cells?** Look at the *among immune cells* tab of the *Interactions* card in the
 dashboard. It compares the subtypes with each other within events, with a 95 % interval. See
 [Cell contacts](../analysis/interactions.md#subset-preference-which-immune-cells-touch).
@@ -46,7 +50,8 @@ cannot show a preference and are left out; the dashboard says how many pairs rem
 or more cells, the ratios are uncertain. See [Cell contacts](../analysis/interactions.md).
 
 **The membrane badge is amber or red.** The partner cells carry the marker of interest too, so the interface may show
-their membrane rather than that of the measured cells. See
+their membrane rather than that of the measured cells. By default the measured cells are the type that carries the
+marker, so a red badge means that *Membrane of* or *Interface with* was set by hand. See
 [Where the marker is expressed](../analysis/membrane.md#where-the-marker-is-expressed).
 
 **The control is not centered on 0.** The control windows score random stretches of free membrane. If the staining

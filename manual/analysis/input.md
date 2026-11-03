@@ -41,7 +41,7 @@ position in the stack.
 ## Channels, roles and pixel size
 
 Every channel that the analysis needs is given a name and a role: brightfield, tumor marker, immune marker(s), subtype
-markers or marker of interest. See [The import page](../guide/import-page.md#2-ideas-exports) for how to set them. The
+markers or markers of interest. See [The import page](../guide/import-page.md#2-ideas-exports) for how to set them. The
 pixel size (in µm) is set for each export, because IDEAS files do not contain it. It is used to convert areas to µm²
 and positions along the membrane to µm.
 

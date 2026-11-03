@@ -47,8 +47,8 @@ is stale, when a setting has no comment, or when the site does not build in stri
 - The project: `python tools/manual/make_example_project.py` sets it up as on the import page and runs it
   (`data/manual/project/`, about a minute with a GPU). Cellpose: `cellpose_python` in `data/manual/local.toml`
   (a path of this computer, not in git) or the environment variable `ISA_CELLPOSE_PYTHON`.
-- Settings of the example (the walk-through quotes them): marker of interest expressed in tumor cells, cell diameter
-  20 px, membrane analysis on, pools per experiment ("Example").
+- Settings of the example (the walk-through quotes them): one marker of interest (*Marker*, found on the tumor cells
+  from the data), cell diameter 20 px, membrane analysis on, pools per experiment ("Example").
 - The example zip is also an asset of the `example-data` release, for readers.
 
 ## Screenshots

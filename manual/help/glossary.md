@@ -27,7 +27,8 @@ Interface
     cell.
 
 Marker of interest (MOI)
-:   The marker whose enrichment at the interface is measured.
+:   A marker whose enrichment at the interface is measured. A panel can have several, which are all analyzed alike.
+    By default, each is measured on the cell type that carries it.
 
 Neighbor track
 :   For every position along a cell's membrane, the cell that touches it at that position (or none).

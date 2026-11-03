@@ -4,7 +4,7 @@ their results. Stored as `project.toml` in the project's output folder; the resu
 
     [channels]                                           the panel: the role channels by name
     brightfield = 'BF'
-    marker_of_interest = 'marker'
+    marker_of_interest = ['marker']                      one or more, or none
     tumor = 'tumor'
     immune = ['immune A', 'immune B']
     functional = ['subtype X']
@@ -33,7 +33,6 @@ import copy
 import json
 import logging
 import math
-import re
 import time
 import tomllib
 from dataclasses import dataclass, field
@@ -44,9 +43,9 @@ import numpy as np
 import pandas as pd
 
 from .comparison import write_comparison
-from .config import CellOfInterest, ChannelSettings, Pool, Settings, _from_dict, _toml_value
-from .io import save_table
-from .membrane import pair_of
+from .config import ChannelSettings, Pool, Settings, _from_dict, _toml_value
+from .io import safe_name, save_table
+from .membrane import selector_problems
 
 log = logging.getLogger(__name__)
 PROJECT_FILE = "project.toml"
@@ -122,9 +121,14 @@ class Project:
             if not z.pixel_size:
                 msgs.append(f"{name}: pixel size not set")
             try:
-                self.channels_of(z)
+                ch = self.channels_of(z)
             except ValueError as e:
                 msgs.append(f"{name}: {e}")
+            else:  # the membrane pair, against the subtype markers by their names in this zip
+                if self.settings.membrane.cells or self.settings.membrane.partners:
+                    names = [z.channel_names[z.channels.index(int(n))] if int(n) in z.channels else ""
+                             for n in ch.functional]
+                    msgs += [m for m in selector_problems(self.settings.membrane, names) if m not in msgs]
             if not Path(z.path).exists():
                 msgs.append(f"{name}: file not found")
         return msgs
@@ -192,7 +196,7 @@ class Project:
                 names = [name_of.get(int(v), "") for v in (value if isinstance(value, list) else [value])]
                 if not all(names):
                     return  # an unnamed role channel: keep the numbers
-                panel[role] = names if role in ("immune", "functional") else names[0]
+                panel[role] = names if role in ("immune", "functional", "marker_of_interest") else names[0]
             panels.append(panel)
         if any(p != panels[0] for p in panels):
             return
@@ -202,18 +206,14 @@ class Project:
             z.roles = {}
 
 
-def safe_name(name: str) -> str:
-    """A folder name: characters that Windows does not allow are replaced."""
-    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "unnamed"
-
-
 def summarize(result: Any, settings: Settings) -> dict[str, Any]:
-    """Key numbers of one analysed dataset, for the overview."""
+    """Key numbers of one analysed dataset, for the overview; the columns of each marker of interest end in
+    " (<marker>)" (every marker alike, decided 2026-11-03)."""
+    from .interfaces import moi_column
+
     cells = result.cells
     events = result.events
     d = result.doublets
-    of_interest = "Tumor" if settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL else "Immune"
-    side = "Tumor membrane ratio" if of_interest == "Tumor" else "Immune membrane ratio"
     row: dict[str, Any] = {
         "events": int(len(events)),
         "cells": int(len(cells)),
@@ -222,28 +222,31 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
         "artefacts": int((cells["Cell type"] == "Artefact").sum()),
         "single tumor + single immune cell": int(len(d)),
         "interactions": int(len(result.pairs)),
-        "MOI partners / measured": _finite(result.expression.get("partners / measured")),
-        "marker check": result.expression.get("level", ""),
         "tumor–immune contacts": int(result.contacts.loc[(result.contacts["cell type"] == "Tumor")
                                                          & result.contacts["neighbour type"].str.startswith("Immune"),
                                                          "contacts"].sum()),
         "doublet fraction": round(len(d) / len(events), 4) if len(events) else None,
     }
-    if side in d:
-        row[f"median {side} (doublets)"] = _median(d[side]) if len(d) else None
     for subtype, count in cells.loc[cells["Subtype"] != "", "Subtype"].value_counts().items():
         row[f"immune {subtype}"] = int(count)
-    mem = result.membranes
-    if mem is not None:
-        t = mem.table
-        cells_of, partners = pair_of(settings.membrane, settings.channels.cell_of_interest)
-        row |= {
-            "membrane pair": f"{' / '.join(cells_of)} with {' / '.join(partners)}",
-            "membranes": int(len(t)),
-            "with interface": int(mem.has_interface.sum()),
-            "median stdDevs above mean": _median(t["stdDevs above mean"]),
-            "median control (windows)": _median(pd.Series(mem.control_scores)),
-        }
+    for mk in result.markers:
+        n = mk.name
+        row |= {f"MOI on ({n})": mk.carried_by,
+                f"MOI partners / measured ({n})": _finite(mk.expression.get("partners / measured")),
+                f"marker check ({n})": mk.expression.get("level", "")}
+        side = moi_column(f"{mk.carried_by} membrane ratio", n)  # the macro's ratio, of the type carrying it
+        if mk.carried_by and side in d:
+            row[f"median {mk.carried_by} membrane ratio, doublets ({n})"] = _median(d[side]) if len(d) else None
+        mem = mk.membranes
+        if mem is not None and len(mem.table):
+            t = mem.table
+            row |= {
+                f"membrane pair ({n})": f"{' / '.join(mk.cells)} with {' / '.join(mk.partners)}",
+                f"membranes ({n})": int(len(t)),
+                f"with interface ({n})": int(mem.has_interface.sum()),
+                f"median stdDevs above mean ({n})": _median(t["stdDevs above mean"]),
+                f"median control (windows) ({n})": _median(pd.Series(mem.control_scores)),
+            }
     return row
 
 
@@ -436,8 +439,18 @@ def write_overview(folder: str | Path) -> pd.DataFrame:
                    "fraction touching", "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
         save_table(pd.concat([each[columns], summed[columns]], ignore_index=True), folder / INTERACTIONS_FILE)
     write_subsets(folder, table)
-    pairs = [pd.read_csv(f, sep="\t").assign(experiment=row.experiment, dataset=row.dataset)
-             for row in table.itertuples() if (f := folder / str(row.folder) / "Membrane pairs.tsv").exists()]
+    pairs = []
+    for row in table.itertuples():
+        f = folder / str(row.folder) / "Membrane pairs.tsv"
+        if not f.exists():
+            continue
+        t = pd.read_csv(f, sep="\t").assign(experiment=row.experiment, dataset=row.dataset)
+        if "marker" not in t:  # results from before 2026-11-03: one marker, its name and carrier not recorded
+            log.info("%s: Membrane pairs.tsv without the columns marker and marker on (an older run): marker "
+                     "unknown; run the dataset again", row.folder)
+            t.insert(0, "marker", "")
+            t.insert(1, "marker on", "")
+        pairs.append(t)
     if pairs:
         each = pd.concat(pairs, ignore_index=True)
         save_table(each[["experiment", "dataset", *[c for c in each.columns if c not in ("experiment", "dataset")]]],

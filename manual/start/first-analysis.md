@@ -53,12 +53,13 @@ step in detail.
 
 **Step 3, Analysis settings.** For the example, change these settings:
 
-- *Marker of interest expressed in*: **Tumor cell** (the marker is on the membrane of the tumor cells);
 - *Cell diameter (px)*: **20**;
 - *Membrane profiles and enrichment*: **on**.
 
-Leave the other settings as they are. If Cellpose is installed in a separate environment, fill in *Python with
-Cellpose* (see [Installation](install.md#3-cellpose)).
+Leave the other settings as they are, including *Membrane of* and *Interface with*. You do not need to say which cells
+carry the marker of interest: the program finds in the data that it is on the tumor cells, and measures their
+membranes at the contacts with the immune cells. The overview shows this in the column *MOI on (Marker)*. If Cellpose is
+installed in a separate environment, fill in *Python with Cellpose* (see [Installation](install.md#3-cellpose)).
 
 ![The analysis settings](../images/gui_settings.png)
 

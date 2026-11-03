@@ -31,7 +31,7 @@ A local guard backs this up:
 ### Layout
 
 - `src/imagestream_analysis/` (uv, hatchling, Python 3.12+; `.python-version` is 3.13). Modules:
-  - `config.py`: Settings dataclasses ↔ TOML. Relative paths resolve against the settings file, and unknown keys are an error. Channels are numbers or names; `channels.immune` and `channels.functional` are lists; `ChannelSettings.migrate` reads the old `t_cell`.
+  - `config.py`: Settings dataclasses ↔ TOML. Relative paths resolve against the settings file, and unknown keys are an error. Channels are numbers or names; `channels.immune`, `channels.functional` and `channels.marker_of_interest` are lists; `ChannelSettings.migrate` reads the old `t_cell`, a single marker of interest, and drops `cell_of_interest`.
   - `io.py`: `read_stack` reads only the first N events; also the labelmap montage↔stack and the TSV writer (3 decimals, `NaN`).
   - `imagej.py`: exact re-implementations of the ImageJ/CLIJ2 operations (Otsu and MaxEntropy on float, RankFilters variance, cross erode/dilate, close index gaps). Check such ports against Fiji headless (see `CLAUDE.local.md` for where Fiji is).
   - `segmentation.py`: marker normalization, Cellpose input montage, Cellpose subprocess, label clean-up.
@@ -154,7 +154,8 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **Artefacts by default: positive in all subtype markers** (2026-11-01; only with two or more of them).
 - **Where the marker of interest is expressed matters** (the user, 2026-11-01): a partner that carries it too makes
   an evenly stained interface look enriched. Check it on the data and let users change it: `expression_check`
-  warns, `channels.cell_of_interest` / `membrane.cells` / `membrane.partners` set the pair, `membrane.inside_only`
+  warns, `membrane.cells` / `membrane.partners` set the pair (empty: the type that carries the marker, from the
+  data, since 2026-11-03), `membrane.inside_only`
   keeps the partner's pixels out (a sensitivity test only: touching membranes are nm apart, below the resolution,
   so the blur mixes both whatever is sampled).
 
@@ -173,6 +174,18 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   update the tables in manual/analysis/comparing-conditions.md.
 - User tests: agents follow the manual on synthetic scenarios with a hidden truth (`usertest/make_scenarios.py`,
   local, outside the repository).
+
+### Decisions by the user (2026-11-03; details in docs/SPEC.md, "Several markers of interest")
+
+- **Compatibility with the Fiji macros is not required** if dropping it makes the tool better, as long as it is
+  scientifically sound.
+- **Several markers of interest**: `channels.marker_of_interest` is a list; every marker gets the membrane analysis,
+  treated alike (no primary marker): files `... - <marker>.tsv`, columns `... (<marker>)`, one `Membrane pairs.tsv`
+  with `marker` and `marker on`; the comparison has one measure per marker.
+- **The measured cells follow from the data**: `channels.cell_of_interest` is gone (dropped with a log line on
+  loading); empty `membrane.cells` = the type (Tumor or Immune) with the brighter free membrane, per marker.
+- The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
+  the membrane card has a *Marker* menu. On the import page *Membrane of* / *Interface with* are menus.
 
 ### Git
 

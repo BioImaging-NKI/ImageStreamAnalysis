@@ -14,38 +14,60 @@ def disk(cy, cx, r):
     return (yy - cy) ** 2 + (xx - cx) ** 2 <= r * r
 
 
-def make_events(n=10, seed=0):
-    """Returns data (T, C, Y, X) uint16 and the labels (T, Y, X): tumor label 2t+1, T cell label 2t+2."""
+def make_events(n=10, seed=0, second_marker=False):
+    """Returns data (T, C, Y, X) uint16 and the labels (T, Y, X): tumor label 2t+1, T cell label 2t+2.
+    second_marker: a fifth channel (SECOND) with a second marker of interest, on the T cells (enriched at their side
+    of the interface), where the first one is on the tumor cells."""
     rng = np.random.default_rng(seed)
-    data = np.zeros((n, len(CHANNELS), H, W), dtype=np.float64)
+    data = np.zeros((n, len(CHANNELS) + second_marker, H, W), dtype=np.float64)
     labels = np.zeros((n, H, W), dtype=np.int32)
+    xx = np.mgrid[:H, :W][1]
     for t in range(n):
         r_tumor = 12 + t % 3
         tumor = disk(30, 22, r_tumor)
         t_cell = disk(30, 22 + r_tumor + 8, 8) & ~tumor
         labels[t][tumor] = 2 * t + 1
         labels[t][t_cell] = 2 * t + 2
-        for c, m in enumerate(MEDIANS):
+        for c, m in enumerate(MEDIANS + ([SECOND[1]] if second_marker else [])):
             data[t, c] = m + rng.normal(0, 2, (H, W))
         data[t, 0][tumor | t_cell] -= 200  # brightfield: cells darker
         data[t, 2][tumor] += 400 + 20 * t
         data[t, 3][t_cell] += 600 + 10 * t
-        contact = tumor & (np.abs(np.mgrid[:H, :W][1] - (22 + r_tumor)) <= 2)
+        contact = tumor & (np.abs(xx - (22 + r_tumor)) <= 2)
         data[t, 1][tumor] += 50
         data[t, 1][contact] += 150  # marker of interest enriched at the tumor side of the interface
+        if second_marker:
+            data[t, 4][t_cell] += 60
+            data[t, 4][t_cell & (np.abs(xx - (22 + r_tumor)) <= 3)] += 120  # at the T-cell side of the interface
     return np.clip(data, 0, 65535).astype(np.uint16), labels
+
+
+SECOND = ("Second", 15)  # the second marker of interest of make_events(second_marker=True): name, background
+
+
+def write_stack(path, data, names):
+    medians = MEDIANS + [SECOND[1]] * (len(names) - len(MEDIANS))
+    tifffile.imwrite(path, data, imagej=True, resolution=(2.0, 2.0),
+                     metadata={"axes": "TCYX", "unit": "um", "Labels": names * len(data),
+                               "Properties": {"Medians": "\n" + ",".join(str(m) for m in medians)}})
+    return path
 
 
 @pytest.fixture
 def synthetic(tmp_path):
     data, labels = make_events()
-    image = tmp_path / "events.tif"
-    tifffile.imwrite(image, data, imagej=True, resolution=(2.0, 2.0),
-                     metadata={"axes": "TCYX", "unit": "um", "Labels": CHANNELS * len(data),
-                               "Properties": {"Medians": "\n" + ",".join(str(m) for m in MEDIANS)}})
+    image = write_stack(tmp_path / "events.tif", data, CHANNELS)
     labelmap = tmp_path / "labels.tif"
     tifffile.imwrite(labelmap, labels.astype(np.uint16), imagej=True, metadata={"axes": "TYX"})
     return {"image": image, "labelmap": labelmap, "data": data, "labels": labels, "tmp": tmp_path}
+
+
+@pytest.fixture
+def synthetic_two_markers(synthetic):
+    """As synthetic, with a fifth channel: a second marker of interest, on the T cells (the first is on the tumor)."""
+    data, _ = make_events(second_marker=True)
+    image = write_stack(synthetic["tmp"] / "events_two_markers.tif", data, [*CHANNELS, SECOND[0]])
+    return synthetic | {"image": image, "data": data}
 
 
 def write_ideas_zip(path, data, object_ids, channels, dataset="Sample A", shrink=()):

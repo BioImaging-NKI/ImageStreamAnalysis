@@ -10,8 +10,8 @@ cells selects the event and shows it in the *Cell* card. Press *Esc* to clear th
 `dashboard.html#cell=12`; the cell number is its row in the cell table.
 
 The page remembers its view in the browser, separately for each dashboard: the channels and their brightness, the
-overlays, the filter, the sort order, the size, the magnification in the *Cell* card, the membrane pair, the scale of
-the membrane histograms and the open tabs. The next time you open the
+overlays, the filter, the sort order, the size, the magnification in the *Cell* card, the marker of interest and the
+membrane pair of each marker, the scale of the membrane histograms and the open tabs. The next time you open the
 dashboard, it shows the same view again.
 
 ![The dashboard](../images/dash_overview.png)
@@ -55,11 +55,12 @@ The column to the left of the gallery controls what is drawn in the event images
 
 This card shows the selected cell: its event, its measurements, its subtype markers (the value, and whether it is
 positive or negative), and the cells it touches. If the membrane analysis was run, the card also shows the membrane
-profile of the cell, aligned on the interface.
+profile of the cell, aligned on the interface. With several markers of interest, the membrane rows and the profile are
+those of the marker chosen in the [Membrane enrichment](#membrane-enrichment) card, and the row *marker* names it.
 
 When an event is selected but no cell, the card shows that event: its object number, its cells and their types, the
-number of touching pairs, and the marker of interest at the interface. You can hover over the cells in the enlarged
-image and click one to show it.
+number of touching pairs, and the marker of interest at the interface and on the rest of the membrane, from the
+per-event table (of the marker chosen in the membrane card). You can hover over the cells in the enlarged image and click one to show it.
 
 The **−** and **+** buttons under the image set its magnification: 100 % is one screen pixel per image pixel, and the
 steps are 100, 150, 200, 300, 400 and 600 %. The default is 200 %. The page remembers the last magnification.
@@ -117,14 +118,6 @@ its points to the front.
 
 ![Cell classes](../images/dash_classes.png){ width="420" }
 
-## Marker of interest at the interface
-
-For each event, this plot shows the mean of the marker of interest at the interface against its mean on the rest of
-the membrane, for the cell type that expresses the marker. This is the per-event table of the Fiji macro. Points above
-the dashed line have more marker at the interface. The plot is not shown when there is no marker of interest. When
-the membrane analysis was run, the plot is a panel of the [Membrane enrichment](#membrane-enrichment) card, next to
-the histograms and profiles; otherwise it has a card of its own, below the interactions.
-
 ## Interactions
 
 ![Interactions](../images/dash_interactions.png)
@@ -155,6 +148,13 @@ pair of cells to compare. Each can be a cell type, an immune subtype, or all imm
 marker. The page computes the enrichment for the chosen pair immediately. *Apply to the project…* makes it the pair
 that is used for the tables (see [Subtype markers](#subtype-markers)).
 
+With two or more markers of interest, a **Marker** menu comes first. It switches the whole card to that marker: the
+histograms, the profile, the heatmap, *All pairs*, the badge, the membrane columns of the *Cells* table and the cell
+card. Each marker starts with the pair of the run, which is by default the cell type that carries that marker against
+the other type, and keeps the pair you choose for it. The line under the menus names the marker and the cell type that
+carries it. *Apply to the project…* and *Copy as settings* write one pair, which then applies to **every** marker of
+interest. The page remembers the chosen marker.
+
 ![Membrane enrichment](../images/dash_membrane.png)
 
 - **Histogram**: the enrichment at the interface (aqua) of every cell with an interface, compared with random control
@@ -180,8 +180,13 @@ that is used for the tables (see [Subtype markers](#subtype-markers)).
 
     The page computes the pair from the membrane profile and the neighbor track of every cell, in the same way as the
     program does for the tables. Only the random control windows differ: the page uses a fixed seed, and the run uses
-    an unseeded random generator. Their summaries agree closely. The tables (`Membrane intensity analysis.tsv`) hold
-    the pair that is set in the settings.
+    an unseeded random generator. Their summaries agree closely. The tables (`Membrane intensity analysis - <marker>.tsv`,
+    one per marker of interest) hold the pair of the run: the pair set in the settings, or by default the cell type
+    that carries the marker against the other type.
+
+    The per-event measure of the Fiji macro (the marker at the interface against the rest of the membrane, per event)
+    is no longer plotted: the pair comparisons supersede it. Its values are still in the *Events* table, in the sort
+    *membrane ratio* and in `All cell combinations.tsv`.
 
 ## Tables
 

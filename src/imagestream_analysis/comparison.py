@@ -2,8 +2,8 @@
 
 Every analysed dataset with a condition (control, treated, ...) and a replicate (the independent unit: a donor, an
 independent experiment) takes part. The datasets of one replicate and condition are pooled (their contacts summed,
-their membranes weighted by cells). Per condition against the reference condition, for every subset preference and
-membrane pair:
+their membranes weighted by cells). Per condition against the reference condition, for every subset preference and,
+per marker of interest, every membrane pair of the cell type that carries the marker with the other type:
 
 - paired, when two or more replicates have both conditions: a paired t-test on the per-replicate differences
   (log observed/expected for the subset preference, median SD above mean for the membrane enrichment); replicates
@@ -19,6 +19,7 @@ for the number of pairs tested (Benjamini-Hochberg: q)."""
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,7 +28,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .config import CellOfInterest, Pool
+from .config import Pool
 from .interactions import MIN_EXPECTED
 from .io import save_table
 
@@ -38,7 +39,8 @@ log = logging.getLogger(__name__)
 COMPARISON_FILE = "condition comparison.tsv"
 MIN_INTERFACES = 10  # fewer cells with an interface in a replicate: the membrane pair is not tested
 SUBSETS = "subset preference"
-MEMBRANE = "membrane enrichment"
+MEMBRANE = "membrane enrichment"  # per marker of interest: "membrane enrichment (<marker>)"
+PAIRS = "Membrane pairs.tsv"
 OK_CHECK = "mainly on the measured cells"  # the marker check that needs no note (membrane.CHECK_LEVELS)
 COLUMNS = ["measure", "cell type", "partner", "condition", "reference", "design", "replicates", "effect", "95% low",
            "95% high", "p", "q", "per replicate", "note"]
@@ -84,6 +86,8 @@ def compare(project: Project, table: pd.DataFrame) -> tuple[pd.DataFrame, list[s
     pool_note = _pool_note(project, units)
     if pool_note:
         notes.append(pool_note)
+    sides, side_notes = marker_sides(Path(project.folder), units)
+    notes += side_notes
     out = []
     for condition in conditions:
         if condition == reference:
@@ -91,14 +95,64 @@ def compare(project: Project, table: pd.DataFrame) -> tuple[pd.DataFrame, list[s
         a, b = units[units["condition"] == reference], units[units["condition"] == condition]
         design, used, note = _design(sorted(set(a["replicate"])), sorted(set(b["replicate"])))
         notes.append(f"{condition} vs {reference}: {note}")
-        for measure, values in ((SUBSETS, _subsets), (MEMBRANE, _membranes)):
+        measures: list[tuple[str, ValueFn, str]] = [(SUBSETS, _subsets, "")]
+        measures += [(f"{MEMBRANE} ({m})" if m else MEMBRANE, _membranes_of(m, side), side_note)
+                     for m, (side, side_note) in sides.items()]
+        for measure, values, extra in measures:
             rows = _compare_measure(project, measure, values, a, b, design, used)
             for r in rows:
                 r |= {"condition": condition, "reference": reference}
-                if pool_note:
-                    r["note"] = "; ".join(x for x in (r["note"], "classified in different pools") if x)
+                for x in (extra, "classified in different pools" if pool_note else ""):
+                    if x:
+                        r["note"] = "; ".join(y for y in (r["note"], x) if y)
             out += sorted(_adjust(rows), key=lambda r: (not np.isfinite(r["p"]), r["p"] if np.isfinite(r["p"]) else 0))
     return pd.DataFrame(out, columns=COLUMNS), notes, conditions, reference
+
+
+def _read_pairs(folder: Path, units: pd.DataFrame) -> pd.DataFrame:
+    """The Membrane pairs.tsv of the datasets, with their folder; files from before 2026-11-03 (one marker, without the
+    columns marker and marker on) get marker "" and an empty marker on."""
+    parts = []
+    for u in units["folder"]:
+        f = folder / u / PAIRS
+        if f.exists():
+            t = pd.read_csv(f, sep="\t", keep_default_na=False, na_values=["NaN", ""])
+            if "marker" not in t:
+                t.insert(0, "marker", "")
+            if "marker on" not in t:
+                t.insert(1, "marker on", "")
+            parts.append(t.assign(folder=u))
+    if not parts:
+        return pd.DataFrame(columns=["marker", "marker on", "folder"])
+    t = pd.concat(parts, ignore_index=True)
+    t["marker"] = t["marker"].fillna("").astype(str)
+    t["marker on"] = t["marker on"].fillna("").astype(str)
+    return t
+
+
+def marker_sides(folder: Path, units: pd.DataFrame) -> tuple[dict[str, tuple[str, str]], list[str]]:
+    """Per marker of interest (in the order of the files): the cell type that carries it ("Tumor" or "Immune", the
+    column marker on of the datasets; when they disagree, the majority of the datasets, with a note for its rows),
+    and notes on the markers that cannot be compared."""
+    t = _read_pairs(folder, units)
+    sides: dict[str, tuple[str, str]] = {}
+    notes = []
+    for marker in dict.fromkeys(t["marker"]):
+        per_dataset = t[t["marker"] == marker].drop_duplicates("folder")["marker on"]
+        votes = Counter(v for v in per_dataset if v in ("Tumor", "Immune"))
+        label = f"'{marker}'" if marker else "the marker of interest"
+        if not votes:
+            notes.append(f"Membrane enrichment of {label}: the results do not say which cell type carries it (run the "
+                         "analysis again); not compared")
+            continue
+        side, n = votes.most_common(1)[0]
+        note = ""
+        if len(votes) > 1:
+            counts = ", ".join(f"{k.lower()} cells in {v}" for k, v in votes.most_common())
+            note = f"marker on: {counts} datasets; compared on the {side.lower()} cells (the majority)"
+            notes.append(f"Membrane enrichment of {label}: {note}")
+        sides[marker] = (side, note)
+    return sides, notes
 
 
 def _design(ref: list[str], cond: list[str]) -> tuple[str, dict[str, list[str]], str]:
@@ -175,15 +229,22 @@ def _subsets(folder: Path, units: pd.DataFrame, project: Project) -> dict[tuple[
     return out
 
 
-def _membranes(folder: Path, units: pd.DataFrame, project: Project) -> dict[tuple[str, str], dict[str, Any]]:
-    """Per membrane pair of the cell of interest with the other cell type: the median SD above mean of the datasets
-    of one replicate and condition (weighted by their cells with an interface); ok with MIN_INTERFACES of them."""
-    parts = [pd.read_csv(f, sep="\t") for f in (folder / u / "Membrane pairs.tsv" for u in units["folder"])
-             if f.exists()]
-    if not parts:
+def _membranes_of(marker: str, side: str) -> ValueFn:
+    """The ValueFn of the membrane enrichment of one marker, measured on `side` (the cell type that carries it)."""
+    def values(folder: Path, units: pd.DataFrame, project: Project) -> dict[tuple[str, str], dict[str, Any]]:
+        return _membranes(folder, units, marker, side)
+    return values
+
+
+def _membranes(folder: Path, units: pd.DataFrame, marker: str, side: str) -> dict[tuple[str, str], dict[str, Any]]:
+    """Per membrane pair of the cell type that carries the marker (`side`; its subtypes, its markers) with the other
+    cell type: the median SD above mean of the datasets of one replicate and condition (weighted by their cells with
+    an interface); ok with MIN_INTERFACES of them."""
+    t = _read_pairs(folder, units)
+    if not len(t):
         return {}
-    t = pd.concat(parts, ignore_index=True)
-    tumor = project.settings.channels.cell_of_interest == CellOfInterest.TUMOR_CELL
+    t = t[t["marker"] == marker]
+    tumor = side == "Tumor"
     mine = t["membrane of"].astype(str).str.startswith("Tumor") == tumor
     theirs = t["interface with"].astype(str).str.startswith("Tumor") != tumor
     t = t[mine & theirs & t["median stdDevs above mean"].notna()]

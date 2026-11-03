@@ -11,25 +11,18 @@ Conventions:
 from __future__ import annotations
 
 import copy
+import logging
 import tomllib
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, get_args, get_origin, get_type_hints
 
+log = logging.getLogger(__name__)
 
 class MarkerLocation(StrEnum):
     NUCLEAR = "nuclear"
     MEMBRANE = "membrane"
-
-
-class CellOfInterest(StrEnum):
-    IMMUNE_CELL = "Immune cell"
-    TUMOR_CELL = "Tumor cell"
-
-    @classmethod
-    def _missing_(cls, value: object) -> CellOfInterest | None:
-        return cls.IMMUNE_CELL if value == "T cell" else None  # the name in settings before 2026-10-31
 
 
 Channel = int | str  # a channel number (1-based), or a channel name
@@ -61,9 +54,11 @@ class ChannelSettings:
     # name (of input.channel_names, or of the stack)
 
     brightfield: Channel = 1  # The brightfield channel.
-    # The marker whose enrichment at the interface is measured. Empty ("") means no marker of interest: the tool
-    # then determines only the cell types and their contacts. The membrane analysis needs a marker of interest.
-    marker_of_interest: Channel = 2
+    # The markers whose enrichment at the interface is measured, as a list. Every marker is analyzed in the same
+    # way, and its columns and files carry its name. Empty ([]) means no marker of interest: the tool then
+    # determines only the cell types and their contacts. The membrane analysis needs at least one marker of
+    # interest.
+    marker_of_interest: list[Channel] = field(default_factory=lambda: [2])
     tumor: Channel = 3  # The tumor-cell marker.
     # The immune-cell marker or markers, as a list. With several markers, each is normalized and the results are
     # summed (the phenotypic markers of macro 2.8).
@@ -74,28 +69,32 @@ class ChannelSettings:
     # Where the tumor and immune markers stain: "nuclear" (the nucleus or the cytoplasm) or "membrane". This
     # determines the image that Cellpose segments.
     marker_location: MarkerLocation = MarkerLocation.NUCLEAR
-    # The cell type that expresses the marker of interest: "Tumor cell" or "Immune cell".
-    cell_of_interest: CellOfInterest = CellOfInterest.IMMUNE_CELL
 
     @staticmethod
     def migrate(data: dict[str, Any]) -> dict[str, Any]:
-        """Settings written before 2026-10-31 have one T-cell marker: t_cell = N."""
+        """Older settings: one T-cell marker `t_cell = N` (before 2026-10-31); one marker of interest, `""` for none,
+        and `cell_of_interest` (before 2026-11-03: the measured cells now follow from the data, so it is dropped)."""
+        data = dict(data)
         if "t_cell" in data:
-            data = dict(data)
             if "immune" in data:
                 raise ValueError("Give either channels.immune or (the old) channels.t_cell, not both")
             data["immune"] = [data.pop("t_cell")]
+        moi = data.get("marker_of_interest")
+        if moi is not None and not isinstance(moi, list):
+            data["marker_of_interest"] = [] if moi == "" else [moi]
+        if "cell_of_interest" in data:
+            log.info("channels.cell_of_interest ('%s') is no longer used and is ignored: the measured cells are the "
+                     "type that carries the marker of interest, or membrane.cells", data.pop("cell_of_interest"))
         return data
 
     def roles(self) -> dict[str, list[Channel]]:
         """Every role with its channel(s)."""
-        return {"brightfield": [self.brightfield],
-                "marker_of_interest": [self.marker_of_interest] if self.has_marker_of_interest else [],
+        return {"brightfield": [self.brightfield], "marker_of_interest": list(self.marker_of_interest),
                 "tumor": [self.tumor], "immune": list(self.immune), "functional": list(self.functional)}
 
     @property
     def has_marker_of_interest(self) -> bool:
-        return self.marker_of_interest not in ("", None)
+        return bool(self.marker_of_interest)
 
     def resolved(self, numbers: list[int], names: list[str]) -> ChannelSettings:
         """A copy with every channel given by number: names are looked up in `names` (the channels `numbers`)."""
@@ -114,8 +113,7 @@ class ChannelSettings:
 
         out = copy.deepcopy(self)
         out.brightfield = number(self.brightfield, "brightfield")
-        if self.has_marker_of_interest:
-            out.marker_of_interest = number(self.marker_of_interest, "marker_of_interest")
+        out.marker_of_interest = list(dict.fromkeys(number(c, "marker of interest") for c in self.marker_of_interest))
         out.tumor = number(self.tumor, "tumor")
         # The immune markers are summed: a zip needs at least one of them, not all (another zip of the project may
         # name its immune marker differently).
@@ -213,7 +211,8 @@ class MembraneSettings:
     analysis: bool = False
     # The cells whose membrane is measured, as a list. Each item is a cell type ("Tumor", "Immune"), an immune
     # subtype as written in the tables ("Immune A+ B+"), or a marker ("A+" means the immune cells positive for A).
-    # Empty means the cell type set in channels.cell_of_interest.
+    # Empty means the cell type that carries the marker of interest, decided per marker from the data (the median
+    # intensity of the membrane that touches no cell). A pair set here applies to every marker of interest.
     cells: list[str] = field(default_factory=list)
     # The partners whose contact forms the interface, written as for cells. Empty means the other cell type.
     partners: list[str] = field(default_factory=list)

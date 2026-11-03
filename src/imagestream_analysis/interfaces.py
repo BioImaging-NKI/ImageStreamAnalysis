@@ -52,29 +52,38 @@ MOI_COLUMNS = ["mean immune interface", "mean immune NOT in interface", "mean tu
                "mean tumor NOT in interface", "Immune membrane ratio", "Tumor membrane ratio"]
 
 
-def event_table(cells: pd.DataFrame, n_events: int, masks: InterfaceMasks, moi: np.ndarray | None) -> pd.DataFrame:
-    """The 'All cell combinations' table: one row per event (Frame is 1-based). Without a marker of interest
-    (moi None) the marker columns (MOI_COLUMNS) are left out.
+def moi_column(column: str, marker: str) -> str:
+    """The per-event column of one marker of interest: 'mean tumor interface (<marker>)'."""
+    return f"{column} ({marker})"
+
+
+def event_table(cells: pd.DataFrame, n_events: int, masks: InterfaceMasks,
+                mois: list[tuple[str, np.ndarray]]) -> pd.DataFrame:
+    """The 'All cell combinations' table: one row per event (Frame is 1-based). For every marker of interest (name,
+    (T, Y, X) image) the MOI_COLUMNS, with the marker's name added (moi_column); none without a marker of interest.
+    The macro had one marker and no name in its columns (decided 2026-11-03: every marker is treated alike).
 
     The macro writes a row only for events with at least one cell, but fills the measurements by event index,
     so its rows shift when an event has no cells (issue I5); here every event has its own row."""
     counts = pd.crosstab(cells["frame"], cells["Cell type"]).reindex(range(n_events), fill_value=0)
-    values = moi if moi is not None else np.zeros(masks.immune_interface.shape, dtype=np.float32)
     df = pd.DataFrame({
         "Frame": np.arange(1, n_events + 1),
         "Immune cells": counts.get("Immune", pd.Series(0, index=counts.index)).to_numpy(),
         "Tumor cells": counts.get("Tumor", pd.Series(0, index=counts.index)).to_numpy(),
-        "mean immune interface": _masked_means(values, masks.immune_interface),
-        "mean immune NOT in interface": _masked_means(values, masks.immune_not_in_interface),
-        "mean tumor interface": _masked_means(values, masks.tumor_interface),
-        "mean tumor NOT in interface": _masked_means(values, masks.tumor_not_in_interface),
     })
-    with np.errstate(divide="ignore", invalid="ignore"):
-        df["Immune membrane ratio"] = df["mean immune interface"] / df["mean immune NOT in interface"]
-        df["Tumor membrane ratio"] = df["mean tumor interface"] / df["mean tumor NOT in interface"]
+    for name, values in mois:
+        means = {"mean immune interface": _masked_means(values, masks.immune_interface),
+                 "mean immune NOT in interface": _masked_means(values, masks.immune_not_in_interface),
+                 "mean tumor interface": _masked_means(values, masks.tumor_interface),
+                 "mean tumor NOT in interface": _masked_means(values, masks.tumor_not_in_interface)}
+        with np.errstate(divide="ignore", invalid="ignore"):
+            means["Immune membrane ratio"] = means["mean immune interface"] / means["mean immune NOT in interface"]
+            means["Tumor membrane ratio"] = means["mean tumor interface"] / means["mean tumor NOT in interface"]
+        for c in MOI_COLUMNS:
+            df[moi_column(c, name)] = means[c]
     # whether a tumor and an immune cell touch (the interface mask is not empty), with or without a marker
     df["Tumor-immune interface"] = masks.immune_interface.reshape(n_events, -1).any(axis=1)
-    return df if moi is not None else df.drop(columns=MOI_COLUMNS)
+    return df
 
 
 def doublets(events: pd.DataFrame) -> pd.DataFrame:

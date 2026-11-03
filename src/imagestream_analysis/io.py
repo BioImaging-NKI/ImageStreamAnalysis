@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import logging
 import math
+import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -167,6 +168,11 @@ def montage_to_stack(montage: np.ndarray, height: int, width: int) -> np.ndarray
     rows, cols = montage.shape[0] // height, montage.shape[1] // width
     grid = montage.reshape(rows, height, cols, width, *montage.shape[2:]).swapaxes(1, 2)
     return grid.reshape(rows * cols, height, width, *montage.shape[2:])
+
+
+def safe_name(name: str) -> str:
+    """A file or folder name: characters that Windows does not allow are replaced."""
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "unnamed"
 
 
 def save_table(df: pd.DataFrame, path: Path, index: bool = False) -> None:

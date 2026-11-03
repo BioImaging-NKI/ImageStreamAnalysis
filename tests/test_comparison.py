@@ -4,7 +4,7 @@ import pytest
 from scipy import stats
 
 from imagestream_analysis.comparison import COMPARISON_FILE, MEMBRANE, SUBSETS, bh, compare, write_comparison
-from imagestream_analysis.config import CellOfInterest, Pool
+from imagestream_analysis.config import Pool
 from imagestream_analysis.project import DatasetEntry, Project, ZipEntry
 
 NAMES = ["BF", "MOI", "Immune", "Tumor", "A"]
@@ -16,7 +16,8 @@ def project(tmp_path, datasets, experiment=lambda name: "E") -> tuple[Project, p
     """A project with one zip; datasets: (name, condition, replicate, {(cell type, partner): (contacts, expected)})."""
     p = Project(tmp_path)
     ch = p.settings.channels
-    ch.brightfield, ch.marker_of_interest, ch.immune, ch.tumor, ch.functional = "BF", "MOI", ["Immune"], "Tumor", ["A"]
+    ch.brightfield, ch.marker_of_interest, ch.tumor = "BF", ["MOI"], "Tumor"
+    ch.immune, ch.functional = ["Immune"], ["A"]
     entries, folders = [], []
     for name, condition, replicate, contacts in datasets:
         entries.append(DatasetEntry(name, experiment(name), True, condition, replicate))
@@ -122,7 +123,6 @@ def test_reference_and_pools(tmp_path):
 def test_membrane_pairs(tmp_path):
     data = [(f"{d}_{k}", k, d, {}) for d in ("D1", "D2", "D3") for k in ("control", "treated")]
     p, table = project(tmp_path, data)
-    p.settings.channels.cell_of_interest = CellOfInterest.TUMOR_CELL
     shift = {"control": 0.0, "treated": 1.0}
     for k, (name, cond, _rep, _) in enumerate(data):
         rows = [{"membrane of": "Tumor", "interface with": "Immune A+", "cells with an interface": 30,
@@ -134,13 +134,48 @@ def test_membrane_pairs(tmp_path):
                  "median stdDevs above mean": 0.0, "marker check": ""},
                 {"membrane of": "Tumor", "interface with": "Tumor", "cells with an interface": 30,  # a control pair
                  "median stdDevs above mean": 0.0, "marker check": ""}]
-        pd.DataFrame(rows).to_csv(tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
+        pd.DataFrame(rows).assign(**{"marker": "MOI", "marker on": "Tumor"}).to_csv(
+            tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
     result = compare(p, table)[0]
-    mem = result[result["measure"] == MEMBRANE].set_index(["cell type", "partner"])
+    mem = result[result["measure"] == f"{MEMBRANE} (MOI)"].set_index(["cell type", "partner"])
     assert list(mem.index) == [("Tumor", "Immune A+"), ("Tumor", "Immune negative")]
     assert mem.loc[("Tumor", "Immune A+"), "effect"] == pytest.approx(1.1)
     low = mem.loc[("Tumor", "Immune negative")]
     assert np.isnan(low["p"]) and "too few interfaces" in low["note"] and "partners carry part" in low["note"]
+
+
+def _pairs(marker, on, value, n=30):
+    """Membrane pairs.tsv rows of one marker: its carrier with the other type, and the other way round."""
+    other = "Immune" if on == "Tumor" else "Tumor"
+    common = {"marker": marker, "marker on": on, "cells with an interface": n}
+    return [common | {"membrane of": on, "interface with": other, "median stdDevs above mean": value,
+                      "marker check": "mainly on the measured cells"},
+            common | {"membrane of": other, "interface with": on, "median stdDevs above mean": -value,
+                      "marker check": ""}]
+
+
+def test_membrane_pairs_per_marker_of_interest(tmp_path):
+    """Two markers of interest: a measure each, on the cell type that carries it (the column marker on); when the
+    datasets disagree, the majority, with a note; an old file (one marker, no marker on) is not compared."""
+    data = [(f"{d}_{k}", k, d, {}) for d in ("D1", "D2", "D3") for k in ("control", "treated")]
+    p, table = project(tmp_path, data)
+    for k, (name, cond, _rep, _) in enumerate(data):
+        shift = 1.0 if cond == "treated" else 0.0
+        on_b = "Tumor" if name == "D3_treated" else "Immune"  # one dataset says otherwise
+        rows = _pairs("MOI", "Tumor", 1.0 + shift + 0.1 * k) + _pairs("B", on_b, 2.0 - shift + 0.1 * k)
+        pd.DataFrame(rows).to_csv(tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
+    result, notes, _, _ = compare(p, table)
+    first = result[result["measure"] == f"{MEMBRANE} (MOI)"].set_index(["cell type", "partner"])
+    assert list(first.index) == [("Tumor", "Immune")] and first.iloc[0]["effect"] == pytest.approx(1.1)
+    second = result[result["measure"] == f"{MEMBRANE} (B)"].set_index(["cell type", "partner"])
+    assert list(second.index) == [("Immune", "Tumor")]  # the majority: on the immune cells
+    assert "majority" in second.iloc[0]["note"] and any("compared on the immune cells" in n for n in notes)
+    # files written before 2026-11-03: no marker columns, so no known carrier
+    for name, *_ in data:
+        pd.DataFrame(_pairs("x", "Tumor", 1.0)).drop(columns=["marker", "marker on"]).to_csv(
+            tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
+    result, notes, _, _ = compare(p, table)
+    assert not result["measure"].str.startswith(MEMBRANE).any() and any("run the analysis again" in n for n in notes)
 
 
 def test_write_and_round_trip(tmp_path):

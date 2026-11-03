@@ -19,17 +19,24 @@ means:
 | *immune cells*, *tumor cells*, *artefacts* | the number of cells of each type (see [Cell types](../analysis/classification.md)) |
 | *single tumor + single immune cell* | the number of events with exactly one tumor cell and one immune cell that touch |
 | *interactions* | the number of pairs of touching cells, of any cell types |
-| *MOI partners / measured* | the marker check (see [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed)); empty when there is no marker of interest |
-| *marker check* | the marker check of the project's membrane pair, in words |
 | *tumor–immune contacts* | the number of pairs of a tumor cell and an immune cell that touch |
 | *doublet fraction* | *single tumor + single immune cell* divided by *events* |
-| *median Tumor (or Immune) membrane ratio (doublets)* | computed in the events of *single tumor + single immune cell*: the mean marker of interest in the measured cell's membrane band at the interface, divided by that in the rest of its band. This is the macro's ratio. It uses all immune cells, whatever the membrane pair, and has no control; see [the per-event table](../analysis/membrane.md#the-per-event-table) |
 | *immune negative*, *immune A+*, *immune A+ B+*, … | the number of immune cells with exactly that combination of positive subtype markers (*immune A+* cells are negative for the other markers); 0 when a dataset has none |
+
+Then come the columns of each marker of interest. Their names end in the name of the marker, for example
+*MOI on (Marker)*:
+
+| Column | Meaning |
+|---|---|
+| *MOI on* | the cell type (*Tumor* or *Immune*) that carries the marker, found in the data; by default its membranes are measured (see [A pair of cell types](../analysis/membrane.md#a-pair-of-cell-types)) |
+| *MOI partners / measured* | the marker check (see [Membrane enrichment](../analysis/membrane.md#where-the-marker-is-expressed)) |
+| *marker check* | the marker check of the marker's membrane pair, in words |
+| *median Tumor (or Immune) membrane ratio, doublets* | computed in the events of *single tumor + single immune cell*, for the cell type that carries the marker: the mean of the marker in that cell's membrane band at the interface, divided by that in the rest of its band. This is the macro's ratio. It uses all partners of the other type, whatever the membrane pair, and has no control; see [the per-event table](../analysis/membrane.md#the-per-event-table) |
 | *membrane pair* | the pair that the enrichment columns after it describe: *Membrane of* … *with* … |
 | *membranes*, *with interface* | the number of measured cells of that pair, and how many of them touch a partner |
 | *median stdDevs above mean*, *median control (windows)* | the median enrichment of the cells with an interface, and that of the control windows |
 
-The enrichment columns describe the membrane pair of the project. If you click *Apply to the project…* in a dashboard
+The enrichment columns describe the membrane pair of each marker. If you click *Apply to the project…* in a dashboard
 with another pair selected, they describe that pair, so always note the pair together with the numbers. Every other
 pair of every dataset is in `membrane pairs.tsv` in the project folder, so you don't need another run to see them.
 

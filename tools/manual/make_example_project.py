@@ -15,7 +15,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from imagestream_analysis.config import CellOfInterest, Pool
+from imagestream_analysis.config import Pool
 from imagestream_analysis.project import DatasetEntry, Project, ZipEntry, run_project
 
 DATA = Path(__file__).parents[2] / "data" / "manual"
@@ -35,9 +35,8 @@ def cellpose_python() -> str | None:
 def make() -> Project:
     p = Project(FOLDER)
     ch = p.settings.channels
-    ch.brightfield, ch.marker_of_interest, ch.tumor = "BF", "Marker", "Tumor"
+    ch.brightfield, ch.marker_of_interest, ch.tumor = "BF", ["Marker"], "Tumor"
     ch.immune, ch.functional = ["Immune"], ["Subtype A", "Subtype B"]
-    ch.cell_of_interest = CellOfInterest.TUMOR_CELL
     seg = p.settings.segmentation
     seg.diameter = 20.0
     python = cellpose_python()

@@ -1,10 +1,14 @@
 """Membrane profiles and the enrichment at the interface (macro lines 700-996), between two cell types of choice.
 
-Every cell (artefacts excepted) gets its membrane profile of the marker of interest and a neighbour track: for each
+Every cell (artefacts excepted) gets its membrane profile of each marker of interest and a neighbour track: for each
 position along the outline, the label of the nearest other cell within the interface reach (0 = none). A pair of
 cell types (`membrane.cells`, `membrane.partners`) then only chooses which positions are the interface: those that
 touch a partner; the rest of the membrane is the part that touches no cell. (Decided 2026-10-31: with several cell
-types the interfaces between all of them are kept by position, and any pair is a selection.)
+types the interfaces between all of them are kept by position, and any pair is a selection.) The outlines and tracks
+are the same for every marker of interest; only the profiles differ.
+
+Without a pair in the settings, the measured cells are the cell type (Tumor or Immune) that carries the marker, decided
+per marker from the data (`carrier`; the user, 2026-11-03), against the other type.
 
 Deviations from the macro, decided 2026-10-22 (SPEC I8-I11):
 - one membrane per cell (the macro: one per blob of touching cells of the same class);
@@ -17,6 +21,7 @@ Deviations from the macro, decided 2026-10-22 (SPEC I8-I11):
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -25,7 +30,7 @@ import pandas as pd
 from scipy import ndimage as ndi
 from skimage import measure
 
-from .config import CellOfInterest, MembraneSettings
+from .config import MembraneSettings
 from .interactions import type_label
 
 log = logging.getLogger(__name__)
@@ -162,15 +167,24 @@ class Profiles:
 
 def membrane_profiles(labels: np.ndarray, cells: pd.DataFrame, moi: np.ndarray, background: float, width: int,
                       reach: int, inside_only: bool = False) -> Profiles:
-    """Profiles and neighbour tracks of all cells but the artefacts. labels (T, Y, X); moi: (T, Y, X) raw marker of
-    interest, `background` is subtracted; reach: the interface reach (membrane.thickness), in 4-connected steps.
+    """Profiles and neighbour tracks of all cells but the artefacts, for one marker (membrane_profiles_of)."""
+    return membrane_profiles_of(labels, cells, [moi], [background], width, reach, inside_only)[0]
+
+
+def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence[np.ndarray],
+                         backgrounds: Sequence[float], width: int, reach: int,
+                         inside_only: bool = False) -> list[Profiles]:
+    """Profiles and neighbour tracks of all cells but the artefacts, one Profiles per marker (they share the labels
+    and the tracks: the outlines are traced once). labels (T, Y, X); mois: (T, Y, X) raw markers of interest, their
+    `backgrounds` are subtracted; reach: the interface reach (membrane.thickness), in 4-connected steps.
 
     The straightened band is `width` samples across the outline, half of them outside the cell: at an interface
     they lie in the partner cell. inside_only: the maximum is taken over the samples inside the cell only, so that
     the membrane of a partner that also carries the marker is not measured as this cell's."""
     roi = cells[cells["Cell type"] != "Artefact"]
     objects = {t: ndi.find_objects(labels[t]) for t in np.unique(roi["frame"])}
-    out = Profiles(np.zeros(0, dtype=np.int64), [], [])
+    tracks: list[np.ndarray] = []
+    out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks) for _ in mois]
     kept = []
     for t, label in zip(roi["frame"].astype(int), roi["label"].astype(int), strict=True):
         sl = objects[t][label - 1] if label - 1 < len(objects[t]) else None
@@ -188,16 +202,67 @@ def membrane_profiles(labels: np.ndarray, cells: pd.DataFrame, moi: np.ndarray, 
         others = np.where(own, 0, sub)
         dist, (iy, ix) = ndi.distance_transform_cdt(others == 0, metric="taxicab", return_indices=True)
         nearest = np.where(own & (dist <= reach), others[iy, ix], 0)
-        band = straighten(moi[t][box].astype(np.float64) - background, line, width)
         if inside_only:
             inside = straighten(own.astype(np.float64), line, width, order=0) > 0
             inside[(width - 1) // 2] |= ~inside.any(axis=0)  # a sliver of a cell: at least the middle sample
-            band = np.where(inside, band, -np.inf)
-        out.profiles.append(band.max(axis=0))  # macro: maximum projection across the membrane
-        out.tracks.append(straighten(nearest.astype(np.float64), line, width, order=0).max(axis=0).astype(np.int64))
+        for prof, moi, background in zip(out, mois, backgrounds, strict=True):
+            band = straighten(moi[t][box].astype(np.float64) - background, line, width)
+            if inside_only:
+                band = np.where(inside, band, -np.inf)
+            prof.profiles.append(band.max(axis=0))  # macro: maximum projection across the membrane
+        tracks.append(straighten(nearest.astype(np.float64), line, width, order=0).max(axis=0).astype(np.int64))
         kept.append(label)
-    out.labels = np.array(kept, dtype=np.int64)
+    for prof in out:
+        prof.labels = np.array(kept, dtype=np.int64)
     return out
+
+
+def selector_problem(sel: str, markers: list[str]) -> str:
+    """Why `sel` is not a selection of select() for a panel with these subtype markers ("" when it is one): a cell
+    type, 'Immune negative', 'Immune <m>+ <n>+ ...' (subtype markers, in the panel's order, as the tables name the
+    subtypes), or '<m>+' (with two or more subtype markers, also with one: every immune cell positive for m)."""
+    if sel in ("Tumor", "Immune", "Artefact", "Immune negative"):
+        return ""
+    if sel.endswith("+") and sel[:-1] in markers and not sel.startswith("Immune "):
+        return ""
+    if sel.startswith("Immune "):
+        rest = sel[len("Immune "):].strip()
+        words = _marker_words(rest, markers)  # marker names may contain spaces ("Subtype A+")
+        if words is not None and len(set(words)) == len(words):
+            ordered = [f"{m}+" for m in markers if f"{m}+" in words]
+            if words == ordered:
+                return ""
+            return f"'{sel}' is not a subset as the tables name it: did you mean 'Immune {' '.join(ordered)}'?"
+        if rest.rstrip("+") in markers:
+            m = rest.rstrip("+")
+            return (f"'{sel}' is not a subset: did you mean '{m}+' (every {m}-positive immune cell) or 'Immune {m}+' "
+                    f"({m} positive only)?")
+        known = ", ".join(f"'{m}+'" for m in markers) or "none"
+        return (f"'{sel}' is not a subset: after 'Immune ' come subtype markers with '+' (of the panel: {known}), "
+                "or 'negative'")
+    if sel.rstrip("+") in markers:
+        m = sel.rstrip("+")
+        return f"'{sel}' is not a selection: did you mean '{m}+' (every {m}-positive immune cell)?"
+    return f"'{sel}' is not a selection: use Tumor, Immune, 'Immune <subtype>' or '<marker>+'"
+
+
+def _marker_words(text: str, markers: list[str]) -> list[str] | None:
+    """'A+ B c+' -> ['A+', 'B c+'] when every piece is '<marker>+' (longest marker name first), else None."""
+    out = []
+    names = sorted(markers, key=len, reverse=True)
+    while text:
+        hit = next((f"{m}+" for m in names if text == f"{m}+" or text.startswith(f"{m}+ ")), None)
+        if hit is None:
+            return None
+        out.append(hit)
+        text = text[len(hit):].lstrip()
+    return out or None
+
+
+def selector_problems(settings: MembraneSettings, markers: list[str]) -> list[str]:
+    """The problems of membrane.cells and membrane.partners (selector_problem), as messages."""
+    return [f"membrane.{key}: {msg}" for key, sels in (("cells", settings.cells), ("partners", settings.partners))
+            for sel in sels if (msg := selector_problem(sel, markers))]
 
 
 def select(cells: pd.DataFrame, selectors: list[str]) -> pd.Series:
@@ -218,6 +283,29 @@ def select(cells: pd.DataFrame, selectors: list[str]) -> pd.Series:
     return hit
 
 
+def per_cell_intensity(cells: pd.DataFrame, membranes: Profiles | None, moi_column: str) -> pd.Series:
+    """The marker per cell (by label), background-subtracted: the mean of the membrane that touches no cell, or
+    without membrane profiles the mean of the whole cell."""
+    if membranes is None:
+        return cells.set_index("label")[moi_column]
+    free = [float(p[t == 0].mean()) if (t == 0).any() else np.nan
+            for p, t in zip(membranes.profiles, membranes.tracks, strict=True)]
+    return pd.Series(free, index=membranes.labels)
+
+
+def carrier(cells: pd.DataFrame, membranes: Profiles | None, moi_column: str) -> tuple[str, dict[str, float]]:
+    """The cell type (Tumor or Immune) that carries the marker: the one with the higher median of
+    per_cell_intensity (the measure of expression_check), and the medians of both. "" when neither type has cells
+    with a value."""
+    values = per_cell_intensity(cells, membranes, moi_column)
+    medians = {}
+    for kind in ("Tumor", "Immune"):
+        v = values.reindex(cells.loc[cells["Cell type"] == kind, "label"].astype(int)).to_numpy(dtype=float)
+        medians[kind] = float(np.nanmedian(v)) if np.isfinite(v).any() else float("nan")
+    finite = {k: v for k, v in medians.items() if np.isfinite(v)}
+    return (max(finite, key=lambda k: finite[k]) if finite else ""), medians
+
+
 def expression_check(cells: pd.DataFrame, membranes: Profiles | None, moi_column: str, wanted: list[str],
                      partners: list[str]) -> dict[str, Any]:
     """Is the marker of interest expressed in the measured cells rather than in their partners? If the partners
@@ -225,14 +313,7 @@ def expression_check(cells: pd.DataFrame, membranes: Profiles | None, moi_column
 
     Compares the median membrane intensity (the membrane that touches no cell; without membrane profiles the mean
     of the whole cell) of the measured cells and of the partners, background-subtracted."""
-    def per_cell() -> pd.Series:
-        if membranes is None:
-            return cells.set_index("label")[moi_column]
-        free = [float(p[t == 0].mean()) if (t == 0).any() else np.nan
-                for p, t in zip(membranes.profiles, membranes.tracks, strict=True)]
-        return pd.Series(free, index=membranes.labels)
-
-    values = per_cell()
+    values = per_cell_intensity(cells, membranes, moi_column)
     labels = cells["label"].astype(int)
 
     def median(selectors: list[str]) -> float:
@@ -248,8 +329,8 @@ def expression_check(cells: pd.DataFrame, membranes: Profiles | None, moi_column
         verdict = "not checked (no cells of one of the types)"
     elif ratio >= EXPRESSION_SIMILAR[1]:
         verdict = (f"WARNING: the marker of interest is brighter on the partners ({' / '.join(partners)}) than on the "
-                   f"measured cells ({' / '.join(wanted)}): check where it is expressed (channels.cell_of_interest, "
-                   "membrane.cells). The interface would show the partners' membrane.")
+                   f"measured cells ({' / '.join(wanted)}): check the pair (membrane.cells, membrane.partners; "
+                   "empty: the cell type that carries the marker). The interface would show the partners' membrane.")
     elif np.isfinite(brightest) and brightest > 0 and a < EXPRESSION_LOW * brightest:
         verdict = (f"NOT INFORMATIVE: the measured cells ({' / '.join(wanted)}) hardly carry the marker of interest "
                    f"({a / brightest:.0%} of the brightest cell type, {by_type.idxmax()}); their enrichment says "
@@ -318,18 +399,20 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str) -> pd.
     return pd.DataFrame(out)
 
 
-def pair_of(settings: MembraneSettings, cell_of_interest: CellOfInterest) -> tuple[list[str], list[str]]:
-    """The cells and partners of the enrichment; empty settings: the cell of interest against the other type."""
-    own = "Immune" if cell_of_interest == CellOfInterest.IMMUNE_CELL else "Tumor"
+def pair_of(settings: MembraneSettings, carried_by: str) -> tuple[list[str], list[str]]:
+    """The cells and partners of the enrichment; empty settings: the cell type that carries the marker ("Tumor" or
+    "Immune", see carrier; "" counts as Tumor) against the other type."""
+    own = "Immune" if carried_by == "Immune" else "Tumor"
     other = "Tumor" if own == "Immune" else "Immune"
     return list(settings.cells) or [own], list(settings.partners) or [other]
 
 
-def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, cell_of_interest: CellOfInterest,
-                      settings: MembraneSettings, rng: np.random.Generator | None = None) -> MembraneResult:
-    """The enrichment of the marker of interest at the interface of the chosen cells with their partners."""
+def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str, settings: MembraneSettings,
+                      rng: np.random.Generator | None = None) -> MembraneResult:
+    """The enrichment of the marker of interest at the interface of the chosen cells with their partners
+    (pair_of: carried_by is the cell type that carries the marker)."""
     rng = rng or np.random.default_rng()
-    wanted, partners = pair_of(settings, cell_of_interest)
+    wanted, partners = pair_of(settings, carried_by)
     chosen = set(cells.loc[select(cells, wanted), "label"].astype(int))
     partner_labels = np.array(sorted(cells.loc[select(cells, partners), "label"].astype(int)), dtype=np.int64)
     frame_of = dict(zip(cells["label"].astype(int), cells["frame"].astype(int), strict=True))

@@ -25,12 +25,11 @@ The role of each channel, given by channel number or by channel name.
 | Setting | Default | On the import page | Meaning |
 |---|---|---|---|
 | `brightfield` | `1` |  | The brightfield channel. |
-| `marker_of_interest` | `2` |  | The marker whose enrichment at the interface is measured. Empty ("") means no marker of interest: the tool then determines only the cell types and their contacts. The membrane analysis needs a marker of interest. |
+| `marker_of_interest` | `[2]` |  | The markers whose enrichment at the interface is measured, as a list. Every marker is analyzed in the same way, and its columns and files carry its name. Empty ([]) means no marker of interest: the tool then determines only the cell types and their contacts. The membrane analysis needs at least one marker of interest. |
 | `tumor` | `3` |  | The tumor-cell marker. |
 | `immune` | `[4]` |  | The immune-cell marker or markers, as a list. With several markers, each is normalized and the results are summed (the phenotypic markers of macro 2.8). |
 | `functional` | `[]` |  | The immune subtype markers, as a list. Each immune cell is called positive or negative for each of them (the functional markers of macro 2.8). |
 | `marker_location` | `'nuclear'` | Tumor / immune markers | Where the tumor and immune markers stain: "nuclear" (the nucleus or the cytoplasm) or "membrane". This determines the image that Cellpose segments. |
-| `cell_of_interest` | `'Immune cell'` | Marker of interest expressed in | The cell type that expresses the marker of interest: "Tumor cell" or "Immune cell". |
 
 ## `[segmentation]`
 
@@ -71,8 +70,8 @@ The membrane profiles and the enrichment at the interface.
 | Setting | Default | On the import page | Meaning |
 |---|---|---|---|
 | `analysis` | `false` | Membrane profiles and enrichment | Measure the membrane profiles and the enrichment at the interface. The interface table per event is always made, whether or not this is on. |
-| `cells` | `[]` | Membrane of (e.g. Tumor, Immune, A+; empty = where the marker is expressed) | The cells whose membrane is measured, as a list. Each item is a cell type ("Tumor", "Immune"), an immune subtype as written in the tables ("Immune A+ B+"), or a marker ("A+" means the immune cells positive for A). Empty means the cell type set in channels.cell_of_interest. |
-| `partners` | `[]` | Interface with (empty = the other cell type) | The partners whose contact forms the interface, written as for cells. Empty means the other cell type. |
+| `cells` | `[]` | Membrane of | The cells whose membrane is measured, as a list. Each item is a cell type ("Tumor", "Immune"), an immune subtype as written in the tables ("Immune A+ B+"), or a marker ("A+" means the immune cells positive for A). Empty means the cell type that carries the marker of interest, decided per marker from the data (the median intensity of the membrane that touches no cell). A pair set here applies to every marker of interest. |
+| `partners` | `[]` | Interface with | The partners whose contact forms the interface, written as for cells. Empty means the other cell type. |
 | `thickness` | (empty) | Membrane / interface width (px) | In pixels: the width of the membrane band, which is also the distance at which cells count as touching. Empty means about 1.5 µm (2 px at 20x, 3 px at 40x, 5 px at 60x). |
 | `straightening_width` | (empty) | Straightening width (px) | In pixels: the width of the band across the outline that is straightened. Empty means about 4.5 µm (5 px at 20x, 9 px at 40x, 13 px at 60x). This width lets the band reach the membrane where the outline lies a little outside it. |
 | `max_histogram_value` | (empty) | Histogram maximum (SD) | The upper end of the histograms, in SD above the mean. The histograms start at -5. Empty means automatic: the 99th percentile of the interface values or of the control windows, whichever is higher (at least 5), rounded up to a whole number of bins. Values above the upper end are not counted. |
