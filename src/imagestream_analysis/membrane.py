@@ -203,10 +203,14 @@ class Profiles:
     profiles: list[np.ndarray]
     tracks: list[np.ndarray]
     sums: list[np.ndarray] = field(default_factory=list)
+    # the line along which each membrane was straightened, in pixels of its event ((n, 2) of y, x; one point per
+    # profile sample), and the width of the band across it: the dashboard draws the band that was sampled
+    lines: list[np.ndarray] = field(default_factory=list)
+    width: int = 0
 
     def summed(self) -> Profiles:
         """The same membranes with the sum across the band as profile."""
-        return Profiles(self.labels, self.sums, self.tracks, self.sums)
+        return Profiles(self.labels, self.sums, self.tracks, self.sums, self.lines, self.width)
 
 
 def membrane_profiles(labels: np.ndarray, cells: pd.DataFrame, moi: np.ndarray, background: float, width: int,
@@ -228,7 +232,8 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
     roi = cells[cells["Cell type"] != "Artefact"]
     objects = {t: ndi.find_objects(labels[t]) for t in np.unique(roi["frame"])}
     tracks: list[np.ndarray] = []
-    out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks, []) for _ in mois]
+    lines: list[np.ndarray] = []
+    out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks, [], lines, width) for _ in mois]
     kept = []
     for t, label in zip(roi["frame"].astype(int), roi["label"].astype(int), strict=True):
         sl = objects[t][label - 1] if label - 1 < len(objects[t]) else None
@@ -256,6 +261,7 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
             prof.profiles.append(band.max(axis=0))  # macro: maximum projection across the membrane
             prof.sums.append(np.where(np.isfinite(band), band, 0.0).sum(axis=0))  # additive: both membranes count
         tracks.append(straighten(nearest.astype(np.float64), line, width, order=0).max(axis=0).astype(np.int64))
+        lines.append(line + (y0, x0))
         kept.append(label)
     for prof in out:
         prof.labels = np.array(kept, dtype=np.int64)

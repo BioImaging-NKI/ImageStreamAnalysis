@@ -80,6 +80,9 @@ a larger change). Retake them at the next refresh and empty this list.
 - 2026-11-03, the excess over both membranes: the membrane card has a *Measure* menu, and the *All pairs* note
   changed. Retake `dash_membrane` and `dash_pairs` (and `dash_cell` if its rows matter there). Make the example
   project again first.
+- 2026-11-04, the cell card: a channel montage under the measurements, and the *membrane band* tick box (space bar).
+  Retake `dash_cell` (consider one with the band on, for the membrane page). The demo needs rebuilding (the page and
+  its data changed). Make the example project again first.
 
 ## Refresh, check, publish
 

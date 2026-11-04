@@ -46,6 +46,16 @@ def test_dashboard_is_written_with_data_and_image_sheets(synthetic):
     assert set(np.unique(track)) <= set(range(-1, 20)) and (track >= 0).any()
     assert first["expression"]["check"]
     assert len(data["pairs"]) == 20 and data["markers"] == []  # 10 touching pairs, as rows of the cell table
+    # the straightening line of every membrane, a point per profile sample, on the edge of its cell (the cell card's
+    # membrane band): in page coordinates (pixel edges at integers) about on the cell's outline
+    line = np.frombuffer(base64.b64decode(m["line"]), "<i2").reshape(-1, 2) / 8 + 0.5
+    assert len(line) == len(profile) and m["band_width"] == result.markers[0].profiles.width > 0
+    k, start = 0, 0
+    cell = m["cell"][k]
+    own = line[start : start + m["length"][k]]
+    edge = np.array(data["cells"]["outline"][cell]).reshape(-1, 2) / 2
+    gap = np.linalg.norm(own[:, None] - edge[None], axis=2).min(axis=1)
+    assert np.median(gap) < 1.0  # smoothed, so not exactly on the polygon's corners
 
 
 def test_dashboard_data_with_two_markers_of_interest(synthetic_two_markers):

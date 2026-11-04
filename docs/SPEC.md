@@ -385,6 +385,16 @@ from the import page (served from the project folder, token-protected). No exter
   (sortable). Hover and selection are linked in all views; one filter row (events: all / both cell types / one
   tumor + one immune cell / with an interface / with touching cells; a contact; sort) scopes everything. `#cell=N`
   or `#event=N` in the address selects on opening.
+- **Cell card: channel montage and membrane band (the user, 2026-11-04).** Under the measurements, every loaded
+  channel of the event in grey (its display range, also when switched off in *Channels*), with the selected cell's
+  outline. *membrane band* (space bar; remembered in the view) lays the band that was straightened over the image and
+  the montage at 40 % opacity: `Profiles.lines` (the smoothed outline of `membrane.outline`, one point per profile
+  sample, in event pixels) are written to the page as `membranes.line` (int16, 1/8 px) with `band_width` (the
+  straightening width in px), and the page draws `band_width` / 2 on each side of the normal as `straighten` samples
+  it (with `inside_only` only the inner half). Colour per position, from the neighbour track and the pair shown:
+  interface with a partner (aqua), free membrane, the reference (amber), another contact, left out (grey). A selected
+  cell of the partner type shows its contacts with the measured cells as interface; a selected event shows the measured
+  cells of the pair only. Size: 4 bytes per membrane sample (the profiles take 8 per marker).
 - Colours: the validated reference palette (dataviz skill), in light and dark mode; aqua and yellow are below 3:1
   on the light surface, so they are always named in a legend and the values are in the tables.
 - Project overview (import page): the contact matrix of each experiment against chance, side by side (from

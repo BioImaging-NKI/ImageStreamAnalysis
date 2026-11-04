@@ -107,6 +107,13 @@ svg .axis { stroke: var(--axis); stroke-width: 1; }
 #cellcard dt { color: var(--ink-2); }
 #cellcard dd { margin: 0; font-variant-numeric: tabular-nums; }
 .cardrow { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.zoomctl label { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; cursor: pointer; }
+.montage { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.montage figure { margin: 0; }
+.montage canvas { display: block; background: #000; border-radius: 3px; }
+.montage figcaption { font-size: 11px; color: var(--ink-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--line, #8888); flex: none; vertical-align: -1px; margin-right: 3px; }
+.bandnote kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line, #8888); border-radius: 3px; padding: 0 4px; }
 table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 th, td { padding: 3px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 th { color: var(--ink-2); font-weight: 500; cursor: pointer; position: sticky; top: 0; background: var(--surface); }
@@ -289,7 +296,8 @@ const fmt = (v, d = 3) => v == null || (typeof v === "number" && !isFinite(v)) ?
 const pct = v => v == null || !isFinite(v) ? "–" : Math.round(v * 100) + " %";
 const state = { filter: "all", sort: "event", zoom: 1, outlines: true, interfaces: true, contacts: false, hover: -1, selected: -1,
                 event: -1, tab: "cells", tableSort: null, tableDesc: false, contact: null, focus: null, matrix: "ratio", bars: "share",
-                cardZoom: 2 };  // the magnification of the image in the cell card (CSS pixels per image pixel)
+                cardZoom: 2,  // the magnification of the image in the cell card (CSS pixels per image pixel)
+                band: false };  // the cell card: the membrane band as straightened, over the images (space bar)
 const CARD_ZOOMS = [1, 1.5, 2, 3, 4, 6];
 
 // ---------- cell types: tumor, immune (or immune subtypes, live from the marker thresholds), artefact
@@ -487,7 +495,7 @@ gallery.addEventListener("wheel", ev => {
 let galleryWidth = -1;  // the plots follow the page width; the gallery's height also follows the right-hand column
 new ResizeObserver(() => { relayout(); if (gallery.clientWidth !== galleryWidth) { galleryWidth = gallery.clientWidth; drawPlots(); } }).observe(gallery);
 function redrawEvent(e) { const t = tiles.get(e); if (t) drawEvent(t.querySelector("canvas"), e, state.zoom);
-  if (e === cardEvent && cardCanvas) drawEvent(cardCanvas, e, state.cardZoom); }
+  if (e === cardEvent && cardCanvas) drawCard(cardCanvas, e, state.cardZoom); }
 function redrawEventsOfSheet(s) { for (const e of tiles.keys()) if (Math.floor(e / PER_SHEET) === s) redrawEvent(e); if (cardEvent >= 0 && Math.floor(cardEvent / PER_SHEET) === s) renderCard(); }
 function scrollToEvent(e) {
   const k = shown.indexOf(e); if (k < 0) return;
@@ -1272,10 +1280,83 @@ function drawHeatOverlay() {
 // ---------- cell card: the selected cell, or else the selected event; its cells can be hovered and clicked
 let cardCanvas = null, cardEvent = -1;
 const EMPTY_CARD = '<h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell or an event in the events, a plot or the table.</p>';
+// the membrane band as it was straightened (membrane.py: straighten): along the smoothed outline, `band_width` samples
+// across it (half of them outside the cell; with inside_only only those inside count). Coloured by what each position
+// is for the pair shown: the interface with a partner, the free membrane (the reference), or another contact (left out)
+const BAND_ALPHA = 0.4, BAND_FREE = "#ffb000";
+let LINE = null, MEMK = null;
+// the selected cell, or the measured cells of the pair in the selected event
+const bandCells = () => state.selected >= 0 ? [state.selected] : (state.event >= 0 ? cellsOfEvent[state.event].filter(c => matches(c, pair.cells)) : []);
+// the other side of the pair for a cell: its partners if it is a measured cell, else the measured cells
+const bandOther = i => i >= 0 && !matches(i, pair.cells) ? pair.cells : pair.partners;
+function bandLine(k) {  // the straightening line of membrane k, in page coordinates (pixel edges at integers)
+  if (!LINE) LINE = decodeB64(MP.line, Int16Array);
+  const pts = [];
+  for (let j = OFFS[k]; j < OFFS[k + 1]; j++) pts.push([LINE[2 * j] / 8 + 0.5, LINE[2 * j + 1] / 8 + 0.5]);
+  return pts;
+}
+function drawBands(ctx, cells) {  // onto ctx (transform set to the image's scale): the bands of these cells
+  if (!state.band || !MP || !MP.line) return;
+  if (!MEMK) { MEMK = new Int32Array(NC).fill(-1); MP.cell.forEach((c, k) => MEMK[c] = k); }
+  decodeMembranes();
+  const t = ctx.getTransform(), cv = document.createElement("canvas"); cv.width = ctx.canvas.width; cv.height = ctx.canvas.height;
+  const bx = cv.getContext("2d"); bx.setTransform(t);  // opaque here, then laid over at BAND_ALPHA: no darker seams
+  const colour = { iface: css("--s3"), free: BAND_FREE, other: "#8a8f98" }, half = MP.band_width / 2;
+  for (const i of cells) {
+    const k = MEMK[i]; if (k < 0) continue;
+    const p = bandLine(k), n = p.length; if (n < 3) continue;
+    const nrm = p.map((_, j) => { const a = p[(j + n - 1) % n], b = p[(j + 1) % n], tx = (b[0] - a[0]) / 2, ty = (b[1] - a[1]) / 2, l = Math.hypot(tx, ty) || 1e-9;
+      return [ty / l, -tx / l]; });  // as membrane.straighten: normal = (-t_x, t_y) in (y, x)
+    let lo = -half, hi = half;
+    if (MP.inside_only) {  // only the samples inside the cell: the inner half, on the side where the cell is
+      let inward = 0; for (let j = 0; j < n; j += Math.max(1, n >> 4)) inward += offCtx.isPointInPath(cellPath(i), p[j][0] + 1.5 * nrm[j][0], p[j][1] + 1.5 * nrm[j][1]) ? 1 : -1;
+      [lo, hi] = inward >= 0 ? [0, half] : [-half, 0];
+    }
+    const other = bandOther(i), kind = j => { const tr = TRACK[OFFS[k] + j]; return tr < 0 ? "free" : matches(tr, other) ? "iface" : "other"; };
+    for (let j = 0; j < n; j++) {
+      const j2 = (j + 1) % n, [x1, y1] = p[j], [x2, y2] = p[j2], [nx1, ny1] = nrm[j], [nx2, ny2] = nrm[j2];
+      bx.fillStyle = colour[kind(j)]; bx.beginPath();
+      bx.moveTo(x1 + lo * nx1, y1 + lo * ny1); bx.lineTo(x2 + lo * nx2, y2 + lo * ny2); bx.lineTo(x2 + hi * nx2, y2 + hi * ny2); bx.lineTo(x1 + hi * nx1, y1 + hi * ny1);
+      bx.closePath(); bx.fill(); bx.strokeStyle = bx.fillStyle; bx.lineWidth = 0.6 / t.a; bx.stroke();  // close the hairline gaps between quads
+    }
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = BAND_ALPHA; ctx.drawImage(cv, 0, 0); ctx.restore();
+}
+function drawCard(cv, e, z) { drawEvent(cv, e, z); drawBands(cv.getContext("2d"), bandCells()); }
+function bandLegend() {
+  const p = document.createElement("p"); p.className = "note bandnote";
+  const sw = (c, t) => `<span class="sw" style="background:${c}"></span>${t}`;
+  p.innerHTML = `Membrane band as straightened: ${MP.band_width} px (${fmt(MP.band_width * D.pixel_size, 1)} µm) across the outline` +
+    (MP.inside_only ? ", the half inside the cell" : "") + (state.selected < 0 ? `; the measured cells (${shortType(pair.cells)})` : "") + ". " + [sw(css("--s3"), `interface with ${shortType(bandOther(state.selected))}`),
+    sw(BAND_FREE, "free membrane (the reference)"), sw("#8a8f98", "other contacts (left out)")].join(" · ") + ". <kbd>Space</kbd>: show / hide.";
+  return p;
+}
+function toggleBand(on = !state.band) {
+  if (!MP || !MP.line) return;
+  state.band = on; saveView(); if (state.selected >= 0 || state.event >= 0) renderCard();
+}
+// one image per loaded channel, grey (its display range), with the cell's outline (and the band): what each marker shows
+function cardMontage(e) {
+  const z = Math.max(1, state.cardZoom / 2), wrap = document.createElement("div"); wrap.className = "montage";
+  const s = Math.floor(e / PER_SHEET), k = e % PER_SHEET, sx = (k % SC) * TW, sy = Math.floor(k / SC) * TH;
+  for (const ch of D.channels) {
+    const cv = document.createElement("canvas"); cv.width = Math.round(TW * z); cv.height = Math.round(TH * z);
+    const ctx = cv.getContext("2d"); ctx.setTransform(z, 0, 0, z, 0, 0); ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, TW, TH);
+    const img = sheet(ch.number, s); if (img.complete && img.naturalWidth) ctx.drawImage(img, sx, sy, TW, TH, 0, 0, TW, TH);
+    if (state.selected >= 0) { ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.2 / z; ctx.stroke(cellPath(state.selected)); }
+    drawBands(ctx, bandCells());
+    const fig = document.createElement("figure"), cap = document.createElement("figcaption");
+    cap.textContent = ch.name; cap.title = `Ch${ch.number}` + (ch.role ? ` · ${ch.role.replace(/_/g, " ")}` : "") + ` · display range ${fmt(ch.range[0], 0)}–${fmt(ch.range[1], 0)}`;
+    const dot = document.createElement("span"); dot.className = "sw"; dot.style.background = LUT[ch.lut] || "#fff"; cap.prepend(dot);
+    fig.append(cv, cap); wrap.append(fig);
+  }
+  return wrap;
+}
 function cardImage(e) {  // the event at state.cardZoom, with − / + and the cells under the mouse
   const z = state.cardZoom, cv = document.createElement("canvas");
   cv.width = Math.round(TW * z); cv.height = Math.round(TH * z); cv.style.cssText = "background:#000;border-radius:4px;display:block;cursor:pointer";
-  drawEvent(cv, e, z);
+  drawCard(cv, e, z);
   const at = ev => { const r = cv.getBoundingClientRect(), ctx = cv.getContext("2d"); ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
     const i = cellAt(e, (ev.clientX - r.left) / z, (ev.clientY - r.top) / z, ctx); ctx.restore(); return i; };
   cv.addEventListener("pointermove", ev => { const i = at(ev); setHover(i); if (i >= 0) showTip(ev, cellTip(i)); else hideTip(); });
@@ -1288,6 +1369,12 @@ function cardImage(e) {  // the event at state.cardZoom, with − / + and the ce
   const ctl = document.createElement("div"); ctl.className = "zoomctl";
   const v = document.createElement("span"); v.textContent = `${Math.round(z * 100)} %`; v.title = "screen pixels per image pixel";
   ctl.append(btn("−", "Smaller", k > 0 ? CARD_ZOOMS[k - 1] : null), v, btn("+", "Larger", k < CARD_ZOOMS.length - 1 ? CARD_ZOOMS[k + 1] : null));
+  if (MP && MP.line) {  // the membrane band as straightened (space bar)
+    const lab = document.createElement("label"), box = document.createElement("input"); box.type = "checkbox"; box.checked = state.band;
+    box.onchange = () => toggleBand(box.checked);
+    lab.title = "The band of the membrane as it was straightened and measured, over the images (shortcut: space bar)";
+    lab.append(box, " membrane band"); ctl.append(lab);
+  }
   const box = document.createElement("div"); box.className = "cardimg"; box.append(cv, ctl);
   return box;
 }
@@ -1311,7 +1398,7 @@ function renderCard() {
     if (D.has_moi && iInterface(e) != null) rows.push([`${evMarker().name} at the interface`, fmt(iInterface(e))], ["rest of the membrane", fmt(iRest(e))]);
     const row = document.createElement("div"); row.className = "cardrow"; row.append(cardImage(e), cardList(rows));
     const hint = document.createElement("p"); hint.className = "note"; hint.textContent = "Click a cell in the image to show it.";
-    card.replaceChildren(h2, row, hint); return;
+    card.replaceChildren(h2, row, hint, cardMontage(e)); if (state.band) card.append(bandLegend()); return;
   }
   const e = C.event[i], k = memOfCell[i];
   h2.textContent = typeName(i).replace(/^./, c => c.toUpperCase()) + ` in event #${e + 1}`;
@@ -1325,7 +1412,8 @@ function renderCard() {
                         M.interface_length[k] ? [MEASURES[measure], fmt(M.sd[k], 2)] : ["control (mean of windows)", fmt(M.control[k], 2)],
                         ["ratio interface / rest", fmt(M.ratio[k])]);
   const row = document.createElement("div"); row.className = "cardrow"; row.append(cardImage(e), cardList(rows));
-  card.replaceChildren(h2, row);
+  card.replaceChildren(h2, row, cardMontage(e));
+  if (state.band) card.append(bandLegend());
   if (M && k >= 0) {
     const W = 360, H = 120, svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, style: "width:100%;max-width:420px;display:block;margin-top:8px" });
     const len = M.length[k], vals = Array.from(M.profiles.subarray(k * M.width, k * M.width + len));
@@ -1446,7 +1534,12 @@ document.getElementById("theme").onclick = () => {
   const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("isa-theme", root.dataset.theme); } catch (e) {}
   redrawAll(); drawPlots(); };
-document.addEventListener("keydown", ev => { if (ev.key === "Escape") { select(-1); selectEvent(-1); } });
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape") { select(-1); selectEvent(-1); }
+  // space: the membrane band in the cell card, on / off (not while typing, or on a focused control that space operates)
+  const t = ev.target, typing = t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|SUMMARY|A)$/.test(t.tagName));
+  if (ev.key === " " && !typing && !ev.ctrlKey && !ev.metaKey && !ev.altKey && MP && MP.line) { ev.preventDefault(); toggleBand(); }
+});
 try { const t = localStorage.getItem("isa-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 new ResizeObserver(() => document.documentElement.style.setProperty("--header-h", document.getElementById("header").offsetHeight + "px")).observe(document.getElementById("header"));
 
@@ -1501,7 +1594,7 @@ for (const b of document.querySelectorAll("button.apply")) {
 const VIEW_KEY = "isa-view:" + location.pathname.replace(/^\/files\/[^/]+\//, "/files/");
 function saveView() {
   const v = { filter: state.filter, sort: state.sort, zoom: state.zoom, outlines: state.outlines, interfaces: state.interfaces,
-              contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair }, hist: { ...histView }, cardZoom: state.cardZoom,
+              contacts: state.contacts, matrix: state.matrix, bars: state.bars, tab: state.tab, pair: { ...pair }, hist: { ...histView }, cardZoom: state.cardZoom, band: state.band,
               marker: MKS[MI]?.name, measure, projection, pairs: Object.fromEntries(MKS.map((m, k) => [m.name, k === MI ? { ...pair } : pairOfMarker[k]])),
               channels: D.channels.map(c => ({ name: c.name, on: c.on, gain: c.gain ?? 1 })) };
   try { localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (e) {}
@@ -1510,6 +1603,7 @@ let VIEW = null;
 try { VIEW = JSON.parse(localStorage.getItem(VIEW_KEY) || "null"); } catch (e) {}
 if (VIEW) {
   for (const k of ["filter", "sort", "zoom", "outlines", "interfaces", "contacts"]) if (VIEW[k] != null) state[k] = VIEW[k];
+  state.band = VIEW.band === true;
   if (CARD_ZOOMS.includes(VIEW.cardZoom)) state.cardZoom = VIEW.cardZoom;
   for (const c of VIEW.channels || []) { const ch = D.channels.find(x => x.name === c.name); if (ch) { ch.on = c.on; ch.gain = c.gain; } }
   if (VIEW.hist && typeof VIEW.hist === "object") for (const k of ["max", "bin"]) {  // the histogram scale (null = automatic)

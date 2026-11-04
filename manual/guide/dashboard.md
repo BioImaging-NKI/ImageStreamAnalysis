@@ -65,6 +65,29 @@ per-event table (of the marker chosen in the membrane card). You can hover over 
 The **−** and **+** buttons under the image set its magnification: 100 % is one screen pixel per image pixel, and the
 steps are 100, 150, 200, 300, 400 and 600 %. The default is 200 %. The page remembers the last magnification.
 
+Below the measurements, a **montage** shows the event once per loaded channel, in grey, at half the magnification of
+the large image (at least 100 %). Each channel is shown with its own display range, whether or not it is switched on in
+*Channels*, so you can see what every marker shows on its own. The colour square in front of the name is the colour
+of the channel in the composite; hover over the name to see the channel number, its role and its display range. The
+selected cell is outlined in white.
+
+If the membrane analysis was run, tick **membrane band** next to the magnification, or press the **space bar**, to lay
+the membrane band over the large image and the montage, semi-transparent. The band is the strip of pixels that was
+straightened and measured: it follows the smoothed outline of the cell, and is *Straightening width* pixels wide, half
+of it outside the cell (with *Straighten inside the measured cell only*, only the half inside the cell is shown). Its
+colour says what each position along the membrane counts as, for the membrane pair of the membrane card:
+
+| Colour | Meaning |
+|---|---|
+| aqua | the interface with a partner of the pair |
+| amber | the free membrane, which touches no cell: the reference that the interface is compared with |
+| grey | a contact with a cell outside the pair: left out of both |
+
+For a selected cell, the band of that cell is shown. A cell of the partner type shows its contacts with the measured
+cells as interface. For a selected event, the bands of the measured cells of the pair are shown. A line under the
+montage repeats the colours and the width. The space bar does nothing while you type in a field or when a menu or a
+button has the focus. The page remembers whether the band is shown.
+
 ![A selected cell](../images/dash_cell.png){ width="420" }
 
 ## Subtype markers

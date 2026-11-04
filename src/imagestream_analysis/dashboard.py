@@ -28,6 +28,7 @@ from .config import Settings
 from .interfaces import moi_column
 
 if TYPE_CHECKING:
+    from .membrane import Profiles
     from .pipeline import Result
 
 SHEET_COLUMNS, SHEET_ROWS = 10, 10
@@ -225,6 +226,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
             "length": [len(p) for p in prof.profiles],
             "track": base64.b64encode(np.concatenate(track_rows).astype("<i4").tobytes() if track_rows
                                       else b"").decode("ascii"),
+            "line": membrane_lines(prof), "band_width": prof.width,
             "markers": [{"name": mk.name, "carried_by": mk.carried_by, "cells": mk.cells, "partners": mk.partners,
                          "expression": mk.expression,
                          "profile": float32_b64(np.concatenate(mk.profiles.profiles) if mk.profiles.profiles
@@ -237,6 +239,18 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
             "bin_width": m.histogram_bin_width, "inside_only": m.inside_only,
         }
     return data
+
+
+LINE_SCALE = 8  # the straightening lines in 1/8 pixel
+
+
+def membrane_lines(prof: Profiles) -> str:
+    """The straightening line of every membrane (one point per profile sample, in the profiles' order) as base64 of
+    little-endian int16 x, y pairs in 1/LINE_SCALE pixel of the event: the page draws the band that was sampled."""
+    if not prof.lines:
+        return ""
+    xy = np.concatenate(prof.lines)[:, ::-1] * LINE_SCALE
+    return base64.b64encode(np.round(xy).clip(-32768, 32767).astype("<i2").tobytes()).decode("ascii")
 
 
 def markers_data(result: Result, settings: Settings) -> list[dict[str, Any]]:
