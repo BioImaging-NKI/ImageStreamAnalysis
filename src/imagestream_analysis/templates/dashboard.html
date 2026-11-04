@@ -270,7 +270,8 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
       <div>
         <div class="legend" id="heat-legend"></div>
         <div class="plot"><canvas id="heat" height="240"></canvas></div>
-        <p class="note">One row per cell with an interface, highest enrichment on top.</p>
+        <div class="plot" style="margin-top:3px"><canvas id="heat-avg" height="16" title="The rows above averaged per position"></canvas></div>
+        <p class="note" id="heat-note">One row per cell with an interface, highest enrichment on top; the stripe under it: their average per position.</p>
       </div>
     </div>
   </div>
@@ -1281,7 +1282,8 @@ function drawAcross() {
     const where = !o ? "" : o.source === mk ? `peak ${fmt(o.offset * px, 2)} µm` : names.includes(o.source) ? `band placed by ${o.source} (peak ${fmt(o.offset * px, 2)} µm)` : o.source;
     return `<span class="sw" style="background:${colour}"></span>${esc(words)}: ${p.cells.toLocaleString()} cells${where ? ", " + esc(where) : ""}`; };
   note.innerHTML = `${esc(mk)} averaged across the outline of the ${esc(shortType(typ))} cells.<br>` + parts.map(say).join("<br>") + "<br>" +
-    `The strips under the axis: the band (${MP.band_width} px), ` + (L.moved ? "centred where the membrane lies (membrane.band_centre = membrane)." :
+    `The strips under the axis: the band (${MP.band_width} px), ` + (L.mode === "cell" ? `centred per cell (membrane.band_centre = cell): ${L.own.toLocaleString()} cells on the peak of their own free membrane, their contacts moved by as much plus the difference shown here; the strips show the type's average place.` :
+    L.moved ? "centred where the membrane lies (membrane.band_centre = membrane)." :
     "on the outline (membrane.band_centre = outline): if it reaches less of the free membrane than of the interface, the interface looks enriched without cause.");
 }
 document.getElementById("pair-cells").onchange = e => { pair.cells = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
@@ -1304,11 +1306,33 @@ function drawHeat(rows) {
   const bar = document.createElement("span"); bar.style.cssText = `display:inline-block;width:120px;height:8px;border-radius:2px;vertical-align:middle;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))`;
   const a = document.createElement("span"); a.className = "note"; a.textContent = `−${HEAT_RANGE} `; const b = document.createElement("span"); b.className = "note"; b.textContent = ` +${HEAT_RANGE} SD (position 0 – ${fmt((cols - 1) * D.pixel_size, 0)} µm, interface at ${fmt(20 * D.pixel_size, 0)} µm)`;
   lg.append(a, bar, b);
+  drawHeatAverage(cols);
   if (!cv._wired) { cv._wired = true;
     const rowAt = ev => { const r = cv.getBoundingClientRect(); return heatRows[Math.floor((ev.clientY - r.top) / r.height * heatRows.length)]; };
     cv.addEventListener("pointermove", ev => { const k = rowAt(ev); if (k == null) return; const i = M.cell[k]; setHover(i); showTip(ev, cellTip(i)); });
     cv.addEventListener("pointerleave", () => { setHover(-1); hideTip(); });
     cv.addEventListener("click", ev => { const k = rowAt(ev); if (k != null) select(M.cell[k]); }); }
+}
+// under the heatmap: the rows shown, averaged per position (the mean, as the average profile), on the same colour
+// scale, so that the interface and its surroundings read at a glance
+let heatAvg = [];
+function drawHeatAverage(cols) {
+  const cv = document.getElementById("heat-avg"), ctx = setupCanvas(cv), w = cv._w, h = cv._h;
+  ctx.clearRect(0, 0, w, h); heatAvg = [];
+  if (!heatRows.length || !cols) return;
+  const img = ctx.createImageData(cols, 1);
+  for (let c = 0; c < cols; c++) {
+    let s = 0, n = 0; for (const k of heatRows) { const v = M.profiles[k * M.width + c]; if (!isNaN(v)) { s += v; n++; } }
+    const v = n ? s / n : NaN; heatAvg.push([v, n]);
+    if (!isNaN(v)) img.data.set([...divergingRgb(v / HEAT_RANGE), 255], c * 4);
+  }
+  const tmp = document.createElement("canvas"); tmp.width = cols; tmp.height = 1; tmp.getContext("2d").putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(tmp, 0, 0, w, h);
+  if (!cv._wired) { cv._wired = true;
+    cv.addEventListener("pointermove", ev => { if (!heatAvg.length) return; const r = cv.getBoundingClientRect();
+      const c = Math.max(0, Math.min(heatAvg.length - 1, Math.floor((ev.clientX - r.left) / r.width * heatAvg.length))), [v, n] = heatAvg[c];
+      showTip(ev, [[fmt(v, 2), MEASURES[measure] + " (mean)"], [fmt(c * D.pixel_size, 1) + " µm", c === 20 ? "(interface centre)" : ""], [String(n), "cells"]]); });
+    cv.addEventListener("pointerleave", hideTip); }
 }
 function drawHeatOverlay() {
   const cv = document.getElementById("heat"); if (!heatBase || !M) return;

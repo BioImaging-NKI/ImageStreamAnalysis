@@ -190,11 +190,14 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
   **auto** to return to the automatic scale. The page redraws the histograms immediately and remembers the scale.
   Values above the maximum are not counted; the note under the plot says how many cells that concerns.
 - **Average profile**: the average membrane profile of the cells with an interface, centered on the interface.
-- **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top.
+- **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top. The **stripe** under
+  it shows the rows averaged per position, on the same colour scale (the average profile as a colour band); hover
+  over it to read the value and the number of cells at that position.
 - **Across the membrane: where the band lies** (folded): the marker of interest averaged across the outline of the
   measured cells, at the free membrane (amber) and at the contacts with the partners' cell type (aqua), in µm from the
   outline (− inside the cell). The strips under the axis show the band of each. By default each band is centred on
-  the peak of its curve; with the band on the outline, both strips are centred on 0, and a strip that covers less of
+  the peak of its curve; with *Band centred on*: *cell* each cell has a place of its own around it (the note says how
+  many); with the band on the outline, both strips are centred on 0, and a strip that covers less of
   the amber peak than of the aqua one makes the interface look enriched without cause. See
   [Where the membrane lies](../analysis/membrane.md#where-the-membrane-lies-and-a-false-enrichment-it-prevents).
 - **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the

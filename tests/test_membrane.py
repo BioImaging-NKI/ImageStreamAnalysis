@@ -241,7 +241,7 @@ def test_sum_across_the_band():
     assert prof.summed().profiles is prof.sums and prof.summed().tracks is prof.tracks
 
 
-def _halo_events(n=24, inset=2):
+def _halo_events(n=24, inset=2, insets=None):
     """Pairs of touching cells whose masks reach `inset` px beyond the stained membrane where they are free (as a
     Cellpose outline does), while at the contact the membrane lies on the contact line. The membrane is stained
     evenly everywhere: no enrichment at the interface."""
@@ -255,7 +255,7 @@ def _halo_events(n=24, inset=2):
         labels[t][b & (xx >= 43)] = 2
         # the stained membrane, a ridge of one shape everywhere: `inset` inside the free outline, but on the contact
         # line where the cells touch
-        r = 15 - inset
+        r = 15 - (insets[t] if insets is not None else inset)
         d = np.minimum(np.abs(np.hypot(yy - 30, xx - 30) - r), np.abs(np.hypot(yy - 30, xx - 56) - r))
         d = np.where((xx >= 39) & (xx <= 47), np.inf, d)
         d = np.minimum(d, np.where(labels[t] > 0, np.abs(xx - 42.5), np.inf))
@@ -297,3 +297,27 @@ def test_the_band_follows_the_membrane_not_the_outline():
                                    levels=[{"Tumor": 10.0, "Immune": 30.0}])
     assert ("Tumor", "") not in prof.location.offset and ("Immune", "") in prof.location.offset
     assert prof.location.source[("Tumor", "")].startswith("no marker of interest is carried")
+
+
+def test_the_band_per_cell_follows_each_cells_own_membrane():
+    """Cells whose outlines reach 1 or 3 px beyond their membrane: per cell type the band sits in between; per cell
+    ("cell") each free membrane is found where it is, and the interface stays unenriched."""
+    from imagestream_analysis.membrane import membrane_profiles_of
+
+    n = 24
+    insets = [1 if t % 2 else 3 for t in range(n)]
+    labels, cells, moi = _halo_events(n, insets=insets)
+
+    def run(centre):  # at 0.5 µm per pixel: the membrane is looked for 6 px to each side
+        (prof,) = membrane_profiles_of(labels, cells, [moi], [0.0], 3, 2, centre=centre, names=["M"], pixel_size=0.5)
+        r = [p[tr > 0].mean() / p[tr == 0].mean() for p, tr in zip(prof.profiles, prof.tracks, strict=True)]
+        return float(np.median(r)), prof.location
+
+    by_type, loc = run("membrane")
+    by_cell, loc_cell = run("cell")
+    assert loc.offset[("Tumor", "")] == pytest.approx(-2.0, abs=0.5)  # between the two kinds of cells
+    own = loc_cell.cell_free  # one entry per measured cell, in the order of the cells (two per event)
+    expected = -np.repeat(insets, 2).astype(float)
+    assert np.isfinite(own).all() and np.allclose(own, expected, atol=0.5)
+    assert abs(by_cell - 1) <= abs(by_type - 1) + 0.02 and by_cell == pytest.approx(1.0, abs=0.1)
+    assert loc_cell.table(0.5)["band per cell"].any()

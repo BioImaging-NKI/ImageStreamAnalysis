@@ -203,6 +203,8 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   keeps the macro's): the place is found in the data per cell type, at the free membrane and at the contacts with
   each cell type, from a marker of interest that the type carries; one place per cell type and dataset, not per
   cell. The Fiji comparison keeps "outline". Findings and numbers: SPEC.md and the local notes.
+  - Option `band_centre = "cell"` (asked the same day): each cell's free membrane on its own peak, contacts moved
+    by as much plus the type's contact-minus-free difference (never placed per cell).
 - The import page marks overview rows during a run, and leaves result folders that are not part of the project out
   of `overview.tsv` and the summed tables (their files are kept).
 

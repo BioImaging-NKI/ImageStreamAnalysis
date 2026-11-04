@@ -215,9 +215,15 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   place). The band's centre line is the outline moved along its normal by that offset (per position by its place,
   smoothed over 2·reach+1 samples); the neighbour track stays on the outline. `Profiles.lines` is that centre line
   (the dashboard's band). Choices:
-  - **Per cell type and place, not per cell** (the user, 2026-11-04): robust, and the marker does not choose its own
-    band cell by cell. On the real data the between-cell spread was larger than the within-cell spread (local
-    notes), so a per-cell offset remains an option to examine.
+  - **Per cell type and place by default** (the user, 2026-11-04): robust, and the marker does not choose its own
+    band cell by cell. **Option "cell"** (the user, same day): split-half reliability of a cell's free-membrane peak
+    (alternate 6 µm arcs) was high on all three real datasets (whole-cell reliability about 0.9; local notes), so the
+    between-cell spread is real. "cell" puts each cell's free membrane on its own peak (≥ `MIN_FREE` = 20 free
+    positions, prominence ≥ 0.3, from the marker that placed its type's free band; else the type's) and moves its
+    contacts by the same amount plus the type's contact-minus-free difference (`Location.shift`). Contacts are not
+    placed per cell: short (noisy peak), and a marker choosing where the tested interface is sampled would raise it.
+    Synthetic test: cells with 1 or 3 px halo; per cell recovers each, and the interface ratio is closer to 1 than
+    per type. On the test data it lowered the tumor-with-immune medians somewhat further than per type.
   - **Only markers that the cell type carries place its band**: a type carries a marker when its whole-cell median
     (`carrier`, before the membranes) is at least half that of the brightest type (`CARRY_FRACTION`), so a marker on
     both types places both bands. Among those, the marker most specific to the type (its level relative to the

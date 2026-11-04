@@ -203,7 +203,31 @@ class Location:
     offset: dict[tuple[str, str], float] = field(default_factory=dict)  # (type, where) -> pixels, as used
     source: dict[tuple[str, str], str] = field(default_factory=dict)  # the marker it comes from, or why none
     cell_offsets: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)  # per cell, from that marker
-    moved: bool = False  # the band was placed at `offset` (centre "membrane"), else on the outline
+    # per cell (index in the measured cells), the peak of its own free membrane (pixels) from the marker that placed
+    # its type's free band; NaN: too little free membrane, or no peak of its own (centre "cell" then uses the type's)
+    cell_free: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    cell_types: list[str] = field(default_factory=list)  # the cell type of each measured cell (index as cell_free)
+    mode: str = "outline"  # where the band was centred: "outline", "membrane" (per cell type) or "cell"
+
+    @property
+    def moved(self) -> bool:
+        return self.mode != "outline"
+
+    def shift(self, index: int, typ: str, where: np.ndarray) -> np.ndarray:
+        """The distance (pixels, + = outward) from the outline to the band's centre at every position of one cell.
+        "membrane": the offset of its type at each place (free, or a contact with a cell type; 0 where none was
+        found). "cell": at the free membrane the cell's own free peak; at a contact that peak plus its type's
+        difference between that contact and the free membrane (contacts are too short, and too close to what is
+        tested, to place a band per cell); a cell without a peak of its own as "membrane"."""
+        if not self.moved:
+            return np.zeros(len(where))
+        base = [self.offset.get((typ, str(w)), 0.0) for w in where]
+        own = self.cell_free[index] if self.mode == "cell" and index < len(self.cell_free) else np.nan
+        free = self.offset.get((typ, ""))
+        if not np.isfinite(own) or free is None:
+            return np.array(base)
+        return np.array([own + (b - free if (typ, str(w)) in self.offset else 0.0) if w else own
+                         for w, b in zip(where, base, strict=True)])
 
     def table(self, pixel_size: float) -> pd.DataFrame:
         """One row per cell type, place and marker: the peak of the average profile across the outline (µm, + =
@@ -219,6 +243,7 @@ class Location:
                          "peak (µm from the outline)": _peak(self.distance, prof) * pixel_size,
                          "band placed by it": used and self.moved,
                          "band at (µm)": (self.offset.get((typ, where), 0.0) if self.moved else 0.0) * pixel_size,
+                         "band per cell": self.mode == "cell" and used,
                          "single cells p25 (µm)": q[0], "single cells median (µm)": q[1],
                          "single cells p75 (µm)": q[2]})
         return pd.DataFrame(rows)
@@ -295,7 +320,11 @@ def location_notes(loc: Location, width: int, pixel_size: float) -> list[tuple[i
                   f"{np.percentile(cells, 75) * pixel_size:+.2f} µm (middle half)") if len(cells) else ""
         text = (f"Membrane of {typ.lower()} cells, {place}: {offset * pixel_size:+.2f} µm from the outline "
                 f"(+ = outside; {loc.source[(typ, where)]}){spread}")
-        if loc.moved:
+        if loc.mode == "cell":
+            out.append((logging.INFO, text + ("; the band is centred on each cell's own free membrane ("
+                                              f"{_own_count(loc, typ)})" if not where else
+                                              "; at these contacts each cell's free place plus the type's difference")))
+        elif loc.moved:
             out.append((logging.INFO, text + ": the band is centred there"))
         elif abs(offset) > reach - 1:
             out.append((logging.WARNING, text + f"; the band on the outline reaches {reach * pixel_size:.2f} µm on "
@@ -317,6 +346,12 @@ def location_notes(loc: Location, width: int, pixel_size: float) -> list[tuple[i
 
 
 CARRY_FRACTION = 0.5  # a cell type carries a marker at this fraction of the brightest type's median, or more
+MIN_FREE = 20  # positions of free membrane a cell needs for a peak of its own (centre "cell")
+
+
+def _own_count(loc: Location, typ: str) -> str:
+    own = loc.cell_free[[i for i, t in enumerate(loc.cell_types) if t == typ]] if len(loc.cell_free) else np.zeros(0)
+    return f"{int(np.isfinite(own).sum())} of {len(own)} cells by their own peak, the others by the type's"
 
 
 def _relative(level: dict[str, float] | None, typ: str) -> float:
@@ -341,6 +376,7 @@ def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence
     distance = np.arange(-half, half + LOCATE_STEP / 2, LOCATE_STEP)
     loc = Location(distance)
     sums: dict[tuple[str, str, str], list[np.ndarray]] = {}
+    free_of: dict[str, list[np.ndarray | None]] = {name: [] for name in names}  # per marker, per cell
     for c in cells:
         pts = c.line[None] + distance[:, None, None] * c.outward[None]
         for moi, background, name in zip(mois, backgrounds, names, strict=True):
@@ -350,6 +386,10 @@ def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence
                 at = c.where == where
                 if at.sum() >= MIN_SAMPLES:
                     sums.setdefault((c.typ, str(where), name), []).append(across[:, at].mean(axis=1))
+            free = c.where == ""
+            free_of[name].append(across[:, free].mean(axis=1) if free.sum() >= MIN_FREE else None)
+    loc.cell_types = [c.typ for c in cells]
+    loc.cell_free = np.full(len(cells), np.nan)
     for key, profs in sums.items():
         loc.radial[key] = np.mean(profs, axis=0)
         loc.cells[key] = len(profs)
@@ -373,6 +413,10 @@ def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence
         loc.offset[(typ, where)] = _peak(distance, loc.radial[(typ, where, marker)])
         loc.source[(typ, where)] = marker
         loc.cell_offsets[(typ, where)] = np.array([_peak(distance, p) for p in sums[(typ, where, marker)]])
+        if not where:  # each cell's own free peak, from the same marker (centre "cell")
+            for i, prof in enumerate(free_of[marker]):
+                if loc.cell_types[i] == typ and prof is not None and _prominence(prof) >= 0.3:
+                    loc.cell_free[i] = _peak(distance, prof)
     return loc
 
 
@@ -419,7 +463,8 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
     the outline, half of the band outside the cell. centre "membrane" (2026-11-04): the line is moved to where the
     membrane lies (`locate`, per cell type, at the free membrane and at contacts with each cell type), because the
     outline lies outside a free membrane but on the contact line between touching cells; a band on the outline then
-    reaches less of the free membrane than of an interface. The neighbour track is always taken on the outline.
+    reaches less of the free membrane than of an interface. centre "cell": each cell's free membrane on its own peak
+    (`Location.shift`). The neighbour track is always taken on the outline.
     inside_only: the maximum is taken over the samples inside the cell only, so that the membrane of a partner that
     also carries the marker is not measured as this cell's."""
     names = list(names) if names is not None else [f"marker {k + 1}" for k in range(len(mois))]
@@ -451,15 +496,15 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
                               type_of[(t, label)]))
     location = locate(geometry, mois, backgrounds, names, half, levels) if geometry else None
     if location is not None:
-        location.moved = centre == "membrane"
+        location.mode = centre
     tracks: list[np.ndarray] = []
     lines: list[np.ndarray] = []
     out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks, [], lines, width, location) for _ in mois]
     kept = []
-    for c in geometry:
+    for index, c in enumerate(geometry):
         line = c.line
         if location is not None and location.moved:
-            shift = np.array([location.offset.get((c.typ, str(w)), 0.0) for w in c.where])
+            shift = location.shift(index, c.typ, c.where)
             if shift.any():  # smoothed along the membrane, so that the band does not jump at the end of a contact
                 shift = ndi.uniform_filter1d(shift, size=2 * reach + 1, mode="wrap")
                 line = line + shift[:, None] * c.outward

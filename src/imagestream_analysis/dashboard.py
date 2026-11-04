@@ -249,7 +249,8 @@ def location_data(loc: Location | None) -> dict[str, Any] | None:
     each marker per cell type and place (pixels; + = outside the cell), and where the band was centred."""
     if loc is None:
         return None
-    return {"distance": [round(float(d), 3) for d in loc.distance], "moved": loc.moved,
+    return {"distance": [round(float(d), 3) for d in loc.distance], "moved": loc.moved, "mode": loc.mode,
+            "own": int(np.isfinite(loc.cell_free).sum()),
             "radial": [{"type": t, "at": w, "marker": m, "cells": loc.cells[(t, w, m)], "mean": _column(v, 3)}
                        for (t, w, m), v in sorted(loc.radial.items())],
             "offset": [{"type": t, "at": w, "offset": round(float(loc.offset.get((t, w), 0.0)), 3),

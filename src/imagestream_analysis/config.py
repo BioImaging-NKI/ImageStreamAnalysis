@@ -166,6 +166,7 @@ THRESHOLD_METHODS = ["Two populations", "MaxEntropy", "MaxEntropy strict", "Otsu
 class BandCentre(StrEnum):
     MEMBRANE = "membrane"  # where the membrane is found in the data, per cell type, free and at contacts
     OUTLINE = "outline"  # on the outline of the cell (macro 1.8)
+    CELL = "cell"  # as membrane, but each cell's free membrane on its own peak (2026-11-04)
 
 
 class Pool(StrEnum):
@@ -256,9 +257,12 @@ class MembraneSettings:
     straightening_width: int | None = None
     # Where the band across the membrane is centred. "membrane": where the membrane lies, found in the data: per cell
     # type, the marker of interest averaged across the outline, separately at the free membrane and at the contacts
-    # with each cell type. "outline": on the outline, as macro 1.8. The outline lies outside a free membrane (about
-    # 1 µm) but on the contact line where cells touch, so a band on the outline reaches less of the free membrane
-    # than of an interface, and an interface can look enriched without cause.
+    # with each cell type. "cell": the same, but every cell's free membrane on the peak of its own (cells differ from
+    # each other), its contacts moved by as much plus the type's difference between contact and free membrane; cells
+    # with too little free membrane, or without a clear peak, as "membrane". "outline": on the outline, as macro
+    # 1.8. The outline lies outside a free membrane (about 1 µm) but on the contact line where cells touch, so a band
+    # on the outline reaches less of the free membrane than of an interface, and an interface can look enriched
+    # without cause.
     band_centre: BandCentre = BandCentre.MEMBRANE
     # The upper end of the histograms, in SD above the mean. The histograms start at -5. Empty means automatic: the
     # 99th percentile of the interface values or of the control windows, whichever is higher (at least 5), rounded up

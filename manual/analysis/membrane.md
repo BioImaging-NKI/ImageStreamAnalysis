@@ -52,8 +52,12 @@ with a smooth transition where a contact begins or ends. The neighbor track is s
   peak), and its place holds for all markers (the membrane is where it is, whatever the marker).
 - If no marker of interest is carried by a cell type, if fewer than 20 cells contribute, or if the average has no
   clear peak, the band stays on the outline there. The log says so.
-- One place per cell type, not per cell: the single cells scatter around it, and the average is far more robust
-  than a peak in each cell, which would also let the marker choose its own band.
+- By default one place per cell type, the same for all its cells. With *Band centred on*: *cell*, every cell's
+  free membrane is placed on the peak of its own (from the same marker), and its contacts are moved by as much,
+  plus its type's difference between contact and free membrane. Contacts are not placed per cell: they are short,
+  so their peak is noisy, and letting the marker choose where to sample the interface would raise it. Cells with
+  fewer than 20 positions of free membrane, or without a clear peak, use the type's place. The log says how many
+  cells had a place of their own.
 
 **The check.** The log of every run says, for each cell type and place, where the membrane lies (in µm from the
 outline, + is outside) and how much single cells vary (the middle half). `Membrane location.tsv` holds the same per
@@ -64,9 +68,13 @@ when the band does not reach at least a pixel beyond a membrane.
 On real data, the place of the membrane differed between the cell types, and between the free membrane and the
 contacts: for one cell type the outline lay outside the membrane everywhere, so a band on the outline was fair; for
 the other it lay outside at the free membrane but beyond the membrane at contacts, so a band on the outline
-favoured the interface. Single cells also varied by about as much as these distances. A wide band (the default
-4.5 µm) still matters: centring removes the systematic difference between free membrane and interface, and the
-width takes up the variation between cells.
+favoured the interface. Single cells also varied by about as much as these distances, and the variation was real: the place found on one
+half of a cell's free membrane agreed well with that on the other half. *cell* follows it; on the test data it
+lowered the enrichment of the affected pairs a little further than *membrane*. A wide band (the default 4.5 µm)
+still matters: centring removes the systematic difference between free membrane and interface, and the width takes
+up what remains of the variation. A dependence on the width that remains after centring comes mostly from the
+partner's membrane, which a wider band reaches at a contact (see
+[Where the marker is expressed](#where-the-marker-is-expressed)).
 
 ??? note "Technical: the straightening width with the band on the outline"
 
