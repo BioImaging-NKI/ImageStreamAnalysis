@@ -31,7 +31,7 @@ from .comparison import compare, write_comparison
 from .config import THRESHOLD_METHODS, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
 from .launcher import STATE_DIR
-from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, overview, select_samples
+from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, in_project, overview, result_folders, select_samples
 
 log = logging.getLogger(__name__)
 PREFS = STATE_DIR / "gui_prefs.json"  # last project folder, light / dark
@@ -138,14 +138,36 @@ def browse(kind: str, initial: str = "") -> list[str]:
     return [str(Path(r)) for r in result]
 
 
+def run_folders(project_file: Path, only: list[str] | None = None) -> dict[str, tuple[str, str]]:
+    """The result folders a run of the project writes (relative, posix) -> (experiment, dataset)."""
+    p = Project.load(project_file)
+    folders = result_folders(p)
+    if not only:
+        return folders
+    chosen = {d.name for _, d, _ in select_samples(p.samples(), only, p.settings.classification.pool)}
+    return {f: v for f, v in folders.items() if v[1] in chosen}
+
+
+def same_folder(a: str | Path, b: str | Path) -> bool:
+    try:
+        return bool(str(a).strip() and str(b).strip()) and Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return False
+
+
 class Job:
-    """One run of `imagestream-cli run-project` at a time; its output is kept for the page."""
+    """One run of `imagestream-cli run-project` at a time; its output is kept for the page, and which result folders
+    it writes (`folders`) since when (`started`, wall clock), so that the overview can tell old results from new."""
 
     def __init__(self) -> None:
         self.proc: subprocess.Popen[str] | None = None
         self.lines: list[str] = []
         self.progress = ""
         self.folder = ""
+        self.folders: dict[str, tuple[str, str]] = {}
+        self.started = 0.0
+        self.ended: float | None = None
+        self.stop_requested = False
         self.lock = threading.Lock()
 
     @property
@@ -160,8 +182,14 @@ class Job:
         cmd = [str(python), "-m", "imagestream_analysis.cli", "run-project", str(project_file)]
         for name in only or []:  # only these datasets (with pools per experiment: their experiments)
             cmd += ["--dataset", name]
+        try:
+            folders = run_folders(project_file, only)
+        except Exception as e:  # noqa: BLE001 - only for the page; the run itself reports the problem
+            log.warning("Could not tell which datasets the run writes: %s", e)
+            folders = {}
         with self.lock:
             self.lines, self.progress, self.folder = [], "", str(project_file.parent)
+            self.folders, self.started, self.ended, self.stop_requested = folders, time.time(), None, False
         self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      encoding="utf-8", errors="replace", creationflags=NO_WINDOW,
                                      env=os.environ | {"PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"})
@@ -176,16 +204,53 @@ class Job:
                     self.progress = line[len("ISA_PROGRESS "):]
                 else:
                     self.lines.append(line)
+        self.proc.wait()
+        with self.lock:
+            self.ended = time.time()
 
     def stop(self) -> None:
         if self.running and self.proc is not None:
+            self.stop_requested = True
             self.proc.terminate()
 
     def status(self, since: int) -> dict[str, Any]:
         with self.lock:
-            return {"running": self.running, "lines": self.lines[since:], "n": len(self.lines),
-                    "progress": self.progress, "folder": self.folder,
+            running = self.running
+            end = time.time() if running or self.ended is None else self.ended
+            return {"running": running, "lines": self.lines[since:], "n": len(self.lines),
+                    "progress": self.progress, "folder": self.folder, "datasets": len(self.folders),
+                    "seconds": round(end - self.started, 1) if self.started else None,
+                    "stopped": self.stop_requested,
                     "returncode": None if self.proc is None else self.proc.poll()}
+
+    def result_status(self, folder: Path, table: pd.DataFrame) -> list[str]:
+        """Per row of the overview of `folder`: "running" (in the run going on, not done yet), "done" (written by
+        the run going on or the last one), "old" (in the last run, which ended before writing it: stopped, or
+        failed), or "" (not concerned)."""
+        with self.lock:
+            if not self.folders or not same_folder(folder, self.folder):
+                return [""] * len(table)
+            running, folders, started = self.running, self.folders, self.started
+        out = []
+        for rel in table["folder"]:
+            rel = Path(str(rel)).as_posix()
+            if rel not in folders:
+                out.append("")
+                continue
+            try:
+                fresh = (folder / rel / "summary.json").stat().st_mtime >= started
+            except OSError:
+                fresh = False
+            out.append("done" if fresh else "running" if running else "old")
+        return out
+
+    def waiting(self, folder: Path, present: set[str]) -> list[dict[str, str]]:
+        """The datasets of the run going on that have no result folder yet (a first run): rows for the overview."""
+        with self.lock:
+            if not self.running or not same_folder(folder, self.folder):
+                return []
+            return [{"experiment": e, "dataset": d, "folder": rel, "status": "waiting"}
+                    for rel, (e, d) in self.folders.items() if rel not in present]
 
 
 SERVED: dict[str, Path] = {}  # the project folder whose files (dashboards) the page may open
@@ -344,20 +409,33 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         folder = Path(str(data["folder"]))
         if folder.is_dir():
             SERVED["root"] = folder
-        found = overview(folder) if folder.is_dir() else None
-        if found is None or found.empty:
-            return {"columns": [], "rows": [], "interactions": [], "comparison": None}
+        found = overview(folder) if folder.is_dir() else pd.DataFrame()
+        busy = job.running and same_folder(folder, job.folder)
+        waiting = job.waiting(folder, {Path(str(f)).as_posix() for f in found.get("folder", [])})
+        if found.empty and not waiting:
+            return {"columns": [], "rows": [], "interactions": [], "comparison": None, "busy": busy}
         table = found
+        # the project as on the page (saved or not): which result folders are part of it, and the comparison of
+        # conditions with its labels
+        proj: Project | None = project_from_json(data["project"]) if data.get("project") else (
+            Project.load(folder) if (folder / PROJECT_FILE).exists() else None)
+        if proj is not None:
+            proj.folder = folder
+        status = pd.Series(job.result_status(folder, table) if len(table) else [], index=table.index, dtype=object)
+        if proj is not None and len(table):  # results of an earlier setup in this folder (removed, unticked, renamed)
+            status = status.where(in_project(table, proj), "not in project")
+        shown = table.assign(status=status)
+        if waiting:
+            shown = pd.concat([shown, pd.DataFrame(waiting)], ignore_index=True)
+        table = table[status != "not in project"] if len(table) else table
         contacts = folder / INTERACTIONS_FILE
         summed = pd.read_csv(contacts, sep="	") if contacts.exists() else pd.DataFrame()
         if len(summed):
             summed = summed[summed["dataset"] == "(all)"]
-        # the comparison of conditions with the labels on the page (saved or not)
-        proj: Project | None = project_from_json(data["project"]) if data.get("project") else (
-            Project.load(folder) if (folder / PROJECT_FILE).exists() else None)
+            if proj is not None:  # interactions.tsv of an older version may still hold datasets left out since
+                summed = summed[summed["experiment"].isin({e for e, _ in result_folders(proj).values()})]
         comparison: dict[str, Any] | None = None
-        if proj is not None:
-            proj.folder = folder
+        if proj is not None and len(table):
             try:
                 result, notes, conditions, reference = compare(proj, table)
                 comparison = {"rows": json.loads(result.to_json(orient="records", force_ascii=False)),
@@ -365,10 +443,10 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
             except Exception as e:  # noqa: BLE001 - the overview itself must still show
                 log.exception("Comparison failed")
                 comparison = {"error": f"The comparison failed: {e}"}
-        return {"columns": list(table.columns),
-                "rows": json.loads(table.to_json(orient="records", force_ascii=False)),
+        return {"columns": [c for c in shown.columns if c != "status"],
+                "rows": json.loads(shown.to_json(orient="records", force_ascii=False)),
                 "interactions": json.loads(summed.to_json(orient="records", force_ascii=False)) if len(summed) else [],
-                "comparison": comparison}
+                "comparison": comparison, "busy": busy}
     if api == "open":
         target = Path(str(data["path"]))
         if not target.exists():

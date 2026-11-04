@@ -3,7 +3,8 @@
 The last step of the import page shows the project overview. It has one row per analyzed dataset. Below the table, it
 shows the partner preference of every experiment and, when the datasets have a condition and a replicate, the
 comparison of the conditions. The same information is written to `overview.tsv`, `interactions.tsv` and
-`condition comparison.tsv` in the project folder.
+`condition comparison.tsv` in the project folder. Only the datasets of the project count (see
+[During and after a run](#during-and-after-a-run)).
 
 ![The project overview](../images/gui_overview.png)
 
@@ -39,6 +40,29 @@ Then come the columns of each marker of interest. Their names end in the name of
 The enrichment columns describe the membrane pair of each marker. If you click *Apply to the project…* in a dashboard
 with another pair selected, they describe that pair, so always note the pair together with the numbers. Every other
 pair of every dataset is in `membrane pairs.tsv` in the project folder, so you don't need another run to see them.
+
+## During and after a run
+
+The overview reads the results that are in the project folder. While a run is going on, some of them are about to be
+replaced, so a column before *experiment* shows the state of each row:
+
+| State | Meaning |
+|---|---|
+| *running…* (greyed out) | the run is computing this dataset again; until it is done, the values are those of the previous run |
+| *running…* (greyed out, no links) | the run is computing this dataset for the first time; there are no results yet |
+| *updated* | written by the last run |
+| *previous run* (greyed out) | the last run was stopped or failed before it reached this dataset; the values come from an earlier run, with the settings of that time |
+| *not in the project* (greyed out) | see below |
+
+The overview is refreshed every time a dataset is done, and once more at the end. The partner preference and the
+comparison of conditions are computed at the end of a run, so during a run they are greyed out with a note.
+
+**Results that are not part of the project.** If you reuse an output folder, it can hold result folders of datasets
+that are no longer in the project: a dataset that was removed or unticked in step 2, or one whose experiment label was
+changed (its results go to a folder named after the experiment). These results are left out of the overview, of
+`overview.tsv`, of the partner preference and of the comparison. A line under the table says how many there are, and
+*Show them* lists them, greyed out and marked *not in the project*. Their files stay on disk: delete those folders
+yourself if you no longer need them.
 
 ## Partner preference per experiment
 

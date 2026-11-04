@@ -264,6 +264,21 @@ of the rings with an interface. (These are the checks of `tests/test_reference.p
   channels with example images of each, give them a role, set the pixel size and the analysis settings, run with the
   log streamed, and see the overview. Server: stdlib `ThreadingHTTPServer` on 127.0.0.1 with a per-session token;
   stops after 15 min without requests; a second start reuses the running one.
+- **Run state and stale results (2026-11-04).** The user found the overview showing the previous results during a
+  run, with no clear sign of a run going on, and old results lingering in a reused output folder (the overview reads
+  every `*/*/summary.json` of the folder).
+  - The page shows the run's state under *Run all datasets* and next to the title of step 5: *Running…* (spinner,
+    progress bar, dataset k of n, stage with pools per experiment, time), then *Done*, *Done, N of M failed*,
+    *Stopped* or *Failed (exit code N)*. The start buttons are off while it runs; *Run all datasets* reads *Running…*.
+  - `gui.Job` records the result folders a run writes (`run_folders`, from the project and `--dataset`) and its start
+    time. A row of the overview is *running* (in the run, `summary.json` older than the start), *updated* (newer),
+    *previous run* (the run ended before it: stopped or failed) or *waiting* (no folder yet). The overview is refreshed
+    on every progress line and at the end; the partner preference and the comparison are greyed out during a run
+    (they are written at the end).
+  - **Results not part of the project** (`project.in_project`: the folder is not `<experiment>/<dataset>` of an included
+    dataset: removed, unticked, or experiment renamed) are left out of `overview.tsv`, `interactions.tsv`,
+    `subset preference.tsv`, `membrane pairs.tsv` and the comparison, and hidden on the page behind *Show them*.
+    Before, they were pooled into the partner preference of their experiment. Their files are never deleted.
 
 ## Fixes from the user test (2026-11-01)
 

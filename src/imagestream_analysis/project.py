@@ -439,11 +439,41 @@ def overview(folder: str | Path) -> pd.DataFrame:
     return table
 
 
+def result_folders(project: Project) -> dict[str, tuple[str, str]]:
+    """Where the results of each included dataset go: folder relative to the project (posix) -> (experiment,
+    dataset). A result folder elsewhere is not part of the project (a dataset removed or unticked, or its experiment
+    renamed)."""
+    return {(Path(s.input.output) / d.name).relative_to(project.folder).as_posix(): (d.experiment or Path(z.path).stem,
+                                                                                    d.name)
+            for z, d, s in project.samples()}
+
+
+def in_project(table: pd.DataFrame, project: Project) -> pd.Series:
+    """Per row of the overview: whether its result folder belongs to an included dataset of the project."""
+    current = result_folders(project)
+    if "folder" not in table:
+        return pd.Series(True, index=table.index)
+    return table["folder"].map(lambda f: Path(str(f)).as_posix() in current).astype(bool)
+
+
 def write_overview(folder: str | Path) -> pd.DataFrame:
     """overview.tsv, and interactions.tsv: the contact tables of all datasets, and summed per experiment;
-    subset preference.tsv, membrane pairs.tsv, and condition comparison.tsv (with a project file)."""
+    subset preference.tsv, membrane pairs.tsv, and condition comparison.tsv (with a project file).
+
+    With a project file, result folders that are not part of the project (results of an earlier setup in the same
+    output folder) are left out of these tables; their files stay on disk."""
     folder = Path(folder)
     table = overview(folder)
+    if len(table) and (folder / PROJECT_FILE).is_file():
+        try:
+            keep = in_project(table, Project.load(folder / PROJECT_FILE))
+        except Exception as e:  # noqa: BLE001 - a broken project file: all results, as before
+            log.warning("Could not read %s (%s): the overview holds every result folder", PROJECT_FILE, e)
+        else:
+            if not keep.all():
+                log.info("Not part of the project, left out of the overview (the files are kept): %s",
+                         ", ".join(str(f) for f in table.loc[~keep, "folder"]))
+                table = table[keep].reset_index(drop=True)
     save_table(table, folder / OVERVIEW_FILE)
     parts = []
     for row in table.itertuples():

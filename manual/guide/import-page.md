@@ -133,8 +133,19 @@ the same in every dataset of that experiment. With **dataset**, each dataset is 
 The list above *Run all datasets* names anything that is still missing, such as an output folder, a pixel size, or a
 channel for a role. For the immune-cell markers, one ticked *Immune* channel in each export is enough: the markers are
 summed, so an export may lack a marker that another export has. The button works only when this list is empty. The
-run first saves the project. The log shows the progress of the run, and *Stop* ends it. If a dataset fails, the error
-is logged and the other datasets are still analyzed.
+run first saves the project. If a dataset fails, the error is logged and the other datasets are still analyzed.
+
+While a run is going on, a blue bar under the button says *Running…*, with a progress bar, the dataset in progress
+(*Dataset 2 of 3*, or *Measuring* / *Finishing dataset 2 of 3* when the datasets of an experiment are classified
+together) and the time so far. The same state is shown next to the title of step 5. *Run all datasets* reads
+*Running…* and, like every other *Run* and *run again* button, cannot be clicked until the run ends. *Stop* ends the
+run. The log below shows the details. At the end, the bar shows one of:
+
+- *Done* (green): every dataset of the run was analyzed, and the overview is up to date.
+- *Done, N of M failed* (red): the run finished, but some datasets failed. Their rows in the overview show the error.
+- *Stopped* (red): you clicked *Stop*. Datasets that the run had not finished keep their previous results, marked
+  *previous run* in the overview.
+- *Failed (exit code N)* (red): the run itself stopped with an error. The log says why.
 
 To run **one dataset** (again), click *Run* in its row of the dataset table in step 2, or *run again* in its row of the
 overview. The other datasets keep their results, and the overview is written again from all of them. With *Classify
@@ -146,4 +157,5 @@ skipped for every dataset whose Cellpose input and settings have not changed.
 
 The overview shows one row per analyzed dataset, with links to its [dashboard](dashboard.md) and its folder. Below
 the table, it shows the partner preference of each experiment and, if the datasets have conditions, the comparison of
-the conditions. See [The project overview](overview.md).
+the conditions. During a run, the rows that are being computed again are greyed out and marked *running…*, and they
+are refreshed as soon as their dataset is done. See [The project overview](overview.md#during-and-after-a-run).

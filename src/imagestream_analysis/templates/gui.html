@@ -97,6 +97,29 @@ fieldset.tint-4 { --hue: #e87ba4; } fieldset.tint-5 { --hue: #8a63d2; }
 pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 260px;
   overflow: auto; font-size: 12px; white-space: pre-wrap; margin: 8px 0 0; }
 progress { width: 260px; }
+/* the run: busy, done or failed (next to the Run button and in the header of the overview) */
+.run-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0 0; padding: 8px 12px;
+  border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
+.run-state[hidden] { display: none; }
+.run-state .what { font-weight: 600; }
+.run-state.busy { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.run-state.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 8%, var(--panel)); }
+.run-state.failed { border-color: color-mix(in srgb, var(--error) 45%, var(--line)); background: color-mix(in srgb, var(--error) 8%, var(--panel)); }
+.run-state.ok .what { color: var(--ok); } .run-state.failed .what { color: var(--error); }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor; display: inline-block; animation: spin .8s linear infinite; vertical-align: -2px; flex: none; }
+.spinner[hidden] { display: none; }
+button .spinner { margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+h2 .chip { font-weight: 400; display: inline-flex; align-items: center; gap: 6px; }
+.chip.busy { background: color-mix(in srgb, var(--accent) 15%, var(--panel)); color: var(--accent); }
+.chip.bad { background: color-mix(in srgb, var(--error) 15%, var(--panel)); color: var(--error); }
+/* overview rows that are not current: being recomputed, not updated by a stopped run, or not part of the project */
+tr.dim > td:not(.links):not(.state) { opacity: .45; }
+td.state { white-space: nowrap; }
+.outdated { opacity: .45; }
+.outdated-note { color: var(--warn); font-size: 13px; margin: 10px 0 4px; }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; display: none; max-width: 90vw; z-index: 3; }
 /*__ISA_HELP_CSS__*/
@@ -152,14 +175,19 @@ progress { width: 260px; }
       <button id="run" class="primary" data-icon="run">Run all datasets</button>
       <span class="hint" style="margin:0">or one dataset: <i>Run</i> in its row of step 2, or <i>run again</i> in the overview</span>
       <button id="stop" data-icon="stop" disabled>Stop</button>
+    </div>
+    <div id="run-state" class="run-state" role="status" aria-live="polite" hidden>
+      <span id="run-spinner" class="spinner" hidden></span>
+      <span id="run-what" class="what"></span>
       <progress id="progress" max="1" value="0" hidden></progress>
       <span id="progress-text"></span>
+      <span id="run-time" class="hint" style="margin:0"></span>
     </div>
     <pre id="log" class="log" hidden></pre>
   </section>
 
   <section>
-    <h2 data-help="guide/import-page#5-overview"><span class="step">5</span>Overview</h2>
+    <h2 data-help="guide/import-page#5-overview"><span class="step">5</span>Overview <span id="overview-state"></span></h2>
     <div class="row">
       <button id="refresh" data-icon="refresh">Refresh</button>
       <button id="open-folder" data-icon="folder">Open folder</button>
@@ -231,15 +259,13 @@ async function checkRun() {
   let s;
   try { s = await api("status", { since: 0 }); } catch (e) { return; }
   if (!s.running || polling) return;
-  const folder = document.getElementById("folder").value.trim();
-  if (folder && s.folder && folder.replace(/[\\/]+$/, "") === s.folder.replace(/[\\/]+$/, "")) {
-    try { state.settings = (await api("open_project", { path: folder })).settings; renderSettings(); } catch (e) {}
+  if (sameFolder(s.folder)) {
+    try { state.settings = (await api("open_project", { path: s.folder })).settings; renderSettings(); } catch (e) {}
   }
-  logSince = 0;
-  const log = document.getElementById("log"); log.textContent = ""; log.hidden = false;
-  document.getElementById("stop").disabled = false;
-  polling = setInterval(poll, 1000);
+  startPolling();
 }
+const sameFolder = f => { const own = document.getElementById("folder").value.trim();
+  return !!own && !!f && own.replace(/[\\/]+$/, "").toLowerCase() === f.replace(/[\\/]+$/, "").toLowerCase(); };
 setInterval(checkRun, __ISA_PING__);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkRun(); });
 async function quit() {
@@ -385,12 +411,12 @@ function renderZip(z) {
     const di = info.datasets.find(x => x.name === d.name) || {};
     dt.append(el("tr", {},
       el("td", {}, el("input", { type: "checkbox", checked: d.include, onchange: e => { d.include = e.target.checked;
-        const b = e.target.closest("tr").querySelector("button.run-one"); if (b) b.dataset.off = d.include ? "" : "1"; renderProblems(); } })),
+        const b = e.target.closest("tr").querySelector("button.run-one"); if (b) b.dataset.off = d.include ? "" : "1"; renderProblems(); refreshOverview(); } })),
       el("td", {}, d.name), el("td", { class: "num" }, di.objects ?? ""), el("td", { class: "num", title: "objects with all channels" }, di.complete ?? ""),
-      el("td", {}, el("input", { type: "text", value: d.experiment, onchange: e => d.experiment = e.target.value.trim() })),
+      el("td", {}, el("input", { type: "text", value: d.experiment, onchange: e => { d.experiment = e.target.value.trim(); refreshOverview(); } })),
       ["condition", "replicate"].map(k => el("td", {}, el("input", { type: "text", size: 10, value: d[k] || "",
         onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } }))),
-      el("td", {}, withIcon(el("button", { class: "run-one", "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
+      el("td", {}, withIcon(el("button", { class: "run-one", "data-name": d.name, "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
         title: runOneTitle(d.name), onclick: () => run([d.name]) }, "Run"), "run"))));
   }
   card.append(el("div", { class: "scroll" }, dt));
@@ -651,8 +677,13 @@ function renderProblems() {
   renderPairRows();  // the markers of interest or the subtype markers may have changed (ticked, unticked, renamed)
   const p = problems();
   document.getElementById("problems").replaceChildren(...p.map(m => el("li", {}, m)));
-  document.getElementById("run").disabled = p.length > 0 || !!polling;
-  for (const b of document.querySelectorAll("button.run-one")) b.disabled = p.length > 0 || !!polling || b.dataset.off === "1";
+  const run = document.getElementById("run");
+  run.disabled = p.length > 0 || !!polling;
+  run.title = polling ? "A run is going on: wait for it to end, or Stop it" : "";
+  for (const b of document.querySelectorAll("button.run-one")) {
+    b.disabled = p.length > 0 || !!polling || b.dataset.off === "1";
+    b.title = polling ? "A run is going on: wait for it to end, or Stop it" : runOneTitle(b.dataset.name || "");
+  }
 }
 async function save() {
   try {
@@ -674,15 +705,28 @@ function runOneTitle(name) {  // what the run button of one dataset runs
   return "Run only this dataset (again); the others keep their results";
 }
 async function run(datasets = null) {
+  if (polling) return;
+  // at once, before the answer (saving and starting take a moment): no second start
+  for (const b of document.querySelectorAll("#run, button.run-one")) b.disabled = true;
   try {
     const r = await api("run", { project: toProject(), datasets });
-    if (!r.started) { toast(r.problems.join("; ")); return; }
+    if (!r.started) { toast(r.problems.join("; ")); renderProblems(); return; }
     forgetDraft();
-    logSince = 0;
-    const log = document.getElementById("log"); log.textContent = ""; log.hidden = false;
-    document.getElementById("stop").disabled = false;
-    polling = setInterval(poll, 1000); renderProblems();
-  } catch (e) { toast(e.message); }
+    startPolling();
+  } catch (e) { toast(e.message); renderProblems(); }
+}
+// ---------- the state of a run: busy (with the dataset in progress), done, stopped or failed; shown under the Run
+// button and in the header of the overview. While it runs, the start buttons are off and the overview marks the rows
+// that are being computed again (refreshed each time a dataset is done, and at the end).
+let runInfo = null, lastProgress = null;
+function startPolling() {
+  logSince = 0; lastProgress = null;
+  const log = document.getElementById("log"); log.textContent = ""; log.hidden = false;
+  document.getElementById("stop").disabled = false;
+  runInfo = { running: true, progress: "", datasets: 0, folder: document.getElementById("folder").value.trim() };
+  showRun();
+  clearInterval(polling); polling = setInterval(poll, 1000);
+  renderProblems(); refreshOverview();
 }
 async function poll() {
   let s;
@@ -690,16 +734,61 @@ async function poll() {
   const log = document.getElementById("log");
   if (s.lines.length) { log.textContent += s.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
   logSince = s.n;
-  const bar = document.getElementById("progress"), text = document.getElementById("progress-text");
-  const m = /^(\d+)\/(\d+)\s*(.*)$/.exec(s.progress || "");
-  if (m) { bar.hidden = false; bar.max = Number(m[2]); bar.value = Number(m[1]) - (s.running ? 1 : 0); text.textContent = `${m[1]} of ${m[2]}: ${m[3]}`; }
+  runInfo = s; showRun();
   if (!s.running) {
     clearInterval(polling); polling = null;
     document.getElementById("stop").disabled = true;
-    text.textContent = s.returncode === 0 ? "Done" : `Stopped (exit code ${s.returncode})`;
-    text.className = s.returncode === 0 ? "ok" : "error";
-    renderProblems(); refreshOverview();
+    renderProblems();
+    const o = await refreshOverview();  // the datasets of this run that failed (an error in their row)
+    const failed = (o?.rows || []).filter(r => r.status === "done" && r.error).length;
+    if (failed && s.returncode === 0) { runInfo = { ...s, failedDatasets: failed }; showRun(); }
+  } else if (s.progress !== lastProgress) {  // a dataset is done (or the next stage began): its row is current
+    lastProgress = s.progress; refreshOverview();
   }
+}
+function progressOf(s) {  // ISA_PROGRESS "i/n label": the stage, the dataset number (1-based) and the fraction done
+  const m = /^(\d+)\/(\d+)\s*(.*)$/.exec(s.progress || "");
+  if (!m) return null;
+  const i = Number(m[1]), n = Number(m[2]), label = m[3];
+  if (label === "done") return { n, k: n, stage: "", label: "", frac: 1 };
+  const stage = /^(measuring|finishing) /.exec(label);  // classified per experiment: measure all, then finish all
+  const frac = stage ? (stage[1] === "measuring" ? i : n + i) / (2 * n) : i / n;
+  return { n, k: Math.min(i + 1, n), stage: stage ? stage[1] : "", label: stage ? label.slice(stage[0].length) : label, frac };
+}
+function duration(s) {
+  if (s == null) return "";
+  s = Math.round(s);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
+}
+// the run in words: [class busy / ok / failed, short text, detail]
+function runWords(s) {
+  const p = progressOf(s), n = s.datasets || p?.n || 0, sets = n === 1 ? "1 dataset" : `${n} datasets`;
+  if (s.running) {
+    const at = p ? `${p.stage ? p.stage[0].toUpperCase() + p.stage.slice(1) + " d" : "D"}ataset ${p.k} of ${p.n}` : (n ? `${sets}: starting` : "starting");
+    return ["busy", s.stopped ? "Stopping…" : "Running…", at + (p?.label ? `: ${p.label}` : "")];
+  }
+  if (s.returncode === 0 && s.failedDatasets) return ["failed", `Done, ${s.failedDatasets} of ${n} failed`, "the error is in the row of the dataset in the overview, and in the log"];
+  if (s.returncode === 0) return ["ok", "Done", `${sets} analysed; the overview is up to date`];
+  if (s.stopped) return ["failed", "Stopped", "datasets not reached keep their previous results (marked in the overview)"];
+  return ["failed", `Failed (exit code ${s.returncode})`, "see the log; datasets not reached keep their previous results"];
+}
+function showRun() {
+  const s = runInfo, box = document.getElementById("run-state");
+  if (!s) { box.hidden = true; return; }
+  const [cls, what, detail] = runWords(s), p = progressOf(s), bar = document.getElementById("progress");
+  box.hidden = false; box.className = "run-state " + cls;
+  document.getElementById("run-spinner").hidden = !s.running;
+  document.getElementById("run-what").textContent = what;
+  document.getElementById("progress-text").textContent = detail;
+  bar.hidden = !s.running || !p; if (p) { bar.max = 1; bar.value = p.frac; }
+  document.getElementById("run-time").textContent = s.seconds != null ? (s.running ? "for " : "in ") + duration(s.seconds) : "";
+  // the start buttons: off while a run goes on, the main one says so
+  const run = document.getElementById("run");
+  run.replaceChildren(s.running ? el("span", { class: "spinner" }) : iconSvg("run"), s.running ? "Running…" : "Run all datasets");
+  // the header of the overview: the same state, for the project of this run
+  const head = document.getElementById("overview-state");
+  head.replaceChildren(sameFolder(s.folder) ? el("span", { class: "chip " + (cls === "failed" ? "bad" : cls), title: detail },
+    s.running ? el("span", { class: "spinner" }) : null, s.running ? `${what.replace("…", "")}: ${detail.split(":")[0].toLowerCase()}…` : what) : "");
 }
 
 // ---------- overview
@@ -730,33 +819,64 @@ function columnHelp(c) {
   if (/^immune .*\+/.test(c)) return "immune cells with exactly this combination of positive subtype markers (and negative for the others)";
   return null;
 }
+// the state of a row (gui.py, Job.result_status): [chip class, text, hover text, dimmed]
+const ROW_STATE = {
+  waiting: ["busy", "running…", "In the run going on; no results yet", true],
+  running: ["busy", "running…", "Being computed again: the values shown are those of the previous run, until this dataset is done", true],
+  done: ["ok", "updated", "Written by the last run", false],
+  old: ["warn", "previous run", "The last run ended (stopped or failed) before this dataset: these results are from an earlier run, with the settings of then", true],
+  "not in project": ["", "not in the project", "Results of an earlier setup in this output folder: the dataset was removed or unticked, or its experiment renamed. Left out of overview.tsv, the partner preference and the comparison; its files are kept", true],
+};
+let showOthers = false, overviewSeq = 0;
 async function refreshOverview() {
   const folder = document.getElementById("folder").value.trim();
   const box = document.getElementById("overview");
-  if (!folder) return;
+  if (!folder) return null;
+  const seq = ++overviewSeq;  // answers may come back out of order (the overview is refreshed during a run)
   let o;
-  try { o = await api("overview", { folder, project: state.settings ? toProject() : null }); } catch (e) { box.replaceChildren(el("p", { class: "error" }, e.message)); return; }
-  if (!o.rows.length) { box.replaceChildren(el("p", { class: "hint" }, "No results yet.")); return; }
-  const cols = o.columns.filter(c => !["zip", "folder", "seconds"].includes(c));
-  // the links first, so that they are in view however many columns follow
-  const table = el("table", {}, el("tr", {}, el("th", {}, ""), cols.map(c => el("th", { class: typeof o.rows[0][c] === "number" ? "num" : "", title: columnHelp(c) }, c))));
-  const rows = [...o.rows].sort((a, b) => String(a.experiment).localeCompare(String(b.experiment)) || String(a.dataset).localeCompare(String(b.dataset)));
+  try { o = await api("overview", { folder, project: state.settings ? toProject() : null }); } catch (e) {
+    if (seq === overviewSeq) box.replaceChildren(el("p", { class: "error" }, e.message)); return null; }
+  if (seq !== overviewSeq) return o;
+  if (!o.rows.length) { box.replaceChildren(el("p", { class: "hint" }, o.busy ? "Running: no results yet." : "No results yet.")); return o; }
+  const cols = o.columns.filter(c => !["zip", "folder", "seconds", "status"].includes(c));
+  const others = o.rows.filter(r => r.status === "not in project");
+  const shown = o.rows.filter(r => showOthers || r.status !== "not in project"), withState = shown.some(r => ROW_STATE[r.status]);
+  const isNum = c => o.rows.some(r => typeof r[c] === "number");
+  // the links first, so that they are in view however many columns follow; then the state of the row (during a run)
+  const table = el("table", {}, el("tr", {}, el("th", {}, ""), withState ? el("th", {}, "") : null,
+    cols.map(c => el("th", { class: isNum(c) ? "num" : "", title: columnHelp(c) }, c))));
+  const order = r => r.status === "not in project" ? 1 : 0;
+  const rows = [...shown].sort((a, b) => order(a) - order(b) || String(a.experiment).localeCompare(String(b.experiment)) || String(a.dataset).localeCompare(String(b.dataset)));
   for (const r of rows) {
+    const st = ROW_STATE[r.status], noResults = r.status === "waiting";
     const links = el("td", { class: "links" },
-      r.error ? "" : el("a", { href: `/files/${TOKEN}/${r.folder.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}/dashboard.html`,
+      r.error || noResults ? "" : el("a", { href: `/files/${TOKEN}/${r.folder.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}/dashboard.html`,
                                target: "_blank", rel: "noopener" }, "dashboard"),
-      el("button", { class: "link", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"),
-      el("button", { class: "link run-one", disabled: problems().length > 0 || !!polling, title: runOneTitle(String(r.dataset)),
+      noResults ? "" : el("button", { class: "link", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"),
+      r.status === "not in project" ? "" : el("button", { class: "link run-one", "data-name": String(r.dataset), disabled: problems().length > 0 || !!polling,
+                     title: polling ? "A run is going on: wait for it to end, or Stop it" : runOneTitle(String(r.dataset)),
                      onclick: () => run([String(r.dataset)]) }, "run again"));
-    table.append(el("tr", {}, links, cols.map(c => {
+    const stateCell = withState ? el("td", { class: "state" }, st ? el("span", { class: "chip " + st[0], title: st[2] },
+      st[0] === "busy" ? el("span", { class: "spinner" }) : null, st[1]) : "") : null;
+    table.append(el("tr", { class: st && st[3] ? "dim" : "", title: st ? st[2] : null }, links, stateCell, cols.map(c => {
       const v = r[c];
       if (c === "error" && v) return el("td", { class: "error" }, v);
       return el("td", { class: typeof v === "number" ? "num" : "" }, v == null ? "" : typeof v === "number" ? NUMBER.format(v) : String(v));
     })));
   }
   box.replaceChildren(table);
-  if (o.interactions && o.interactions.length) box.append(contactMatrices(o.interactions));
-  if (o.comparison) box.append(comparisonTables(o.comparison));
+  if (others.length) box.append(el("p", { class: "hint", style: "margin:8px 0 0" },
+    `${others.length} result folder(s) in this output folder are not part of the project (a dataset removed or unticked, or its experiment renamed): ` +
+    "they are left out of overview.tsv, the partner preference and the comparison. Their files are kept. ",
+    el("button", { class: "link", onclick: () => { showOthers = !showOthers; refreshOverview(); } }, showOthers ? "Hide them" : "Show them")));
+  // the summed tables are written at the end of a run: during one, they are those of the previous run
+  const outdated = o.busy && ((o.interactions && o.interactions.length) || o.comparison);
+  if (outdated) box.append(el("p", { class: "outdated-note" }, "A run is going on: the partner preference and the comparison below are those of the previous results, and are updated when the run ends."));
+  const wrap = el("div", { class: outdated ? "outdated" : "" });
+  if (o.interactions && o.interactions.length) wrap.append(contactMatrices(o.interactions));
+  if (o.comparison) wrap.append(comparisonTables(o.comparison));
+  box.append(wrap);
+  return o;
 }
 // the comparison of conditions across the replicates (comparison.py): the tested pairs of each measure
 function comparisonTables(c) {
@@ -849,7 +969,7 @@ document.getElementById("add-path").onclick = async () => {
   if (p) { input.value = ""; await addZip(p); }
 };
 document.getElementById("run").onclick = () => run();
-document.getElementById("stop").onclick = () => api("stop");
+document.getElementById("stop").onclick = () => { if (runInfo) { runInfo.stopped = true; showRun(); } api("stop").catch(e => toast(e.message)); };
 document.getElementById("refresh").onclick = refreshOverview;
 document.getElementById("open-folder").onclick = () => {
   const f = document.getElementById("folder").value.trim(); if (f) api("open", { path: f }).catch(e => toast(e.message));
@@ -885,6 +1005,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) saveD
   if (s.project) loadProject(s.project);
   else { state.settings = newSettings(); state.settings.membrane.analysis = false; renderAll(); }
   savedJson = JSON.stringify(toProject());
+  checkRun();  // a run going on (the page reloaded, or Apply in a dashboard): show it at once
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); } catch (e) {}
   if (draft && draft.settings && JSON.stringify(draft) !== savedJson) {

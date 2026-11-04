@@ -267,6 +267,83 @@ def test_apply_from_a_dashboard(ideas_zip, monkeypatch):
         gui.apply_from_dashboard({"dry_run": True}, job)
 
 
+def _old_result(folder, experiment="Old setup", dataset="Gone"):
+    """A result folder of an earlier setup in the same output folder (a dataset since removed)."""
+    old = folder / experiment / dataset
+    old.mkdir(parents=True)
+    (old / "summary.json").write_text(json.dumps({"experiment": experiment, "dataset": dataset, "zip": "x.zip",
+                                                  "summary": {"events": 3, "cells": 5}}), encoding="utf-8")
+    return old
+
+
+def test_results_not_in_the_project_are_left_out_but_kept(ideas_zip):
+    """overview.tsv and the summed tables hold the datasets of the project only; older result folders in the same
+    output folder (removed, unticked or renamed datasets) stay on disk."""
+    from imagestream_analysis.project import write_overview
+
+    folder = ideas_zip["tmp"] / "project"
+    p = make_project(ideas_zip, folder)
+    p.save()
+    run_project(folder)
+    old = _old_result(folder)
+    table = write_overview(folder)
+    assert table["dataset"].tolist() == ["Sample A"] and (old / "summary.json").exists()
+    assert pd.read_csv(folder / OVERVIEW_FILE, sep="\t")["dataset"].tolist() == ["Sample A"]
+    inter = pd.read_csv(folder / "interactions.tsv", sep="\t")
+    assert set(inter["experiment"]) == {"Experiment 1"}
+    p.zips[0].datasets[0].include = False  # unticked: its results are no longer part of the project either
+    p.save()
+    assert write_overview(folder).empty
+
+
+class FakeProc:
+    def __init__(self, code):
+        self.code = code
+
+    def poll(self):
+        return self.code
+
+
+def test_overview_marks_the_rows_of_a_run(ideas_zip, monkeypatch):
+    """The overview of the page: rows being computed again ("running"), written by the run ("done"), not reached by
+    a stopped run ("old"), not yet there ("waiting"), and results that are not part of the project."""
+    import time
+
+    folder = ideas_zip["tmp"] / "project"
+    p = make_project(ideas_zip, folder)
+    p.save()
+    run_project(folder)
+    _old_result(folder)
+    monkeypatch.setitem(gui.SERVED, "root", folder)
+    job = gui.Job()
+
+    def rows():
+        o = gui.handle("overview", {"folder": str(folder)}, job)
+        return o, {r["dataset"]: r["status"] for r in o["rows"]}
+
+    o, status = rows()  # no run
+    assert status == {"Sample A": "", "Gone": "not in project"} and not o["busy"]
+    assert "status" not in o["columns"]
+    assert gui.run_folders(folder / "project.toml") == {"Experiment 1/Sample A": ("Experiment 1", "Sample A")}
+    job.folder, job.folders = str(folder), gui.run_folders(folder / "project.toml", ["Sample A"])
+    job.proc, job.started = FakeProc(None), time.time() + 60  # running, started after the results were written
+    o, status = rows()
+    assert status["Sample A"] == "running" and o["busy"]
+    job.folders = job.folders | {"Experiment 1/New": ("Experiment 1", "New")}  # a first run: no folder yet
+    assert rows()[1]["New"] == "waiting"
+    job.started = 0.0  # the results are newer than the start: written by this run
+    assert rows()[1]["Sample A"] == "done"
+    job.proc, job.started = FakeProc(1), time.time() + 60  # the run ended (stopped) before this dataset
+    o, status = rows()
+    assert status["Sample A"] == "old" and "New" not in status and not o["busy"]
+    s = job.status(0)
+    assert not s["running"] and s["returncode"] == 1 and s["datasets"] == 2 and not s["stopped"]
+    other = ideas_zip["tmp"] / "other project"  # the run of another project leaves this overview alone
+    other.mkdir()
+    job.folder = str(other)
+    assert rows()[1]["Sample A"] == ""
+
+
 def test_object_ids_follow_the_frames():
     from imagestream_analysis.pipeline import _with_object_ids
 

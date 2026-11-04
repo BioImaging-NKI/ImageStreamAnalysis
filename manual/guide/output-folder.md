@@ -5,7 +5,7 @@
 | File | Contents |
 |---|---|
 | `project.toml` | the project: the exports, channel names, roles and settings (see [Settings files](../reference/command-line.md)) |
-| `overview.tsv` | one row per dataset (the [overview](overview.md)) |
+| `overview.tsv` | one row per dataset of the project (the [overview](overview.md)); result folders of datasets no longer in the project are left out |
 | `interactions.tsv` | the contact tables of all datasets, and their sums per experiment |
 | `membrane pairs.tsv` | the membrane pairs of all datasets, for every marker of interest |
 | `condition comparison.tsv` | the comparison of the conditions (only when every dataset has a condition and a replicate): one row per measure, pair and condition, with the change, its 95 % interval, *p*, *q*, the value per replicate, and notes; see [Comparing conditions](../analysis/comparing-conditions.md) |
