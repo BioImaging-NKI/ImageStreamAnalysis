@@ -187,16 +187,25 @@ def segment(stack: EventStack, m: Markers, settings: Settings,
 def split_across_events(labels: np.ndarray) -> np.ndarray:
     """Give a label that occurs in more than one event (a cell that Cellpose drew across the border of two tiles of
     the montage) a separate label in each event (SPEC I15). Labels stay ordered by event, then label."""
-    t = labels.shape[0]
-    pairs = np.zeros(labels.shape, dtype=np.int64)
-    fg = labels > 0
-    pairs[fg] = (np.arange(t, dtype=np.int64)[:, None, None] * (int(labels.max(initial=0)) + 1)
-                 + labels)[fg]
-    values, inverse = np.unique(pairs, return_inverse=True)
-    n_split = (len(values) - 1) - len(np.unique(labels[fg]))
+    # per event, its labels numbered on from the previous event (the order of np.unique of (event, label) pairs;
+    # 2026-11-04: an event at a time, instead of sorting every pixel of the stack)
+    out = np.zeros(labels.shape, dtype=np.int32)
+    lut = np.zeros(int(labels.max(initial=0)) + 1, dtype=np.int32)
+    seen = np.zeros(len(lut), dtype=bool)
+    following, pairs = 0, 0
+    for t in range(labels.shape[0]):
+        present = np.flatnonzero(np.bincount(labels[t].ravel(), minlength=len(lut))[1:]) + 1
+        if not len(present):
+            continue
+        lut[present] = np.arange(following + 1, following + 1 + len(present), dtype=np.int32)
+        out[t] = lut[labels[t]]
+        lut[present] = 0
+        following += len(present)
+        pairs += len(present)
+        seen[present] = True
+    n_split = pairs - int(seen.sum())
     if n_split:
         log.info("%d cell(s) crossed the border between two events in the montage: split per event", n_split)
-    out: np.ndarray = inverse.reshape(labels.shape).astype(np.int32)  # 0 stays 0: it is the smallest value
     return out
 
 

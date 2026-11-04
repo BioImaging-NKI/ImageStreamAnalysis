@@ -672,6 +672,35 @@ flagged on thresholds over all cells, before the k-means, which then runs withou
 - Project: `interactions.tsv` with the tables of all datasets and their sum per experiment (dataset "(all)"; the
   ratio from the summed counts); the overview gets `interactions` and `tumor–immune contacts`.
 
+## Speed (the user, 2026-11-04)
+
+Profiled on a real dataset of about 15 000 cells with the labels reused (no Cellpose; times in the local notes). The
+outputs stay the same: every table and the dashboard's data were compared with the previous version (control windows
+with a fixed seed for the comparison only; they stay unseeded, I10).
+- `ideas._plain_tiff`: the IDEAS files are plain TIFFs (uncompressed, strips); read straight from the first IFD with
+  `struct`, about ten times faster than tifffile; anything else (compressed, several samples) still goes to tifffile.
+  Checked identical on every file of two real exports.
+- `membrane.pair_table`: all positions of all membranes at once (a partner lookup table per pair, per-cell sums
+  with `np.bincount`) instead of `np.isin` per cell and pair.
+- Labels: `imagej.close_index_gaps` with `np.bincount` instead of `np.unique` of every pixel;
+  `split_across_events` one event at a time (same numbering as `np.unique` of the (event, label) pairs);
+  `measure.edge_labels` from a band of `erosion` pixels along each event's edge instead of a distance for every
+  pixel and `ndi.minimum`; per-label means with `np.bincount` instead of `ndi.mean`; `imagej.erode` / `dilate` with
+  scipy's own `iterations` (same border handling).
+- `membrane.membrane_profiles_of`: two passes (geometry and the samples across the outline; then the bands), each
+  over ranges of events in worker processes (at most 8) from `PARALLEL_MIN_CELLS` (2000) cells on; joined in event
+  order, so the result is the same as in one process (test). The stack goes to the workers once, in shared memory
+  (pickling the ranges cost about as much as the work). The CLI is guarded by `if __name__ == "__main__"`, as the
+  spawned workers on Windows need; if the workers fail anyway (a script without that guard, memory), a warning is
+  logged and the membranes are measured in one process.
+- The marker check's free-membrane means once per `Profiles` (it was recomputed for every pair);
+  `close_index_gaps` returns labels that are already 1..N as they are; the per-label means sum only the cells'
+  pixels.
+- Result on that dataset: identical outputs, a run (without Cellpose) about two and a half times faster (local
+  notes). What remains is mostly the dashboard (image sheets, outlines) and reading the zip.
+- Not done: a cache of the loaded stack (with the faster reader not worth the disk space: about 1 GB per large
+  dataset); the dashboard's outlines and WebP sheets.
+
 ## 11. Settings and outputs
 
 The macro saves part of its parameters in `settings.txt` (lines 85-113): `CellposeModel`,

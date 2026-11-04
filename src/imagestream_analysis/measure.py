@@ -47,7 +47,18 @@ def edge_distance(labels: np.ndarray, extents: np.ndarray) -> np.ndarray:
 def edge_labels(labels: np.ndarray, extents: np.ndarray, erosion: int) -> np.ndarray:
     """Labels 1..N -> True for a cell cut by the edge of its event image: within `erosion` pixels of it (the cells
     were shrunk from the background by that much, so a cell that touched the edge now lies `erosion` pixels away)."""
-    out: np.ndarray = edge_distance(labels, extents) <= erosion
+    # the labels in the band of `erosion` pixels along the edge of each event's image (the same as
+    # edge_distance <= erosion, without a distance for every pixel; 2026-11-04)
+    t, h, w = labels.shape
+    yy = np.arange(h)[None, :, None]
+    xx = np.arange(w)[None, None, :]
+    e = extents.astype(np.int64)
+    band = ((yy - e[:, 0, None, None] <= erosion) | (e[:, 2, None, None] - 1 - yy <= erosion)
+            | (xx - e[:, 1, None, None] <= erosion) | (e[:, 3, None, None] - 1 - xx <= erosion))
+    n = int(labels.max(initial=0))
+    out = np.zeros(n, dtype=bool)
+    hit = np.flatnonzero(np.bincount(labels[band], minlength=n + 1)[1:])
+    out[hit] = True
     return out
 
 
@@ -67,10 +78,18 @@ def measure_cells(labels: np.ndarray, stack: EventStack, tumor: np.ndarray, immu
     mean of the stored values minus the channel's background (median)."""
     n = int(labels.max(initial=0))
     index = np.arange(1, n + 1)
-    area = ndi.sum_labels(np.ones_like(labels, dtype=np.int64), labels, index).astype(np.int64)
+    flat = labels.ravel()
+    inside = np.flatnonzero(flat)  # the pixels of the cells: only those are summed
+    of = flat[inside]
+    area = np.bincount(of, minlength=n + 1)[1:].astype(np.int64)
+
+    def mean(values: np.ndarray) -> np.ndarray:  # per label, as ndi.mean (2026-11-04: np.bincount, much faster)
+        sums = np.bincount(of, weights=values.ravel()[inside].astype(np.float64), minlength=n + 1)[1:]
+        out: np.ndarray = np.divide(sums, area, out=np.full(n, np.nan), where=area > 0)
+        return out
+
     df = pd.DataFrame({"label": index, "frame": frames_of(labels),
-                       "Immune intensity": ndi.mean(immune, labels, index),
-                       "Tumor intensity": ndi.mean(tumor, labels, index), "Area": area})
+                       "Immune intensity": mean(immune), "Tumor intensity": mean(tumor), "Area": area})
     with np.errstate(divide="ignore", invalid="ignore"):
         df["Marker ratio"] = df["Immune intensity"] / df["Tumor intensity"]
         df["Marker ratio over Area"] = df["Marker ratio"] / df["Area"]
@@ -78,6 +97,5 @@ def measure_cells(labels: np.ndarray, stack: EventStack, tumor: np.ndarray, immu
     df["Edge"] = edge.astype(bool)
     numbers = stack.channel_numbers or list(range(1, stack.data.shape[1] + 1))
     for number, name in zip(numbers, stack.channel_names, strict=True):
-        means = ndi.mean(stack.channel(number), labels, index)
-        df[channel_column(number, name)] = np.asarray(means, dtype=np.float64) - stack.median(number)
+        df[channel_column(number, name)] = mean(stack.channel(number)) - stack.median(number)
     return df.sort_values(["frame", "label"], kind="stable").reset_index(drop=True)

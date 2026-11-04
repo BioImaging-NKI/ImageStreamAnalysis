@@ -14,6 +14,7 @@ import base64
 import io
 import logging
 import re
+import struct
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,8 +59,51 @@ def scan(path: str | Path) -> dict[str, DatasetInfo]:
     return dict(sorted(datasets.items()))
 
 
+_TIFF_TYPES = {3: ("H", 2), 4: ("I", 4)}  # SHORT, LONG: the value types of the tags read below
+_SAMPLE_FORMATS = {(1, 8): "u1", (1, 16): "u2", (1, 32): "u4", (2, 8): "i1", (2, 16): "i2", (2, 32): "i4",
+                   (3, 32): "f4", (3, 64): "f8"}
+
+
+def _plain_tiff(buf: bytes) -> np.ndarray | None:
+    """The first image of a plain TIFF (uncompressed, one sample per pixel, strips), read straight from its first
+    IFD: what IDEAS writes, about ten times faster than tifffile (2026-11-04: reading the files took a large part
+    of a run). None for anything else (tifffile then reads it)."""
+    order = {b"II": "<", b"MM": ">"}.get(buf[:2])
+    if order is None or len(buf) < 8 or struct.unpack_from(order + "H", buf, 2)[0] != 42:
+        return None
+    at = struct.unpack_from(order + "I", buf, 4)[0]
+    n = struct.unpack_from(order + "H", buf, at)[0]
+    tags: dict[int, tuple[int, ...]] = {}
+    for tag, kind, count, value in struct.iter_unpack(order + "HHI4s", buf[at + 2 : at + 2 + 12 * n]):
+        if kind not in _TIFF_TYPES:
+            continue
+        code, size = _TIFF_TYPES[kind]
+        if size * count <= 4:
+            tags[tag] = struct.unpack_from(f"{order}{count}{code}", value)
+        else:
+            tags[tag] = struct.unpack_from(f"{order}{count}{code}", buf, struct.unpack(order + "I", value)[0])
+    try:
+        width, height = tags[256][0], tags[257][0]
+        if tags.get(259, (1,))[0] != 1 or tags.get(277, (1,))[0] != 1 or tags.get(284, (1,))[0] != 1:
+            return None
+        dtype = np.dtype(order + _SAMPLE_FORMATS[(tags.get(339, (1,))[0], tags.get(258, (1,))[0])])
+        offsets, counts = tags[273], tags[279]
+    except (KeyError, IndexError):
+        return None
+    data = buf[offsets[0] : offsets[0] + counts[0]] if len(offsets) == 1 else b"".join(
+        buf[o : o + c] for o, c in zip(offsets, counts, strict=True))
+    if len(data) < width * height * dtype.itemsize:
+        return None
+    out: np.ndarray = np.frombuffer(data, dtype=dtype, count=width * height).reshape(height, width)
+    return out.astype(dtype.newbyteorder("="))
+
+
 def _read(z: zipfile.ZipFile, name: str) -> np.ndarray:
-    with tifffile.TiffFile(io.BytesIO(z.read(name))) as tif:
+    buf = z.read(name)
+    fast = _plain_tiff(buf)
+    if fast is not None:
+        return fast
+    with tifffile.TiffFile(io.BytesIO(buf)) as tif:
         return tif.pages.first.asarray()
 
 

@@ -194,25 +194,29 @@ def erode(mask: np.ndarray, iterations: int) -> np.ndarray:
     """CLIJ2 erodeSphereSliceBySlice, repeated: 4-connected binary erosion per slice; pixels outside the image
     count as the nearest edge pixel (so the image border itself does not erode)."""
     out = mask.astype(bool)
+    if iterations <= 0:
+        return out
     structure = CROSS[None] if out.ndim == 3 else CROSS
-    for _ in range(iterations):
-        out = ndi.binary_erosion(out, structure=structure, border_value=1)
-    return out
+    eroded: np.ndarray = ndi.binary_erosion(out, structure=structure, iterations=iterations, border_value=1)
+    return eroded
 
 
 def dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
     """CLIJ2 dilateSphereSliceBySlice, repeated: 4-connected binary dilation per slice."""
     out = mask.astype(bool)
+    if iterations <= 0:
+        return out
     structure = CROSS[None] if out.ndim == 3 else CROSS
-    for _ in range(iterations):
-        out = ndi.binary_dilation(out, structure=structure, border_value=0)
-    return out
+    dilated: np.ndarray = ndi.binary_dilation(out, structure=structure, iterations=iterations, border_value=0)
+    return dilated
 
 
 def close_index_gaps(labels: np.ndarray) -> np.ndarray:
     """CLIJ2 closeIndexGapsInLabelMap: renumber the labels 1..N, keeping their order."""
-    values = np.unique(labels)
+    values = np.flatnonzero(np.bincount(labels.ravel()))  # the labels present, sorted (no sort of every pixel)
     values = values[values != 0]
+    if len(values) == int(labels.max(initial=0)) and labels.dtype == np.int32:  # already 1..N: nothing to do
+        return labels
     lut = np.zeros(int(labels.max(initial=0)) + 1, dtype=np.int32)
     lut[values] = np.arange(1, len(values) + 1, dtype=np.int32)
     out: np.ndarray = lut[labels]

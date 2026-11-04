@@ -321,3 +321,20 @@ def test_the_band_per_cell_follows_each_cells_own_membrane():
     assert np.isfinite(own).all() and np.allclose(own, expected, atol=0.5)
     assert abs(by_cell - 1) <= abs(by_type - 1) + 0.02 and by_cell == pytest.approx(1.0, abs=0.1)
     assert loc_cell.table(0.5)["band per cell"].any()
+
+
+def test_the_membranes_in_worker_processes_are_the_same_as_in_one(monkeypatch):
+    """Ranges of events in worker processes (large datasets) give the same profiles, tracks, lines and place of the
+    membrane, in the same order, as one process."""
+    from imagestream_analysis import membrane
+
+    labels, cells, moi = _halo_events(24, insets=[1 if t % 2 else 3 for t in range(24)])
+    monkeypatch.setattr(membrane, "PARALLEL_MIN_CELLS", 0)
+    kw = {"centre": "cell", "names": ["M"], "pixel_size": 0.5, "inside_only": True}
+    (one,) = membrane.membrane_profiles_of(labels, cells, [moi], [0.0], 5, 2, workers=1, **kw)
+    (two,) = membrane.membrane_profiles_of(labels, cells, [moi], [0.0], 5, 2, workers=2, **kw)
+    assert np.array_equal(one.labels, two.labels) and len(one.profiles) == 48
+    for a, b in [(one.profiles, two.profiles), (one.sums, two.sums), (one.tracks, two.tracks), (one.lines, two.lines)]:
+        assert all(np.array_equal(x, y) for x, y in zip(a, b, strict=True))
+    assert one.location.offset == two.location.offset
+    assert np.array_equal(one.location.cell_free, two.location.cell_free, equal_nan=True)

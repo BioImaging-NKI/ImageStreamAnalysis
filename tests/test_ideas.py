@@ -62,3 +62,24 @@ def test_thumbnails_per_channel(ideas_zip):
     thumbs = ideas.thumbnails(ideas_zip["zip"], "Sample A", n=4)
     assert sorted(thumbs) == IDEAS_CHANNELS
     assert all(url.startswith("data:image/png;base64,") for url in thumbs.values())
+
+
+@pytest.mark.parametrize("dtype", ["uint8", "uint16", "int16", "float32"])
+@pytest.mark.parametrize("byteorder", ["<", ">"])
+def test_the_plain_tiff_reader_gives_what_tifffile_gives(dtype, byteorder):
+    """IDEAS writes plain TIFFs: read straight from the first IFD (fast), with tifffile for anything else."""
+    import io
+
+    import tifffile
+
+    from imagestream_analysis.ideas import _plain_tiff
+
+    rng = np.random.default_rng(1)
+    image = (rng.random((37, 23)) * 200).astype(dtype)
+    buf = io.BytesIO()
+    tifffile.imwrite(buf, image, byteorder=byteorder, rowsperstrip=5)  # several strips
+    got = _plain_tiff(buf.getvalue())
+    assert got is not None and got.dtype == image.dtype and np.array_equal(got, image)
+    packed = io.BytesIO()
+    tifffile.imwrite(packed, image, compression="zlib")
+    assert _plain_tiff(packed.getvalue()) is None  # compressed: left to tifffile

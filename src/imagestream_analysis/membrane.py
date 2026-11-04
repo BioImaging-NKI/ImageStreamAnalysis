@@ -21,8 +21,12 @@ Deviations from the macro, decided 2026-10-22 (SPEC I8-I11):
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
+from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Literal
 
 import numpy as np
@@ -364,30 +368,78 @@ def _relative(level: dict[str, float] | None, typ: str) -> float:
     return float(own / top) if np.isfinite(own) and np.isfinite(top) and top > 0 else 0.0
 
 
-def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence[float], names: Sequence[str],
-           half: float, levels: Sequence[dict[str, float]] | None = None) -> Location:
-    """The average profile of each marker across the outline, per cell type and place (free, or a contact with a
-    cell type), and from them where the band goes: for each type and place, the peak of the marker with the clearest
-    membrane there (prominence), among the markers that this cell type carries: `levels` per marker, the median
-    intensity per cell type; a type carries a marker at CARRY_FRACTION of the brightest type or more (None: all), and
-    the marker most specific to the type (its level relative to the brightest) comes first, then the prominence.
-    A marker that a cell type does not carry shows no membrane of it, or signal elsewhere in the cell (seen on real
-    data, 2026-11-04). None clear, or too few cells: on the outline (0)."""
-    distance = np.arange(-half, half + LOCATE_STEP / 2, LOCATE_STEP)
-    loc = Location(distance)
-    sums: dict[tuple[str, str, str], list[np.ndarray]] = {}
-    free_of: dict[str, list[np.ndarray | None]] = {name: [] for name in names}  # per marker, per cell
+def _cells_of(labels: np.ndarray, t0: int, rows: Sequence[tuple[int, int]], type_of: dict[tuple[int, int], str],
+              width: int, reach: int, half: float) -> list[_Cell]:
+    """The geometry of these cells (rows: event, label; events t0.. of `labels`): outline, outward normals, the
+    neighbour track (on the outline) and what each position touches."""
+    pad = width + reach + int(np.ceil(half)) + 1  # room for the band, the neighbours and the search
+    objects: dict[int, list[Any]] = {}
+    out = []
+    for t, label in rows:
+        frame = labels[t - t0]
+        if t not in objects:
+            objects[t] = ndi.find_objects(frame)
+        sl = objects[t][label - 1] if label - 1 < len(objects[t]) else None
+        if sl is None:
+            continue
+        y0, x0 = max(sl[0].start - pad, 0), max(sl[1].start - pad, 0)
+        box = (slice(y0, sl[0].stop + pad), slice(x0, sl[1].stop + pad))
+        sub = frame[box]
+        own = sub == label
+        line = outline(own)
+        if line is None:
+            continue
+        # every own pixel within `reach` of another cell: the label of the nearest one (as imagej.dilate: taxicab)
+        others = np.where(own, 0, sub)
+        dist, (iy, ix) = ndi.distance_transform_cdt(others == 0, metric="taxicab", return_indices=True)
+        nearest = np.where(own & (dist <= reach), others[iy, ix], 0)
+        track = straighten(nearest.astype(np.float64), line, width, order=0).max(axis=0).astype(np.int64)
+        where = np.array([type_of.get((t, int(v)), "") if v else "" for v in track], dtype=object)
+        out.append(_Cell(t, label, (y0, x0), box, own, line, _outward(own, line), track, where, type_of[(t, label)]))
+    return out
+
+
+Across = dict[tuple[str, str], np.ndarray]  # (place, marker) -> the marker averaged across the outline there
+
+
+def _across(cells: list[_Cell], mois: Sequence[np.ndarray], t0: int, backgrounds: Sequence[float],
+            names: Sequence[str], distance: np.ndarray) -> tuple[list[Across], list[dict[str, np.ndarray | None]]]:
+    """Per cell, every marker sampled across the outline (`distance`, + outward) and averaged along each place with
+    at least MIN_SAMPLES positions; and along its free membrane if it has MIN_FREE positions (else None)."""
+    places: list[Across] = []
+    frees: list[dict[str, np.ndarray | None]] = []
     for c in cells:
         pts = c.line[None] + distance[:, None, None] * c.outward[None]
+        mine: Across = {}
+        free_of: dict[str, np.ndarray | None] = {}
         for moi, background, name in zip(mois, backgrounds, names, strict=True):
-            across = ndi.map_coordinates(moi[c.t][c.box].astype(np.float64) - background, [pts[..., 0], pts[..., 1]],
-                                         order=1, mode="nearest")
+            across = ndi.map_coordinates(moi[c.t - t0][c.box].astype(np.float64) - background,
+                                         [pts[..., 0], pts[..., 1]], order=1, mode="nearest")
             for where in np.unique(c.where):
                 at = c.where == where
                 if at.sum() >= MIN_SAMPLES:
-                    sums.setdefault((c.typ, str(where), name), []).append(across[:, at].mean(axis=1))
+                    mine[(str(where), name)] = across[:, at].mean(axis=1)
             free = c.where == ""
-            free_of[name].append(across[:, free].mean(axis=1) if free.sum() >= MIN_FREE else None)
+            free_of[name] = across[:, free].mean(axis=1) if free.sum() >= MIN_FREE else None
+        places.append(mine)
+        frees.append(free_of)
+    return places, frees
+
+
+def locate(cells: list[_Cell], places: list[Across], frees: list[dict[str, np.ndarray | None]],
+           names: Sequence[str], distance: np.ndarray, levels: Sequence[dict[str, float]] | None = None) -> Location:
+    """From every cell's marker averaged across the outline (`_across`): the average per cell type and place (free,
+    or a contact with a cell type), and where the band goes: for each type and place, the peak of the marker with
+    the clearest membrane there (prominence), among the markers that this cell type carries: `levels` per marker,
+    the median intensity per cell type; a type carries a marker at CARRY_FRACTION of the brightest type or more
+    (None: all), and the marker most specific to the type (its level relative to the brightest) comes first, then
+    the prominence. A marker that a cell type does not carry shows no membrane of it, or signal elsewhere in the
+    cell (seen on real data, 2026-11-04). None clear, or too few cells: on the outline (0)."""
+    loc = Location(distance)
+    sums: dict[tuple[str, str, str], list[np.ndarray]] = {}
+    for c, mine in zip(cells, places, strict=True):
+        for (where, name), prof in mine.items():
+            sums.setdefault((c.typ, where, name), []).append(prof)
     loc.cell_types = [c.typ for c in cells]
     loc.cell_free = np.full(len(cells), np.nan)
     for key, profs in sums.items():
@@ -414,9 +466,10 @@ def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence
         loc.source[(typ, where)] = marker
         loc.cell_offsets[(typ, where)] = np.array([_peak(distance, p) for p in sums[(typ, where, marker)]])
         if not where:  # each cell's own free peak, from the same marker (centre "cell")
-            for i, prof in enumerate(free_of[marker]):
-                if loc.cell_types[i] == typ and prof is not None and _prominence(prof) >= 0.3:
-                    loc.cell_free[i] = _peak(distance, prof)
+            for i, free_of in enumerate(frees):
+                own_free = free_of.get(marker)
+                if loc.cell_types[i] == typ and own_free is not None and _prominence(own_free) >= 0.3:
+                    loc.cell_free[i] = _peak(distance, own_free)
     return loc
 
 
@@ -438,6 +491,15 @@ class Profiles:
     lines: list[np.ndarray] = field(default_factory=list)
     width: int = 0
     location: Location | None = None  # where the membrane was found (centre "membrane"), shared by the markers
+    _free: pd.Series | None = field(default=None, init=False, repr=False, compare=False)
+
+    def free(self) -> pd.Series:
+        """Every cell's mean of the membrane that touches no cell (NaN without one), by label; computed once (the
+        marker check asks for it for every pair)."""
+        if self._free is None:
+            self._free = pd.Series([float(p[t == 0].mean()) if (t == 0).any() else np.nan
+                                    for p, t in zip(self.profiles, self.tracks, strict=True)], index=self.labels)
+        return self._free
 
     def summed(self) -> Profiles:
         """The same membranes with the sum across the band as profile."""
@@ -450,11 +512,86 @@ def membrane_profiles(labels: np.ndarray, cells: pd.DataFrame, moi: np.ndarray, 
     return membrane_profiles_of(labels, cells, [moi], [background], width, reach, inside_only)[0]  # on the outline
 
 
+def _bands(cells: list[_Cell], lines: list[np.ndarray], mois: Sequence[np.ndarray], t0: int,
+           backgrounds: Sequence[float], width: int, inside_only: bool
+           ) -> tuple[list[list[np.ndarray]], list[list[np.ndarray]]]:
+    """Per marker, every cell's band straightened along its line: the maximum and the sum across it."""
+    maxima: list[list[np.ndarray]] = [[] for _ in mois]
+    sums: list[list[np.ndarray]] = [[] for _ in mois]
+    for c, line in zip(cells, lines, strict=True):
+        if inside_only:
+            inside = straighten(c.own.astype(np.float64), line, width, order=0) > 0
+            inside[(width - 1) // 2] |= ~inside.any(axis=0)  # a sliver of a cell: at least the middle sample
+        for k, (moi, background) in enumerate(zip(mois, backgrounds, strict=True)):
+            band = straighten(moi[c.t - t0][c.box].astype(np.float64) - background, line, width)
+            if inside_only:
+                band = np.where(inside, band, -np.inf)
+            maxima[k].append(band.max(axis=0))  # macro: maximum projection across the membrane
+            sums[k].append(np.where(np.isfinite(band), band, 0.0).sum(axis=0))  # additive: both membranes count
+    return maxima, sums
+
+
+PARALLEL_MIN_CELLS = 2000  # fewer cells: one process (starting workers costs more than it saves)
+
+
+def _chunks(frames: np.ndarray, n: int) -> list[tuple[int, int]]:
+    """Contiguous ranges of events [t0, t1) with about equal numbers of cells (frames: the event of every cell)."""
+    if not len(frames):
+        return []
+    cuts = np.unique(np.quantile(frames, np.linspace(0, 1, n + 1)[1:-1]).astype(int))
+    edges = [int(frames.min()), *[int(c) for c in cuts if frames.min() < c <= frames.max()], int(frames.max()) + 1]
+    return [(a, b) for a, b in zip(edges[:-1], edges[1:], strict=True) if b > a]
+
+
+@dataclass(frozen=True)
+class _Shared:
+    """An array in shared memory, by name: the worker processes read the stack there instead of receiving a pickled
+    copy of their range of events."""
+
+    name: str
+    shape: tuple[int, ...]
+    dtype: str
+
+
+_ATTACHED: dict[str, tuple[SharedMemory, np.ndarray]] = {}  # in a worker: the arrays it attached (until it exits)
+
+
+def _array(a: np.ndarray | _Shared) -> np.ndarray:
+    if isinstance(a, np.ndarray):
+        return a
+    if a.name not in _ATTACHED:
+        shm = SharedMemory(name=a.name)
+        _ATTACHED[a.name] = (shm, np.ndarray(a.shape, dtype=a.dtype, buffer=shm.buf))
+    return _ATTACHED[a.name][1]
+
+
+def _share(a: np.ndarray) -> tuple[SharedMemory, _Shared]:
+    shm = SharedMemory(create=True, size=max(a.nbytes, 1))
+    np.ndarray(a.shape, dtype=a.dtype, buffer=shm.buf)[...] = a
+    return shm, _Shared(shm.name, a.shape, a.dtype.str)
+
+
+def _phase1(labels: np.ndarray | _Shared, mois: list[np.ndarray | _Shared], t0: int, t1: int,
+            rows: list[tuple[int, int]], type_of: dict[tuple[int, int], str], width: int, reach: int, half: float,
+            backgrounds: list[float], names: list[str], distance: np.ndarray
+            ) -> tuple[list[_Cell], list[Across], list[dict[str, Any]]]:
+    images = [_array(m)[t0:t1] for m in mois]
+    cells = _cells_of(_array(labels)[t0:t1], t0, rows, type_of, width, reach, half)
+    places, frees = _across(cells, images, t0, backgrounds, names, distance)
+    return cells, places, frees
+
+
+def _phase2(cells: list[_Cell], lines: list[np.ndarray], mois: list[np.ndarray | _Shared], t0: int, t1: int,
+            backgrounds: list[float], width: int, inside_only: bool
+            ) -> tuple[list[list[np.ndarray]], list[list[np.ndarray]]]:
+    return _bands(cells, lines, [_array(m)[t0:t1] for m in mois], t0, backgrounds, width, inside_only)
+
+
 def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence[np.ndarray],
                          backgrounds: Sequence[float], width: int, reach: int,
                          inside_only: bool = False, centre: str = "outline", names: Sequence[str] | None = None,
-                         pixel_size: float = 1.0, levels: Sequence[dict[str, float]] | None = None
-                         ) -> list[Profiles]:
+                         pixel_size: float = 1.0, levels: Sequence[dict[str, float]] | None = None,
+                         workers: int | None = None) -> list[Profiles]:
     """Profiles and neighbour tracks of all cells but the artefacts, one Profiles per marker (they share the labels
     and the tracks: the outlines are traced once). labels (T, Y, X); mois: (T, Y, X) raw markers of interest, their
     `backgrounds` are subtracted; reach: the interface reach (membrane.thickness), in 4-connected steps.
@@ -466,62 +603,92 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
     reaches less of the free membrane than of an interface. centre "cell": each cell's free membrane on its own peak
     (`Location.shift`). The neighbour track is always taken on the outline.
     inside_only: the maximum is taken over the samples inside the cell only, so that the membrane of a partner that
-    also carries the marker is not measured as this cell's."""
+    also carries the marker is not measured as this cell's.
+
+    The cells are measured in worker processes, a range of events each (2026-11-04: this loop was the slowest part
+    of a run), from PARALLEL_MIN_CELLS cells on; `workers` (default: the cores, at most 8). The results are the same
+    as in one process, in the same order."""
     names = list(names) if names is not None else [f"marker {k + 1}" for k in range(len(mois))]
     roi = cells[cells["Cell type"] != "Artefact"]
-    objects = {t: ndi.find_objects(labels[t]) for t in np.unique(roi["frame"])}
+    rows = list(zip(roi["frame"].astype(int), roi["label"].astype(int), strict=True))
     type_of = {(int(t), int(lab)): str(c) for t, lab, c in zip(cells["frame"], cells["label"], cells["Cell type"],
                                                                strict=True)}
     half = LOCATE_UM / pixel_size  # the search for the membrane, in pixels on each side of the outline
-    pad = width + reach + int(np.ceil(half)) + 1  # room for the band, the neighbours and the search
-    geometry: list[_Cell] = []
-    for t, label in zip(roi["frame"].astype(int), roi["label"].astype(int), strict=True):
-        sl = objects[t][label - 1] if label - 1 < len(objects[t]) else None
-        if sl is None:
-            continue
-        y0, x0 = max(sl[0].start - pad, 0), max(sl[1].start - pad, 0)
-        box = (slice(y0, sl[0].stop + pad), slice(x0, sl[1].stop + pad))
-        sub = labels[t][box]
-        own = sub == label
-        line = outline(own)
-        if line is None:
-            continue
-        # every own pixel within `reach` of another cell: the label of the nearest one (as imagej.dilate: taxicab)
-        others = np.where(own, 0, sub)
-        dist, (iy, ix) = ndi.distance_transform_cdt(others == 0, metric="taxicab", return_indices=True)
-        nearest = np.where(own & (dist <= reach), others[iy, ix], 0)
-        track = straighten(nearest.astype(np.float64), line, width, order=0).max(axis=0).astype(np.int64)
-        where = np.array([type_of.get((t, int(v)), "") if v else "" for v in track], dtype=object)
-        geometry.append(_Cell(t, label, (y0, x0), box, own, line, _outward(own, line), track, where,
-                              type_of[(t, label)]))
-    location = locate(geometry, mois, backgrounds, names, half, levels) if geometry else None
-    if location is not None:
-        location.mode = centre
-    tracks: list[np.ndarray] = []
-    lines: list[np.ndarray] = []
-    out = [Profiles(np.zeros(0, dtype=np.int64), [], tracks, [], lines, width, location) for _ in mois]
-    kept = []
-    for index, c in enumerate(geometry):
-        line = c.line
-        if location is not None and location.moved:
-            shift = location.shift(index, c.typ, c.where)
-            if shift.any():  # smoothed along the membrane, so that the band does not jump at the end of a contact
-                shift = ndi.uniform_filter1d(shift, size=2 * reach + 1, mode="wrap")
-                line = line + shift[:, None] * c.outward
-        if inside_only:
-            inside = straighten(c.own.astype(np.float64), line, width, order=0) > 0
-            inside[(width - 1) // 2] |= ~inside.any(axis=0)  # a sliver of a cell: at least the middle sample
-        for prof, moi, background in zip(out, mois, backgrounds, strict=True):
-            band = straighten(moi[c.t][c.box].astype(np.float64) - background, line, width)
-            if inside_only:
-                band = np.where(inside, band, -np.inf)
-            prof.profiles.append(band.max(axis=0))  # macro: maximum projection across the membrane
-            prof.sums.append(np.where(np.isfinite(band), band, 0.0).sum(axis=0))  # additive: both membranes count
-        tracks.append(c.track)
-        lines.append(line + c.corner)
-        kept.append(c.label)
-    for prof in out:
-        prof.labels = np.array(kept, dtype=np.int64)
+    distance = np.arange(-half, half + LOCATE_STEP / 2, LOCATE_STEP)
+    n_workers = workers if workers is not None else min(os.cpu_count() or 1, 8)
+    if len(rows) < PARALLEL_MIN_CELLS:
+        n_workers = 1
+    frames = np.array([t for t, _ in rows], dtype=np.int64)
+    ranges = _chunks(frames, n_workers * 3) if n_workers > 1 else ([(0, len(labels))] if rows else [])
+    pool = ProcessPoolExecutor(n_workers) if n_workers > 1 and len(ranges) > 1 else None
+    shared: list[SharedMemory] = []
+    try:
+        stack: list[np.ndarray | _Shared] = [labels, *mois]
+        if pool is not None:  # the stack in shared memory, once, for all workers
+            for k, a in enumerate(stack):
+                shm, ref = _share(np.ascontiguousarray(a))
+                shared.append(shm)
+                stack[k] = ref
+        labels_in, mois_in = stack[0], stack[1:]
+
+        def run(fn: Any, jobs: list[tuple[Any, ...]]) -> list[Any]:
+            nonlocal pool
+            if pool is not None:
+                try:
+                    return list(pool.map(fn, *zip(*jobs, strict=True)))
+                except (BrokenProcessPool, OSError) as e:  # e.g. a script without a __main__ guard, or memory
+                    log.warning("Worker processes failed (%s): the membranes are measured in one process", e)
+                    pool.shutdown(cancel_futures=True)
+                    pool = None
+            return [fn(*job) for job in jobs]
+
+        jobs1 = []
+        for t0, t1 in ranges:
+            part = [(t, lab) for t, lab in rows if t0 <= t < t1]
+            types = {k: v for k, v in type_of.items() if t0 <= k[0] < t1}
+            jobs1.append((labels_in, mois_in, t0, t1, part, types, width, reach, half, list(backgrounds), names,
+                          distance))
+        first = run(_phase1, jobs1)
+        geometry = [c for part in first for c in part[0]]
+        places = [p for part in first for p in part[1]]
+        frees = [f for part in first for f in part[2]]
+        location = locate(geometry, places, frees, names, distance, levels) if geometry else None
+        if location is not None:
+            location.mode = centre
+        lines = []
+        for index, c in enumerate(geometry):
+            line = c.line
+            if location is not None and location.moved:
+                shift = location.shift(index, c.typ, c.where)
+                if shift.any():  # smoothed along the membrane, so that the band does not jump at a contact's end
+                    shift = ndi.uniform_filter1d(shift, size=2 * reach + 1, mode="wrap")
+                    line = line + shift[:, None] * c.outward
+            lines.append(line)
+        jobs2, at = [], 0
+        for (t0, t1), part in zip(ranges, first, strict=True):
+            n = len(part[0])
+            jobs2.append((part[0], lines[at : at + n], mois_in, t0, t1, list(backgrounds), width, inside_only))
+            at += n
+        second = run(_phase2, jobs2)
+    finally:
+        if pool is not None:
+            pool.shutdown()
+        for shm in shared:
+            attached = _ATTACHED.pop(shm.name, None)  # attached here too after a fallback to one process
+            if attached is not None:
+                del attached
+            try:
+                shm.close()
+                shm.unlink()
+            except (BufferError, OSError) as e:  # a view still in use: freed when the process ends
+                log.debug("Shared memory %s: %s", shm.name, e)
+    tracks = [c.track for c in geometry]
+    placed = [line + c.corner for c, line in zip(geometry, lines, strict=True)]
+    kept = np.array([c.label for c in geometry], dtype=np.int64)
+    out = []
+    for k in range(len(mois)):
+        out.append(Profiles(kept, [p for part in second for p in part[0][k]], tracks,
+                            [s for part in second for s in part[1][k]], placed, width, location))
     return out
 
 
@@ -605,9 +772,7 @@ def per_cell_intensity(cells: pd.DataFrame, membranes: Profiles | None, moi_colu
     without membrane profiles the mean of the whole cell."""
     if membranes is None:
         return cells.set_index("label")[moi_column]
-    free = [float(p[t == 0].mean()) if (t == 0).any() else np.nan
-            for p, t in zip(membranes.profiles, membranes.tracks, strict=True)]
-    return pd.Series(free, index=membranes.labels)
+    return membranes.free()
 
 
 def carrier(cells: pd.DataFrame, membranes: Profiles | None, moi_column: str) -> tuple[str, dict[str, float]]:
@@ -701,26 +866,47 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
         combos.append((list(run_pair[0]), list(run_pair[1])))
     labels = cells["label"].astype(int)
     index = {int(lab): k for k, lab in enumerate(membranes.labels)}
-    free_of = free_means(membranes)
+    # every position of every membrane at once (2026-11-04: per cell and pair with np.isin took most of a run)
+    n = len(membranes.labels)
+    lengths = np.array([len(x) for x in membranes.profiles], dtype=np.int64)
+    seg = np.repeat(np.arange(n), lengths)
+    values = np.concatenate(membranes.profiles).astype(np.float64) if n else np.zeros(0)
+    track = np.concatenate(membranes.tracks).astype(np.int64) if n else np.zeros(0, dtype=np.int64)
+    free = track == 0
+    n_free = np.bincount(seg, free, n)
+    sum_free = np.bincount(seg, np.where(free, values, 0.0), n)
+    mean_free = np.divide(sum_free, n_free, out=np.full(n, np.nan), where=n_free > 0)
+    dev = np.where(free, values - mean_free[seg], 0.0)
+    sd_free = np.sqrt(np.divide(np.bincount(seg, dev * dev, n), n_free - 1, out=np.full(n, np.nan),
+                                where=n_free > 1))
+    top = max(int(track.max(initial=0)), int(labels.to_numpy().max(initial=0))) + 1
+    free_of = np.full(top, np.nan)  # every cell's free mean, by label (free_means)
+    free_of[membranes.labels.astype(np.int64)] = mean_free
+    partner_free = free_of[np.clip(track, 0, None)]
     out = []
     for rs, cs in combos:
         r, c = " / ".join(rs), " / ".join(cs)
-        chosen = [index[int(lab)] for lab in labels[select(cells, rs)] if int(lab) in index]
-        partners = np.array(sorted(labels[select(cells, cs)]), dtype=np.int64)
-        scores, ratios, excesses = [], [], []
-        for k in chosen:
-            p, track = membranes.profiles[k], membranes.tracks[k]
-            f, free = np.isin(track, partners), track == 0
-            if f.any() and free.sum() > 1:
-                scores.append(_score(p[f], p[free]))
-                sd = float(p[free].std(ddof=1))
-                excesses.append(scores[-1] - partner_excess(p, f, track, free_of)[0] / sd if sd > 0 else np.nan)
-                mean_free = float(p[free].mean())
-                ratios.append(float(p[f].mean()) / mean_free if mean_free else np.nan)
+        chosen = np.array([index[int(lab)] for lab in labels[select(cells, rs)] if int(lab) in index], dtype=np.int64)
+        is_partner = np.zeros(top, dtype=bool)
+        is_partner[labels[select(cells, cs)].to_numpy(dtype=np.int64)] = True
+        is_partner[0] = False
+        f = is_partner[np.clip(track, 0, None)] & (track > 0)
+        n_f = np.bincount(seg, f, n)
+        mean_f = np.divide(np.bincount(seg, np.where(f, values, 0.0), n), n_f, out=np.full(n, np.nan),
+                           where=n_f > 0)
+        known = f & np.isfinite(partner_free)  # partner_excess: the partners' free means over the interface
+        n_known = np.bincount(seg, known, n)
+        pm = np.divide(np.bincount(seg, np.where(known, partner_free, 0.0), n), n_known, out=np.full(n, np.nan),
+                       where=n_known > 0)
+        ok = chosen[(n_f[chosen] > 0) & (n_free[chosen] > 1)]
+        sd = sd_free[ok]
+        scores = np.divide(mean_f[ok] - mean_free[ok], sd, out=np.full(len(ok), np.nan), where=sd > 0)
+        excesses = np.divide(scores * sd - pm[ok], sd, out=np.full(len(ok), np.nan), where=sd > 0)
+        ratios = np.divide(mean_f[ok], mean_free[ok], out=np.full(len(ok), np.nan), where=mean_free[ok] != 0)
         check = expression_check(cells, membranes, moi_column, rs, cs)
-        out.append({"membrane of": r, "interface with": c, "cells with an interface": len(scores),
-                    "median stdDevs above mean": float(np.nanmedian(scores)) if scores else np.nan,
-                    "median ratio interface/free": float(np.nanmedian(ratios)) if ratios else np.nan,
+        out.append({"membrane of": r, "interface with": c, "cells with an interface": len(ok),
+                    "median stdDevs above mean": float(np.nanmedian(scores)) if np.isfinite(scores).any() else np.nan,
+                    "median ratio interface/free": float(np.nanmedian(ratios)) if np.isfinite(ratios).any() else np.nan,
                     "median excess above both membranes": (float(np.nanmedian(excesses))
                                                            if np.isfinite(excesses).any() else np.nan),
                     "marker check": check["level"], "partners / measured": check["partners / measured"]})

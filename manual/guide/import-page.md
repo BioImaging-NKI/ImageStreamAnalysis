@@ -134,6 +134,8 @@ The list above *Run all datasets* names anything that is still missing, such as 
 channel for a role. For the immune-cell markers, one ticked *Immune* channel in each export is enough: the markers are
 summed, so an export may lack a marker that another export has. The button works only when this list is empty. The
 run first saves the project. If a dataset fails, the error is logged and the other datasets are still analyzed.
+For a dataset of 2000 cells or more, the membrane profiles are measured in several processes at once (up to
+eight processor cores), so the computer can be busy for a while during that step.
 
 While a run is going on, a blue bar under the button says *Running…*, with a progress bar, the dataset in progress
 (*Dataset 2 of 3*, or *Measuring* / *Finishing dataset 2 of 3* when the datasets of an experiment are classified

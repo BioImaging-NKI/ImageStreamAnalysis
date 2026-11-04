@@ -205,6 +205,12 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   cell. The Fiji comparison keeps "outline". Findings and numbers: SPEC.md and the local notes.
   - Option `band_centre = "cell"` (asked the same day): each cell's free membrane on its own peak, contacts moved
     by as much plus the type's contact-minus-free difference (never placed per cell).
+- Speed (2026-11-04, SPEC "Speed"): a plain-TIFF reader for the IDEAS files, whole-stack work with `np.bincount`
+  instead of `np.unique` / `ndi.mean`, the pairs table vectorised, and the membrane loop in worker processes with
+  the stack in shared memory (from 2000 cells). Outputs must stay identical: compare every table and the dashboard
+  data with the previous version (control windows seeded only for that comparison). A script that runs the
+  pipeline needs an `if __name__ == "__main__"` guard (Windows workers re-import it; else it falls back to one
+  process).
 - The import page marks overview rows during a run, and leaves result folders that are not part of the project out
   of `overview.tsv` and the summed tables (their files are kept).
 
