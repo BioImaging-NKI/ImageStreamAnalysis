@@ -316,11 +316,26 @@ def location_notes(loc: Location, width: int, pixel_size: float) -> list[tuple[i
     return out
 
 
+CARRY_FRACTION = 0.5  # a cell type carries a marker at this fraction of the brightest type's median, or more
+
+
+def _relative(level: dict[str, float] | None, typ: str) -> float:
+    """The marker's level in this cell type relative to the brightest type (1 without levels; 0 without a value)."""
+    if level is None:
+        return 1.0
+    values = [v for v in level.values() if np.isfinite(v)]
+    top = max(values) if values else float("nan")
+    own = level.get(typ, float("nan"))
+    return float(own / top) if np.isfinite(own) and np.isfinite(top) and top > 0 else 0.0
+
+
 def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence[float], names: Sequence[str],
-           half: float, carriers: Sequence[str] | None = None) -> Location:
+           half: float, levels: Sequence[dict[str, float]] | None = None) -> Location:
     """The average profile of each marker across the outline, per cell type and place (free, or a contact with a
     cell type), and from them where the band goes: for each type and place, the peak of the marker with the clearest
-    membrane there (prominence), among the markers that this cell type carries (`carriers`, per marker; None: all).
+    membrane there (prominence), among the markers that this cell type carries: `levels` per marker, the median
+    intensity per cell type; a type carries a marker at CARRY_FRACTION of the brightest type or more (None: all), and
+    the marker most specific to the type (its level relative to the brightest) comes first, then the prominence.
     A marker that a cell type does not carry shows no membrane of it, or signal elsewhere in the cell (seen on real
     data, 2026-11-04). None clear, or too few cells: on the outline (0)."""
     distance = np.arange(-half, half + LOCATE_STEP / 2, LOCATE_STEP)
@@ -339,20 +354,22 @@ def locate(cells: list[_Cell], mois: Sequence[np.ndarray], backgrounds: Sequence
         loc.radial[key] = np.mean(profs, axis=0)
         loc.cells[key] = len(profs)
     for typ, where in sorted({(t, w) for t, w, _ in sums}):
-        own = [m for k, m in enumerate(names) if carriers is None or carriers[k] == typ]
+        rel = {m: _relative(levels[k] if levels is not None else None, typ) for k, m in enumerate(names)}
+        own = [m for m in names if rel[m] >= CARRY_FRACTION]
         if not own:
             loc.source[(typ, where)] = "no marker of interest is carried by these cells: on the outline"
             continue
-        candidates = [(_prominence(loc.radial[(typ, where, m)]), m) for m in own if (typ, where, m) in loc.radial
-                      and loc.cells[(typ, where, m)] >= MIN_LOCATE_CELLS
+        candidates = [(rel[m], _prominence(loc.radial[(typ, where, m)]), m) for m in own
+                      if (typ, where, m) in loc.radial and loc.cells[(typ, where, m)] >= MIN_LOCATE_CELLS
                       and np.isfinite(_peak(distance, loc.radial[(typ, where, m)]))]
         if not candidates:
             loc.source[(typ, where)] = "too few cells, or no peak: on the outline"
             continue
-        best, marker = max(candidates)
-        if best < 0.3:
+        candidates = [c for c in candidates if c[1] >= 0.3]
+        if not candidates:
             loc.source[(typ, where)] = "no clear membrane: on the outline"
             continue
+        marker = max(candidates)[2]  # the most specific marker of this type, then the clearest peak
         loc.offset[(typ, where)] = _peak(distance, loc.radial[(typ, where, marker)])
         loc.source[(typ, where)] = marker
         loc.cell_offsets[(typ, where)] = np.array([_peak(distance, p) for p in sums[(typ, where, marker)]])
@@ -392,7 +409,8 @@ def membrane_profiles(labels: np.ndarray, cells: pd.DataFrame, moi: np.ndarray, 
 def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence[np.ndarray],
                          backgrounds: Sequence[float], width: int, reach: int,
                          inside_only: bool = False, centre: str = "outline", names: Sequence[str] | None = None,
-                         pixel_size: float = 1.0, carriers: Sequence[str] | None = None) -> list[Profiles]:
+                         pixel_size: float = 1.0, levels: Sequence[dict[str, float]] | None = None
+                         ) -> list[Profiles]:
     """Profiles and neighbour tracks of all cells but the artefacts, one Profiles per marker (they share the labels
     and the tracks: the outlines are traced once). labels (T, Y, X); mois: (T, Y, X) raw markers of interest, their
     `backgrounds` are subtracted; reach: the interface reach (membrane.thickness), in 4-connected steps.
@@ -431,7 +449,7 @@ def membrane_profiles_of(labels: np.ndarray, cells: pd.DataFrame, mois: Sequence
         where = np.array([type_of.get((t, int(v)), "") if v else "" for v in track], dtype=object)
         geometry.append(_Cell(t, label, (y0, x0), box, own, line, _outward(own, line), track, where,
                               type_of[(t, label)]))
-    location = locate(geometry, mois, backgrounds, names, half, carriers) if geometry else None
+    location = locate(geometry, mois, backgrounds, names, half, levels) if geometry else None
     if location is not None:
         location.moved = centre == "membrane"
     tracks: list[np.ndarray] = []

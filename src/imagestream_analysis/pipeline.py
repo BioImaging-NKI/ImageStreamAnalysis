@@ -177,8 +177,8 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
         profiles = list(membrane_profiles_of(labels, cells, mois, [stack.median(r) for r in refs], width, reach,
                                              m.inside_only, str(m.band_centre), [n for _, _, n in named],
                                              stack.pixel_size,
-                                             # which cells show the membrane in each marker (whole cell, here)
-                                             [carrier(cells, None, column)[0] for _, column, _ in named]))
+                                             # which cells carry each marker (whole-cell medians per type)
+                                             [carrier(cells, None, column)[1] for _, column, _ in named]))
         location = profiles[0].location if profiles and profiles[0] is not None else None
         if location is not None:
             for level, text in location_notes(location, width, stack.pixel_size):

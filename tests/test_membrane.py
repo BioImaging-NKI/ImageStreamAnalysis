@@ -292,3 +292,8 @@ def test_the_band_follows_the_membrane_not_the_outline():
     table = loc.table(0.5)
     assert set(table["at"]) == {"free membrane", "contact with Immune", "contact with Tumor"}
     assert not table["band placed by it"].any()  # on the outline: nothing moved
+    # a cell type that carries the marker at less than half the level of the brightest type: its band stays put
+    (prof,) = membrane_profiles_of(labels, cells, [moi], [0.0], 3, 2, centre="membrane", names=["M"],
+                                   levels=[{"Tumor": 10.0, "Immune": 30.0}])
+    assert ("Tumor", "") not in prof.location.offset and ("Immune", "") in prof.location.offset
+    assert prof.location.source[("Tumor", "")].startswith("no marker of interest is carried")

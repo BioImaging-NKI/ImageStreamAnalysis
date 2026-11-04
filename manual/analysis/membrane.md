@@ -45,10 +45,11 @@ averaged over the cells of each type. Their peak is where the membrane lies, rel
 then centred there: at the free membrane on the free peak, at a contact on the peak for contacts with that cell type,
 with a smooth transition where a contact begins or ends. The neighbor track is still taken on the outline.
 
-- The membrane of a cell type is located with a marker of interest that this cell type carries (decided from the
-  whole-cell intensities). A marker that a cell type does not carry shows no membrane of that cell, or signal
-  elsewhere in it. With several markers carried by the same type, the one with the clearest peak is used, and its
-  place holds for all markers (the membrane is where it is, whatever the marker).
+- The membrane of a cell type is located with a marker of interest that this cell type carries: its median
+  whole-cell intensity is at least half that of the brightest cell type, so a marker on both types locates both. A
+  marker that a cell type does not carry shows no membrane of that cell, or signal elsewhere in it. With several
+  markers carried by the same type, the one most specific to that type is used (then the one with the clearest
+  peak), and its place holds for all markers (the membrane is where it is, whatever the marker).
 - If no marker of interest is carried by a cell type, if fewer than 20 cells contribute, or if the average has no
   clear peak, the band stays on the outline there. The log says so.
 - One place per cell type, not per cell: the single cells scatter around it, and the average is far more robust

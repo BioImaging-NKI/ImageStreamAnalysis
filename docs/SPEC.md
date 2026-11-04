@@ -218,11 +218,14 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   - **Per cell type and place, not per cell** (the user, 2026-11-04): robust, and the marker does not choose its own
     band cell by cell. On the real data the between-cell spread was larger than the within-cell spread (local
     notes), so a per-cell offset remains an option to examine.
-  - **Only markers that the cell type carries place its band** (`carrier` from whole-cell intensities, before the
-    membranes). On real data, a marker on the other type showed no membrane peak in a cell type, or a peak inside
-    the cell (intracellular signal); the clearest peak (prominence: peak above the window ends over the range, ≥ 0.3)
-    among the carried markers places the band, and holds for every marker. No carried marker, too few cells, no
-    peak: on the outline, logged.
+  - **Only markers that the cell type carries place its band**: a type carries a marker when its whole-cell median
+    (`carrier`, before the membranes) is at least half that of the brightest type (`CARRY_FRACTION`), so a marker on
+    both types places both bands. Among those, the marker most specific to the type (its level relative to the
+    brightest type) wins, then the clearest peak (prominence: peak above the window ends over the range, ≥ 0.3); its
+    place holds for every marker. On real data, a marker on the other type showed no membrane peak in a cell type, or
+    a peak inside the cell (intracellular signal). First version (same day): only the single carrier type; on a
+    dataset whose marker is on both types at a similar level, the other type's band then stayed on the outline.
+    No carried marker, too few cells, no peak: on the outline, logged.
   - **The width stays** (about 4.5 µm): centring removes the systematic free-vs-interface difference, the width
     takes up the cell-to-cell variation.
   Findings on real data (numbers in the local notes): the outline lies outside the membrane by a similar distance at free
