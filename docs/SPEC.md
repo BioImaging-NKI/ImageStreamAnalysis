@@ -583,6 +583,18 @@ is the partner's mean free membrane (`membrane.free_means`, the marker check's p
   - Both the interface and the free membrane are means *along* the membrane (and the SD is over positions), so the
     sum *across* the band (a fixed number of samples) does not make the measure depend on the cell's size.
 
+### Re-check with the band on the membrane (2026-11-05)
+
+The excess was computed again for every band placement (outline, per type, per cell), width (3, 5, 9 px) and
+projection (maximum, sum) on a real dataset. Same-type contacts stayed clearly negative in every combination, and
+centring the band made them more negative (the free membrane is caught at its peak, so the subtracted partner term
+grows). So the outline-centred band was not why the additivity failed (numbers in the local notes). Remaining
+candidates, not tested: a contact is not two free membranes side by side in the 2D projection (cells overlap in
+depth; a tilted contact is not seen edge-on), and less marker per membrane at a contact. The excess stays
+experimental; same-type contacts remain the empirical reference (*All pairs*).
+Side finding: with a marker on both types at a similar level, the automatic carrier (free-membrane medians) can flip
+with the band's width and placement, and with it the default pair.
+
 ## Zero intensities in the clustering (2026-11-03)
 
 One IDEAS export had a block of zero pixels in one channel of one object; a cell inside it had a mean tumor intensity
