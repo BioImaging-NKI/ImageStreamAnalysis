@@ -38,6 +38,7 @@ from .membrane import (
     analyze_membranes,
     carrier,
     expression_check,
+    location_notes,
     membrane_profiles_of,
     pair_of,
     pair_table,
@@ -53,6 +54,7 @@ CELL_TABLE = "Cell classification"
 EVENT_TABLE = "All cell combinations"
 DOUBLETS_TABLE = "Single Tumor Single Immune cell"  # macro v1.8: ... Single T cell
 MEMBRANE_TABLE = "Membrane intensity analysis"
+LOCATION_TABLE = "Membrane location"  # where the membrane lies across the outline (membrane.Location)
 THRESHOLDS_TABLE = "Marker thresholds"
 CONTACTS_TABLE = "Interactions"
 SUBSETS_TABLE = "Subset preference"
@@ -171,9 +173,16 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
     m = settings.membrane
     profiles: list[Profiles | None] = [None] * len(refs)
     if m.analysis:  # the outlines and neighbour tracks once, a profile per marker
-        profiles = list(membrane_profiles_of(labels, cells, mois, [stack.median(r) for r in refs],
-                                             straightening_px(m.straightening_width, stack.pixel_size), reach,
-                                             m.inside_only))
+        width = straightening_px(m.straightening_width, stack.pixel_size)
+        profiles = list(membrane_profiles_of(labels, cells, mois, [stack.median(r) for r in refs], width, reach,
+                                             m.inside_only, str(m.band_centre), [n for _, _, n in named],
+                                             stack.pixel_size,
+                                             # which cells show the membrane in each marker (whole cell, here)
+                                             [carrier(cells, None, column)[0] for _, column, _ in named]))
+        location = profiles[0].location if profiles and profiles[0] is not None else None
+        if location is not None:
+            for level, text in location_notes(location, width, stack.pixel_size):
+                log.log(level, text)
     for (number, column, name), prof in zip(named, profiles, strict=True):
         result.markers.append(marker_result(cells, number, column, name, prof, settings))
     return result
@@ -269,6 +278,11 @@ def save(result: Result, settings: Settings) -> None:
                    out / f"Control windows stdDevs above mean{sfx}.tsv")
         profiles = mem.profiles.astype(np.float32)[None]  # rows = the cells of the membrane table
         save_stack(profiles, out / f"membrane_profiles_normalized{sfx}.tif", result.stack.pixel_size)
+    location = next((mk.profiles.location for mk in result.markers if mk.profiles is not None
+                     and mk.profiles.location is not None), None)
+    if location is not None:  # where the membrane lies across the outline (the band's place, and its check)
+        save_table(location.table(result.stack.pixel_size), out / f"{LOCATION_TABLE}.tsv")
+        save_table(location.profiles(result.stack.pixel_size), out / f"{LOCATION_TABLE} - profiles.tsv")
     write_dashboard(result, settings)
 
 

@@ -204,6 +204,38 @@ Optional (`membrane.analysis`, default off: not every ImageStream analysis needs
   that fall on it looked enriched. On the test data this raises the median `stdDevs above mean` by about 0.2 SD;
   the control quartiles stay within 0.15 SD of Fiji's. (With the v1.8 baseline the neighbour tracks reproduce the
   previous port to a few hundredths.)
+- **The band centred on the membrane (the user, 2026-11-04; `membrane.band_centre`, default "membrane").** The
+  outline does not lie on the membrane: at a free membrane Cellpose's mask reaches beyond it, at a contact the
+  outline is the boundary between two masks. A band centred on the outline (v1.8; "outline") reaches less of the
+  free membrane than of an interface, and a narrow band fakes enrichment (the user test of 2026-11-01 led to the
+  4.5 µm default). Now `membrane.locate` first samples every marker of interest across the outline (±3 µm, 1/4 px
+  steps, outward normal from the own mask), averages it per cell along the free membrane and along the contacts with
+  each cell type (positions as the neighbour track, ≥ 5 per cell), then over the cells of each type (≥ 20). The
+  peak of the average (parabolic refinement; none at the window edge) is the membrane's place per (cell type,
+  place). The band's centre line is the outline moved along its normal by that offset (per position by its place,
+  smoothed over 2·reach+1 samples); the neighbour track stays on the outline. `Profiles.lines` is that centre line
+  (the dashboard's band). Choices:
+  - **Per cell type and place, not per cell** (the user, 2026-11-04): robust, and the marker does not choose its own
+    band cell by cell. On the real data the between-cell spread was larger than the within-cell spread (local
+    notes), so a per-cell offset remains an option to examine.
+  - **Only markers that the cell type carries place its band** (`carrier` from whole-cell intensities, before the
+    membranes). On real data, a marker on the other type showed no membrane peak in a cell type, or a peak inside
+    the cell (intracellular signal); the clearest peak (prominence: peak above the window ends over the range, ≥ 0.3)
+    among the carried markers places the band, and holds for every marker. No carried marker, too few cells, no
+    peak: on the outline, logged.
+  - **The width stays** (about 4.5 µm): centring removes the systematic free-vs-interface difference, the width
+    takes up the cell-to-cell variation.
+  Findings on real data (numbers in the local notes): the outline lies outside the membrane by a similar distance at free
+  membranes of both types; for one type (the immune cells) also at contacts, so the outline-centred band was fair for
+  it; for the other (the tumor cells) the membrane at contacts with immune cells lies on the partner's side of the
+  mask boundary, so the outline-centred band favoured the interface. Consequence for `inside_only`: it cuts away part
+  of the measured cell's own membrane at such contacts (a further reason it is only a sensitivity test).
+  Checks: the log per (type, place) with the spread of single cells; `Membrane location.tsv` and `Membrane location
+  - profiles.tsv`; the dashboard's *Across the membrane* (membrane card) with the band of each place; with "outline"
+  a WARNING when the band's outermost sample is less than a pixel beyond a membrane. Synthetic test
+  (`test_the_band_follows_the_membrane_not_the_outline`): an evenly stained membrane 2 px inside a free outline and
+  on the contact line; 3 px band on the outline: interface/free ratio 1.3, centred: 0.93 at 3 and 9 px. The Fiji
+  comparison (`test_reference.py`) keeps "outline".
 - **Where the marker of interest is expressed (the user, 2026-11-01).** If the partners carry the marker too,
   their membrane lies against the measured one at the interface (half the straightened band lies in the partner)
   and looks like enrichment even when the staining is even. `expression_check` compares the median free-membrane

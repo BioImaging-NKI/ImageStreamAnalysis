@@ -8,9 +8,16 @@ it on. With several markers of interest, the analysis is done for each of them (
 ## The membrane profile
 
 For every cell, the outline is traced, smoothed and **straightened**. The marker of interest is sampled in a band
-across the outline, and at every position along the outline the brightest sample across the band is kept. The width
+across the membrane, and at every position along the outline the brightest sample across the band is kept. The width
 of the band is set by *Straightening width*; by default it is about 4.5 µm, which is 5 px at 20×, 9 px at 40× and
 13 px at 60×. The result is a background-subtracted profile along the membrane, with one value per pixel of perimeter.
+
+By default the band is **centred where the membrane lies**, not on the outline (*Band centred on*: *membrane*). The
+outline that Cellpose draws does not lie on the membrane: where a cell is free it usually lies outside the stained
+membrane, and where cells touch it lies on the boundary between their masks, which need not be the membrane either.
+The program therefore first finds the membrane in the data, for each cell type, at the free membrane and at the
+contacts with each cell type, and moves the band there. See
+[Where the membrane lies](#where-the-membrane-lies-and-a-false-enrichment-it-prevents).
 
 Along the same line, every position also records whether another cell lies within the interface width, and if so,
 which cell. This record is the cell's **neighbor track**.
@@ -24,16 +31,47 @@ which cell. This record is the cell's **neighbor track**.
     nearest other cell. The length of every profile is stored, so a value of 0 is data and does not mark the end of the
     profile (in the macro, zeros ended it).
 
-??? note "Technical: the straightening width, and a false enrichment it prevents"
+### Where the membrane lies, and a false enrichment it prevents
 
-    Where a cell is free, the outline that Cellpose draws lies a little **outside** the stained membrane (by about
-    1 µm in the tests, after *Shrink cells*). Where two cells touch, it lies on the contact line. The band across the
-    outline must reach the membrane in both places. If the band is too narrow, the brightest sample at the free
-    membrane misses part of the membrane, while at a contact it does not. The interface then looks enriched for any
-    membrane marker, without any biological cause.
+Where a cell is free, the outline that Cellpose draws lies a little **outside** the stained membrane (by about 1 µm in
+the tests, after *Shrink cells*). Where two cells touch, it lies on the boundary between the two masks, which is
+close to the membrane. A band centred on the outline then reaches less of the free membrane than of an interface. If
+the band is too narrow, the brightest sample at the free membrane misses part of the membrane, while at a contact it
+does not, and the interface looks enriched for any membrane marker, without any biological cause.
 
-    In a test at 40× (0.5 µm per pixel), a ligand on the tumor membrane was enriched only where Beta+ immune cells
-    touched. The tumor cells' interface with Beta− cells, which has no enrichment, measured:
+**How the membrane is found.** For every measured cell, the marker of interest is sampled across the outline, 3 µm
+to each side, and averaged along the free membrane and along the contacts with each cell type. These profiles are
+averaged over the cells of each type. Their peak is where the membrane lies, relative to the outline. The band is
+then centred there: at the free membrane on the free peak, at a contact on the peak for contacts with that cell type,
+with a smooth transition where a contact begins or ends. The neighbor track is still taken on the outline.
+
+- The membrane of a cell type is located with a marker of interest that this cell type carries (decided from the
+  whole-cell intensities). A marker that a cell type does not carry shows no membrane of that cell, or signal
+  elsewhere in it. With several markers carried by the same type, the one with the clearest peak is used, and its
+  place holds for all markers (the membrane is where it is, whatever the marker).
+- If no marker of interest is carried by a cell type, if fewer than 20 cells contribute, or if the average has no
+  clear peak, the band stays on the outline there. The log says so.
+- One place per cell type, not per cell: the single cells scatter around it, and the average is far more robust
+  than a peak in each cell, which would also let the marker choose its own band.
+
+**The check.** The log of every run says, for each cell type and place, where the membrane lies (in µm from the
+outline, + is outside) and how much single cells vary (the middle half). `Membrane location.tsv` holds the same per
+marker, and `Membrane location - profiles.tsv` the average profiles. The dashboard's membrane card shows them under
+*Across the membrane*. With the band on the outline (*Band centred on*: *outline*, as the macro), a warning is logged
+when the band does not reach at least a pixel beyond a membrane.
+
+On real data, the place of the membrane differed between the cell types, and between the free membrane and the
+contacts: for one cell type the outline lay outside the membrane everywhere, so a band on the outline was fair; for
+the other it lay outside at the free membrane but beyond the membrane at contacts, so a band on the outline
+favoured the interface. Single cells also varied by about as much as these distances. A wide band (the default
+4.5 µm) still matters: centring removes the systematic difference between free membrane and interface, and the
+width takes up the variation between cells.
+
+??? note "Technical: the straightening width with the band on the outline"
+
+    In a test at 40× (0.5 µm per pixel), with the band on the outline, a ligand on the tumor membrane was enriched
+    only where Beta+ immune cells touched. The tumor cells' interface with Beta− cells, which has no enrichment,
+    measured:
 
     | Straightening width | Beta− contacts (truth: none) | Beta+ contacts (truth: enriched) |
     |---|---|---|
@@ -45,7 +83,10 @@ which cell. This record is the cell's **neighbor track**.
     with a minimum of 5. A wider band somewhat lowers the ratio of a real enrichment, because the free membrane is now
     measured at its true brightness, but the real enrichment stays clearly separate from the false one. If you set
     the width in pixels (`membrane.straightening_width`), that value is used as it is. The comparison with the Fiji
-    macro uses the macro's 5 px.
+    macro uses the macro's 5 px, with the band on the outline. With the band centred on the membrane (the default),
+    the result depends much less on the width: in a synthetic test with an evenly stained membrane, a 3 px band on
+    the outline made the interface look about 30 % brighter than the free membrane, and centred on the membrane both
+    3 px and 9 px gave no enrichment.
 
     A wider band also reaches further into a touching partner. This matters only when the partner carries the marker
     (see [Where the marker is expressed](#where-the-marker-is-expressed)).
@@ -264,6 +305,11 @@ that there is no enrichment.
     mixes both membranes in every pixel near the interface, whichever pixels are sampled. If the enrichment drops
     clearly with *inside only*, part of it comes from the partner side. If it stays the same, that is reassuring but
     not proof.
+
+    *Inside only* can also cut away the measured cell's **own** membrane at a contact: the boundary between two
+    masks need not lie on the membrane, and on real data the measured cells' membrane at a contact lay partly on the
+    partner's side of it. A drop with *inside only* is therefore not by itself proof that the signal came from the
+    partner. *Across the membrane* in the dashboard shows where the membrane lies at the contacts.
 
 ## Several markers of interest
 

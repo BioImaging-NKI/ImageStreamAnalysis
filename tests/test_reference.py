@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from imagestream_analysis.config import Settings
+from imagestream_analysis.config import BandCentre, Settings
 from imagestream_analysis.interfaces import MOI_COLUMNS, moi_column
 from imagestream_analysis.pipeline import AVERAGE_PROFILE, CELL_TABLE, DOUBLETS_TABLE, EVENT_TABLE, MEMBRANE_TABLE, run
 
@@ -44,6 +44,7 @@ def result(tmp_path_factory):
     settings, _ = _config()
     settings.input.output = tmp_path_factory.mktemp("reference")
     settings.membrane.analysis = True
+    settings.membrane.band_centre = BandCentre.OUTLINE  # as the macro: the comparison with Fiji
     return run(settings)
 
 

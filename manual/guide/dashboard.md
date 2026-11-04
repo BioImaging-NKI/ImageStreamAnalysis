@@ -73,8 +73,9 @@ selected cell is outlined in white.
 
 If the membrane analysis was run, tick **membrane band** next to the magnification, or press the **space bar**, to lay
 the membrane band over the large image and the montage, semi-transparent. The band is the strip of pixels that was
-straightened and measured: it follows the smoothed outline of the cell, and is *Straightening width* pixels wide, half
-of it outside the cell (with *Straighten inside the measured cell only*, only the half inside the cell is shown). Its
+straightened and measured. It is *Straightening width* pixels wide, and centred where the membrane lies (by default)
+or on the smoothed outline (*Band centred on*: *outline*). With *Straighten inside the measured cell only*, only the
+part inside the cell is shown. Its
 colour says what each position along the membrane counts as, for the membrane pair of the membrane card:
 
 | Colour | Meaning |
@@ -190,6 +191,12 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
   Values above the maximum are not counted; the note under the plot says how many cells that concerns.
 - **Average profile**: the average membrane profile of the cells with an interface, centered on the interface.
 - **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top.
+- **Across the membrane: where the band lies** (folded): the marker of interest averaged across the outline of the
+  measured cells, at the free membrane (amber) and at the contacts with the partners' cell type (aqua), in µm from the
+  outline (− inside the cell). The strips under the axis show the band of each. By default each band is centred on
+  the peak of its curve; with the band on the outline, both strips are centred on 0, and a strip that covers less of
+  the amber peak than of the aqua one makes the interface look enriched without cause. See
+  [Where the membrane lies](../analysis/membrane.md#where-the-membrane-lies-and-a-false-enrichment-it-prevents).
 - **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the
   number of cells and the marker check of each pair. Use this table to compare pairs (see
   [The control](../analysis/membrane.md#the-control)). Click a number to show that pair.

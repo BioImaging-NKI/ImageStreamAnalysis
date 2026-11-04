@@ -28,6 +28,8 @@ which holds the IDEAS object number.
 | `Membrane pairs.tsv` | for every marker of interest (column `marker`, and in `marker on` the cell type that carries it), every pair of *Membrane of* and *Interface with*: the cells with an interface, the median enrichment, ratio and excess over both membranes, and the marker check (only with the membrane analysis) |
 | `Subset preference.tsv` | per immune subtype and partner: the contacts compared with those when the subtypes are shuffled among the immune cells of each event, with the 95 % interval (only with two or more immune subtypes) |
 | `Multiplets.tsv` | the number of events with n cells and with n contacts |
+| `Membrane location.tsv` | where the membrane lies relative to the outline: per cell type, place (free membrane or contacts with a cell type) and marker of interest, the peak of the average profile across the outline (µm, + is outside), the cells, whether it placed the band, and the spread of single cells (only with the membrane analysis) |
+| `Membrane location - profiles.tsv` | those average profiles across the outline, one row per distance |
 | `Membrane intensity analysis - <marker>.tsv` | one row per measured cell: the interface and membrane means, the enrichment (`stdDevs above mean`), the excess over both membranes (`excess stdDevs above both membranes`), and the control |
 | `Average normalized membrane profile values - interfaces centered at 20 - <marker>.tsv` | the average aligned profile (`profile`), and that of the excess over both membranes (`excess profile`) |
 | `Histogram_interface_stdDevs_above_mean - <marker>.tsv`, `Histogram_control_stdDevs_above_mean - <marker>.tsv` | the histograms |

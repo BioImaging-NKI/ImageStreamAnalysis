@@ -30,7 +30,8 @@ the repository.
 | Contacts | region adjacency graph of the labels | cells within the interface width of each other | consistent with the interfaces |
 | Contacts compared with chance | — | partner preference in events with 3 or more cells, and subset preference among immune cells, with intervals | new |
 | Membranes | one ring per blob of touching cells of the same class | one membrane per cell | the cell is the unit of analysis |
-| Straightening width | 5 px | about 4.5 µm (9 px at 40×) | 5 px at 40× gave a false enrichment at every contact (see [Membrane enrichment](../analysis/membrane.md#the-membrane-profile)) |
+| Straightening width | 5 px | about 4.5 µm (9 px at 40×) | 5 px at 40× gave a false enrichment at every contact (see [Membrane enrichment](../analysis/membrane.md#where-the-membrane-lies-and-a-false-enrichment-it-prevents)) |
+| Place of the band | on the outline | where the membrane lies, found in the data per cell type, at the free membrane and at the contacts with each cell type (*Band centred on*: *outline* gives the macro's) | the outline lies outside a free membrane but near the membrane at contacts, which favoured the interface (see [Where the membrane lies](../analysis/membrane.md#where-the-membrane-lies-and-a-false-enrichment-it-prevents)) |
 | Baseline of the enrichment | all of the membrane outside the interface | the membrane that touches no other cell | in the macros, contacts with other marked cells raise the baseline |
 | Control | one window of 25 px per membrane, unseeded | 10 windows as long as the median interface, on free membrane | a better null distribution |
 | Average profile | all rings, including those without an interface | only cells with an interface | rings without an interface halve the peak |

@@ -246,6 +246,9 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
         marker (–); ! and !!: the partners carry the marker too, or more of it (the marker check). Click a number to
         show that pair.</p>
       <div class="tablebox" style="max-height:none"><table id="pairs-table"></table></div></details>
+    <details id="across-box"><summary>Across the membrane: where the band lies</summary>
+      <div class="cardrow"><div class="plot" style="flex:1 1 380px;max-width:520px"><svg id="across" viewBox="0 0 420 220"></svg></div>
+        <p class="note" id="across-note" style="flex:1 1 260px"></p></div></details>
     <div class="grid3">
       <div>
         <div class="legend"><span><span class="key" style="border-color:var(--s3)"></span>interface</span>
@@ -1242,6 +1245,44 @@ function drawMembranes() {
     showTip(ev, [[fmt(avg[i], 2), MEASURES[measure]], [fmt(i * px, 1) + " µm", i === 20 ? "(interface centre)" : ""]]); };
   ps.onpointerleave = () => { hair.setAttribute("visibility", "hidden"); hideTip(); };
   drawHeat(withIf);
+  drawAcross();
+}
+// the marker averaged across the outline, at the free membrane and at the contacts with the partners' cell type,
+// for the measured cells of the pair (membrane.Location), with the band of each: a band that reaches less of the
+// free membrane than of the interface fakes enrichment
+const lineageOf = sel => sel === "Tumor" ? "Tumor" : "Immune";  // every other selection is a kind of immune cell
+function drawAcross() {
+  const L = MP.location, box = document.getElementById("across-box");
+  box.hidden = !L; if (!L) return;
+  const svg = document.getElementById("across"); svg.replaceChildren(); const W = 420, H = 220, px = D.pixel_size;
+  const typ = lineageOf(pair.cells), partner = lineageOf(pair.partners), mk = MKS[MI].name;
+  const prof = at => L.radial.find(r => r.type === typ && r.at === at && r.marker === mk);
+  const off = at => L.offset.find(o => o.type === typ && o.at === at);
+  const parts = [["", "free membrane", BAND_FREE], [partner, `contacts with ${shortType(partner)} cells`, css("--s3")]].filter(([at]) => prof(at));
+  const note = document.getElementById("across-note");
+  if (!parts.length) { note.textContent = `No profile across the membrane of ${shortType(typ)} cells.`; return; }
+  const xs = L.distance.map(d => d * px), all = parts.flatMap(([at]) => prof(at).mean.filter(v => v != null));
+  const lo = Math.min(0, ...all), hi = Math.max(...all) * 1.08 || 1;
+  const sx = scale([xs[0], xs[xs.length - 1]], [PAD.l, W - PAD.r]), sy = scale([lo, hi], [H - PAD.b, PAD.t]);
+  svgAxes(svg, sx, sy, W, H, "µm from the outline (− inside the cell, + outside)", mk, niceTicks(sx.d[0], sx.d[1], 6), niceTicks(lo, hi, 4));
+  const half = (MP.band_width - 1) / 2 * px + px / 2;
+  parts.forEach(([at, , colour], k) => {  // the band: a strip under the axis, one per place
+    const c = (L.moved ? off(at)?.offset || 0 : 0) * px, y = H - PAD.b - 7 - k * 6;
+    svg.append(svgEl("rect", { x: sx(Math.max(xs[0], c - half)), width: sx(Math.min(xs[xs.length - 1], c + half)) - sx(Math.max(xs[0], c - half)), y, height: 4, rx: 2, fill: colour, opacity: 0.8 }));
+  });
+  svg.append(svgEl("line", { x1: sx(0), x2: sx(0), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "2 3" }));
+  for (const [at, , colour] of parts) {
+    const m = prof(at).mean;
+    svg.append(svgEl("path", { d: m.map((v, i) => `${i ? "L" : "M"}${sx(xs[i])},${sy(v ?? 0)}`).join(""), fill: "none", stroke: colour, "stroke-width": 2 }));
+  }
+  const names = MKS.map(m => m.name);
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const say = ([at, words, colour]) => { const o = off(at), p = prof(at);
+    const where = !o ? "" : o.source === mk ? `peak ${fmt(o.offset * px, 2)} µm` : names.includes(o.source) ? `band placed by ${o.source} (peak ${fmt(o.offset * px, 2)} µm)` : o.source;
+    return `<span class="sw" style="background:${colour}"></span>${esc(words)}: ${p.cells.toLocaleString()} cells${where ? ", " + esc(where) : ""}`; };
+  note.innerHTML = `${esc(mk)} averaged across the outline of the ${esc(shortType(typ))} cells.<br>` + parts.map(say).join("<br>") + "<br>" +
+    `The strips under the axis: the band (${MP.band_width} px), ` + (L.moved ? "centred where the membrane lies (membrane.band_centre = membrane)." :
+    "on the outline (membrane.band_centre = outline): if it reaches less of the free membrane than of the interface, the interface looks enriched without cause.");
 }
 document.getElementById("pair-cells").onchange = e => { pair.cells = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
 document.getElementById("pair-partners").onchange = e => { pair.partners = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
@@ -1280,8 +1321,9 @@ function drawHeatOverlay() {
 // ---------- cell card: the selected cell, or else the selected event; its cells can be hovered and clicked
 let cardCanvas = null, cardEvent = -1;
 const EMPTY_CARD = '<h2 data-help="guide/dashboard#cell">Cell</h2><p class="empty">Click a cell or an event in the events, a plot or the table.</p>';
-// the membrane band as it was straightened (membrane.py: straighten): along the smoothed outline, `band_width` samples
-// across it (half of them outside the cell; with inside_only only those inside count). Coloured by what each position
+// the membrane band as it was straightened (membrane.py: straighten): along the line it was centred on (the smoothed
+// outline, or where the membrane lies: membrane.band_centre), `band_width` samples across it (inside_only: only
+// those inside the cell count). Coloured by what each position
 // is for the pair shown: the interface with a partner, the free membrane (the reference), or another contact (left out)
 const BAND_ALPHA = 0.4, BAND_FREE = "#ffb000";
 let LINE = null, MEMK = null;
@@ -1307,11 +1349,8 @@ function drawBands(ctx, cells) {  // onto ctx (transform set to the image's scal
     const p = bandLine(k), n = p.length; if (n < 3) continue;
     const nrm = p.map((_, j) => { const a = p[(j + n - 1) % n], b = p[(j + 1) % n], tx = (b[0] - a[0]) / 2, ty = (b[1] - a[1]) / 2, l = Math.hypot(tx, ty) || 1e-9;
       return [ty / l, -tx / l]; });  // as membrane.straighten: normal = (-t_x, t_y) in (y, x)
-    let lo = -half, hi = half;
-    if (MP.inside_only) {  // only the samples inside the cell: the inner half, on the side where the cell is
-      let inward = 0; for (let j = 0; j < n; j += Math.max(1, n >> 4)) inward += offCtx.isPointInPath(cellPath(i), p[j][0] + 1.5 * nrm[j][0], p[j][1] + 1.5 * nrm[j][1]) ? 1 : -1;
-      [lo, hi] = inward >= 0 ? [0, half] : [-half, 0];
-    }
+    const lo = -half, hi = half;
+    bx.save(); if (MP.inside_only) bx.clip(cellPath(i));  // only the samples inside the cell count
     const other = bandOther(i), kind = j => { const tr = TRACK[OFFS[k] + j]; return tr < 0 ? "free" : matches(tr, other) ? "iface" : "other"; };
     for (let j = 0; j < n; j++) {
       const j2 = (j + 1) % n, [x1, y1] = p[j], [x2, y2] = p[j2], [nx1, ny1] = nrm[j], [nx2, ny2] = nrm[j2];
@@ -1319,6 +1358,7 @@ function drawBands(ctx, cells) {  // onto ctx (transform set to the image's scal
       bx.moveTo(x1 + lo * nx1, y1 + lo * ny1); bx.lineTo(x2 + lo * nx2, y2 + lo * ny2); bx.lineTo(x2 + hi * nx2, y2 + hi * ny2); bx.lineTo(x1 + hi * nx1, y1 + hi * ny1);
       bx.closePath(); bx.fill(); bx.strokeStyle = bx.fillStyle; bx.lineWidth = 0.6 / t.a; bx.stroke();  // close the hairline gaps between quads
     }
+    bx.restore();
   }
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = BAND_ALPHA; ctx.drawImage(cv, 0, 0); ctx.restore();
 }
@@ -1327,7 +1367,7 @@ function bandLegend() {
   const p = document.createElement("p"); p.className = "note bandnote";
   const sw = (c, t) => `<span class="sw" style="background:${c}"></span>${t}`;
   p.innerHTML = `Membrane band as straightened: ${MP.band_width} px (${fmt(MP.band_width * D.pixel_size, 1)} µm) across the outline` +
-    (MP.inside_only ? ", the half inside the cell" : "") + (state.selected < 0 ? `; the measured cells (${shortType(pair.cells)})` : "") + ". " + [sw(css("--s3"), `interface with ${shortType(bandOther(state.selected))}`),
+    (MP.location?.moved ? ", centred where the membrane lies" : ", centred on the outline") + (MP.inside_only ? ", the part inside the cell" : "") + (state.selected < 0 ? `; the measured cells (${shortType(pair.cells)})` : "") + ". " + [sw(css("--s3"), `interface with ${shortType(bandOther(state.selected))}`),
     sw(BAND_FREE, "free membrane (the reference)"), sw("#8a8f98", "other contacts (left out)")].join(" · ") + ". <kbd>Space</kbd>: show / hide.";
   return p;
 }

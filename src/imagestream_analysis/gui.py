@@ -28,7 +28,7 @@ import pandas as pd
 
 from . import __version__, ideas
 from .comparison import compare, write_comparison
-from .config import THRESHOLD_METHODS, ChannelSettings, MarkerLocation, Pool, Settings
+from .config import THRESHOLD_METHODS, BandCentre, ChannelSettings, MarkerLocation, Pool, Settings
 from .dashboard import page_template
 from .launcher import STATE_DIR
 from .project import INTERACTIONS_FILE, PROJECT_FILE, Project, in_project, overview, result_folders, select_samples
@@ -365,7 +365,8 @@ def handle(api: str, data: dict[str, Any], job: Job) -> Any:
         return {"version": __version__, "theme": prefs.get("theme", ""), "project": project,
                 "defaults": Settings().to_dict(), "roles": list(ChannelSettings().roles()),
                 "marker_locations": [str(m) for m in MarkerLocation],
-                "threshold_methods": THRESHOLD_METHODS, "pools": [str(p) for p in Pool]}
+                "threshold_methods": THRESHOLD_METHODS, "pools": [str(p) for p in Pool],
+                "band_centres": [str(b) for b in BandCentre]}
     if api == "prefs":
         return save_prefs({k: v for k, v in data.items() if k in ("theme",)})
     if api == "browse":

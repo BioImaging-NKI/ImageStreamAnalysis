@@ -239,3 +239,56 @@ def test_sum_across_the_band():
     assert len(prof.sums) == len(prof.profiles) == 1
     assert np.allclose(prof.profiles[0], 2.0) and np.allclose(prof.sums[0], 10.0)  # uniform: max 2, sum 5 x 2
     assert prof.summed().profiles is prof.sums and prof.summed().tracks is prof.tracks
+
+
+def _halo_events(n=24, inset=2):
+    """Pairs of touching cells whose masks reach `inset` px beyond the stained membrane where they are free (as a
+    Cellpose outline does), while at the contact the membrane lies on the contact line. The membrane is stained
+    evenly everywhere: no enrichment at the interface."""
+    h, w = 60, 90
+    labels = np.zeros((n, h, w), np.int32)
+    moi = np.zeros((n, h, w), np.float64)
+    yy, xx = np.mgrid[:h, :w]
+    for t in range(n):
+        a, b = disk((h, w), 30, 30, 15), disk((h, w), 30, 56, 15)
+        labels[t][a & (xx < 43)] = 1
+        labels[t][b & (xx >= 43)] = 2
+        # the stained membrane, a ridge of one shape everywhere: `inset` inside the free outline, but on the contact
+        # line where the cells touch
+        r = 15 - inset
+        d = np.minimum(np.abs(np.hypot(yy - 30, xx - 30) - r), np.abs(np.hypot(yy - 30, xx - 56) - r))
+        d = np.where((xx >= 39) & (xx <= 47), np.inf, d)
+        d = np.minimum(d, np.where(labels[t] > 0, np.abs(xx - 42.5), np.inf))
+        moi[t] = 100.0 * np.exp(-d**2 / (2 * 1.2**2))
+    cells = pd.DataFrame({"frame": np.repeat(np.arange(n), 2), "label": np.tile([1, 2], n),
+                          "Cell type": np.tile(["Tumor", "Immune"], n)})
+    return labels, cells, moi
+
+
+def test_the_band_follows_the_membrane_not_the_outline():
+    """A band on the outline, narrower than the gap between a free outline and its membrane, makes an evenly
+    stained interface look enriched; centred where the membrane is found (per cell type, free and at contacts), it
+    does not. The location reports the membrane about `inset` px inside the free outline and on the contact line."""
+    from imagestream_analysis.membrane import location_notes, membrane_profiles_of
+
+    labels, cells, moi = _halo_events()
+
+    def ratio(centre, width=3):
+        (prof,) = membrane_profiles_of(labels, cells, [moi], [0.0], width, 2, centre=centre, names=["M"])
+        r = []
+        for p, tr in zip(prof.profiles, prof.tracks, strict=True):
+            r.append(p[tr > 0].mean() / p[tr == 0].mean())
+        return float(np.median(r)), prof.location
+
+    on_outline, loc = ratio("outline")
+    on_membrane, _ = ratio("membrane")
+    assert on_outline > 1.2  # faked enrichment
+    assert on_membrane == pytest.approx(1.0, abs=0.1)
+    assert ratio("membrane", 9)[0] == pytest.approx(on_membrane, abs=0.03)  # and no longer a matter of the width
+    assert loc.offset[("Tumor", "")] == pytest.approx(-2.0, abs=0.5)  # inside the free outline
+    assert abs(loc.offset[("Tumor", "Immune")]) < 0.75  # on the contact line
+    notes = location_notes(loc, 3, 0.5)
+    assert any(level == 30 and "misses part of it" in text for level, text in notes)  # outline: a warning
+    table = loc.table(0.5)
+    assert set(table["at"]) == {"free membrane", "contact with Immune", "contact with Tumor"}
+    assert not table["band placed by it"].any()  # on the outline: nothing moved

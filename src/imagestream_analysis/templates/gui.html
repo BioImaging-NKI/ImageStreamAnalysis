@@ -482,7 +482,8 @@ const FIELDS = [
      ["membrane.thickness", "Membrane / interface width (px)", "int", null, "about 1.5 µm"]],
     [["membrane.pairs", "Membrane pair per marker of interest", "pairs"]],
     [["membrane.straightening_width", "Straightening width (px)", "int", null, "about 4.5 µm"],
-     ["membrane.inside_only", "Straighten inside the measured cell only", "bool"]],
+     ["membrane.band_centre", "Band centred on", "choice", "band_centres"]],
+    [["membrane.inside_only", "Straighten inside the measured cell only", "bool"]],
     [["membrane.control_repeats", "Control windows per cell", "int"],
      ["membrane.max_histogram_value", "Histogram maximum (SD)", "float", null, "automatic"],
      ["membrane.histogram_bin_width", "Histogram bin width (SD)", "float", null, "automatic"]]]]];
@@ -1000,7 +1001,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) saveD
 (async () => {
   const s = await api("state");
   defaults = s.defaults; choices = { marker_locations: s.marker_locations,
-             threshold_methods: s.threshold_methods, pools: s.pools };
+             threshold_methods: s.threshold_methods, pools: s.pools, band_centres: s.band_centres };
   if (s.theme) document.documentElement.dataset.theme = s.theme;
   if (s.project) loadProject(s.project);
   else { state.settings = newSettings(); state.settings.membrane.analysis = false; renderAll(); }

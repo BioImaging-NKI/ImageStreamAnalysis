@@ -28,7 +28,7 @@ from .config import Settings
 from .interfaces import moi_column
 
 if TYPE_CHECKING:
-    from .membrane import Profiles
+    from .membrane import Location, Profiles
     from .pipeline import Result
 
 SHEET_COLUMNS, SHEET_ROWS = 10, 10
@@ -226,7 +226,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
             "length": [len(p) for p in prof.profiles],
             "track": base64.b64encode(np.concatenate(track_rows).astype("<i4").tobytes() if track_rows
                                       else b"").decode("ascii"),
-            "line": membrane_lines(prof), "band_width": prof.width,
+            "line": membrane_lines(prof), "band_width": prof.width, "location": location_data(prof.location),
             "markers": [{"name": mk.name, "carried_by": mk.carried_by, "cells": mk.cells, "partners": mk.partners,
                          "expression": mk.expression,
                          "profile": float32_b64(np.concatenate(mk.profiles.profiles) if mk.profiles.profiles
@@ -242,6 +242,18 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
 
 
 LINE_SCALE = 8  # the straightening lines in 1/8 pixel
+
+
+def location_data(loc: Location | None) -> dict[str, Any] | None:
+    """Where the membrane lies across the outline (membrane.Location), for the membrane card: the average profile of
+    each marker per cell type and place (pixels; + = outside the cell), and where the band was centred."""
+    if loc is None:
+        return None
+    return {"distance": [round(float(d), 3) for d in loc.distance], "moved": loc.moved,
+            "radial": [{"type": t, "at": w, "marker": m, "cells": loc.cells[(t, w, m)], "mean": _column(v, 3)}
+                       for (t, w, m), v in sorted(loc.radial.items())],
+            "offset": [{"type": t, "at": w, "offset": round(float(loc.offset.get((t, w), 0.0)), 3),
+                        "source": loc.source[(t, w)]} for (t, w) in sorted(loc.source)]}
 
 
 def membrane_lines(prof: Profiles) -> str:

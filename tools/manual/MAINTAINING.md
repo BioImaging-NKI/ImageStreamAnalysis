@@ -83,6 +83,9 @@ a larger change). Retake them at the next refresh and empty this list.
 - 2026-11-04, the cell card: a channel montage under the measurements, and the *membrane band* tick box (space bar).
   Retake `dash_cell` (consider one with the band on, for the membrane page). The demo needs rebuilding (the page and
   its data changed). Make the example project again first.
+- 2026-11-04, the band centred on the membrane: a new setting *Band centred on* in step 3 (`gui_settings`), the
+  folded *Across the membrane* in the membrane card (consider a screenshot of it opened, for the membrane page), and
+  the band in `dash_cell` moves. The numbers of the walk-through may change slightly: check them after the remake.
 
 ## Refresh, check, publish
 

@@ -197,6 +197,15 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
   the membrane card has a *Marker* menu. On the import page *Membrane of* / *Interface with* are menus.
 
+### Decisions by the user (2026-11-04)
+
+- **The membrane band is centred where the membrane lies** (`membrane.band_centre = "membrane"`, default; "outline"
+  keeps the macro's): the place is found in the data per cell type, at the free membrane and at the contacts with
+  each cell type, from a marker of interest that the type carries; one place per cell type and dataset, not per
+  cell. The Fiji comparison keeps "outline". Findings and numbers: SPEC.md and the local notes.
+- The import page marks overview rows during a run, and leaves result folders that are not part of the project out
+  of `overview.tsv` and the summed tables (their files are kept).
+
 ### Git
 
 The history of the first machine was not kept: this repository started again with a snapshot commit (2026-10-31),
