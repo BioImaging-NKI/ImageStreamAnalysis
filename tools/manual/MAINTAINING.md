@@ -79,8 +79,7 @@ off).
 Small changes to the program whose screenshots are not retaken yet (the user prefers to retake them together, with
 a larger change). Retake them at the next refresh and empty this list.
 
-- 2026-11-05: the membrane card's profile axes give µm from the interface (0); the cell card's profile is labelled
-  log2 or SD. Affects `dash_membrane`, `dash_pairs`, `dash_cell` (if it shows a profile) and the live demo.
+- (none: all retaken on 2026-11-05)
 
 The logo: `python tools/make_logo.py` (the SVG is the drawing; the icon is rendered from it by Edge). It writes
 `templates/logo.svg` and `logo.ico` and `manual/images/logo.svg`; retake the screenshots after changing it.
