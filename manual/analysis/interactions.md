@@ -74,6 +74,12 @@ exported. The question it answers is therefore:
 > Within the exported multiplets of three or more cells, which cell types touch each other more, or less, than random
 > pairing of the cells in their events would give?
 
+A selection on **which cells an event holds**, such as a gate on tumor-marker and immune-marker intensity (both
+colors present), therefore does not bias the ratio: the ratio already takes each event's cells as given. A selection
+on **the contact itself** does: a gate on an interface or synapse feature, or on a shape that favors one arrangement
+of the cells, builds the preference for that contact into the export. Datasets compared with each other need the same
+gates.
+
 It does **not** answer how often immune cells bind tumor cells in the sample. That would need the cells that never
 touched another cell (the singlets) and the events without contacts, and these are not in the export. A conjugate
 frequency (for example "the percentage of T cells in conjugates") can only be computed from an export that keeps all

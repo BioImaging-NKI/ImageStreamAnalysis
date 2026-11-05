@@ -37,6 +37,10 @@ following:
   classified together (see [Pools](#pools) below); it starts as the name of the zip. *Condition* (for example control
   or treated) and *Replicate* (the donor or independent experiment the dataset comes from) are needed only if you want
   to compare conditions; see [Comparing conditions](../analysis/comparing-conditions.md#labeling-the-datasets).
+  *Combine as* joins datasets that are parts of one sample, for example two exports of the same tube: give them the
+  same name, and they are analysed as one dataset of that name (see
+  [Several exports of one sample](../analysis/input.md#several-exports-of-one-sample)). A part that gets the name of
+  an existing combination takes over its experiment, condition and replicate. Leave it empty for a dataset on its own.
 - **Channels**: the example images show a few objects in each channel. Give every channel that is needed a **name**,
   and tick its **role**:
 

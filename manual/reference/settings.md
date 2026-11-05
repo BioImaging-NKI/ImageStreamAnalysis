@@ -17,6 +17,8 @@ The input: the IDEAS export or the stack, the dataset, its channels and its pixe
 | `channels` | `[]` |  | IDEAS zip only: the channels to load, as IDEAS channel numbers (Ch&lt;N&gt;). Channels that have a role are always loaded. |
 | `channel_names` | `[]` |  | IDEAS zip only: the names of these channels, in the same order as in channels. |
 | `pixel_size` | (empty) |  | The pixel size in µm per pixel. It is required for an IDEAS zip, because the files in the zip do not record it. |
+| `parts` | `[]` |  | IDEAS zip only: more parts of the same sample (for example a second export of it), analysed together with the dataset above as one dataset. Each part is a table with image (the zip), dataset, channels and channel_names; its channels are matched by name. Each part keeps its own background. Empty: the dataset alone. |
+| `name` | (empty) |  | The name of the results (their folder, the dashboard). Empty means the name of the dataset (or the stack). |
 
 ## `[channels]`
 

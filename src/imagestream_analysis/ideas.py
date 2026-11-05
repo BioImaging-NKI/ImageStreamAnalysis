@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import math
 import re
 import struct
 import zipfile
@@ -165,6 +166,57 @@ def read_dataset(path: str | Path, dataset: str, channels: list[int], names: lis
     names = names or [f"Ch{c}" for c in channels]
     return EventStack(data, list(names), medians, pixel_size, dataset, n_total, list(channels),
                       np.array(objects, dtype=np.int64), extents)
+
+
+def combine(stacks: list[EventStack], name: str, source_names: list[str]) -> EventStack:
+    """Several parts of one sample (datasets with the same channels, in the same order) as one EventStack.
+
+    Each part keeps its own background: its pixels are shifted by (common - its own) background per channel, the
+    common background being the highest of the parts. Everything downstream subtracts the background, so the values
+    above background stay those of the part, and a part with a higher background is not taken as brighter. The
+    images are padded again to the largest size; the events keep their order (part after part), and `sources` says
+    which part each event comes from (object numbers may repeat between parts)."""
+    first = stacks[0]
+    for s in stacks[1:]:
+        if s.channel_names != first.channel_names:
+            raise ValueError(f"The parts of {name} have different channels: {first.channel_names} and "
+                             f"{s.channel_names}")
+        if not math.isclose(s.pixel_size, first.pixel_size):
+            raise ValueError(f"The parts of {name} have different pixel sizes: {first.pixel_size} and {s.pixel_size}")
+    medians = [max((s.medians or [0.0] * len(first.channel_names))[i] for s in stacks)
+               for i in range(len(first.channel_names))]
+    shape = (max(s.data.shape[2] for s in stacks), max(s.data.shape[3] for s in stacks))
+    dtype = first.data.dtype
+    integer = dtype.kind in "ui"
+    top = np.iinfo(dtype).max if integer else np.inf
+    total = sum(s.n_events for s in stacks)
+    data = np.empty((total, len(medians), *shape), dtype=dtype)
+    extents = np.empty((total, 4), dtype=np.int64)
+    at = 0
+    for s in stacks:
+        own = s.medians or [0.0] * len(medians)
+        shift = np.array([medians[i] - own[i] for i in range(len(medians))])
+        if integer:
+            shift = np.round(shift)
+        h, w = s.data.shape[2:]
+        y, x = (shape[0] - h) // 2, (shape[1] - w) // 2
+        fill = [round(m) if integer else m for m in medians]
+        for i in range(len(medians)):
+            data[at : at + s.n_events, i] = fill[i]
+            shifted = s.data[:, i].astype(np.float64 if not integer else np.int64) + shift[i]
+            if integer and shifted.max(initial=0) > top:
+                log.warning("%s: part %s saturates in channel %s after the background shift", name, s.name,
+                            first.channel_names[i])
+            data[at : at + s.n_events, i, y : y + h, x : x + w] = np.clip(shifted, 0, top).astype(dtype)
+        extents[at : at + s.n_events] = s.image_extents() + np.array([y, x, y, x])
+        at += s.n_events
+        log.info("%s: part %s, %d events, background %s", name, s.name, s.n_events,
+                 ", ".join(f"{n} {m:.4g}" for n, m in zip(first.channel_names, own, strict=True)))
+    ids = [s.object_ids if s.object_ids is not None else np.arange(1, s.n_events + 1) for s in stacks]
+    sources = np.concatenate([np.full(s.n_events, k, dtype=np.int64) for k, s in enumerate(stacks)])
+    return EventStack(data, list(first.channel_names), medians, first.pixel_size, name,
+                      sum(s.n_events_in_file for s in stacks), first.channel_numbers,
+                      np.concatenate(ids).astype(np.int64), extents, sources, list(source_names))
 
 
 def _png_url(image: np.ndarray) -> str:

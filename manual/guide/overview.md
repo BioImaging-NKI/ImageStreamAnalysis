@@ -16,6 +16,7 @@ means:
 
 | Column | Meaning |
 |---|---|
+| *parts* | only when a dataset is combined from several exports (*Combine as*): the number of exports joined |
 | *events*, *cells* | the number of events analyzed; the number of cells after the clean-up, including artefacts |
 | *immune cells*, *tumor cells*, *artefacts* | the number of cells of each type (see [Cell types](../analysis/classification.md)) |
 | *single tumor + single immune cell* | the number of events with exactly one tumor cell and one immune cell that touch |

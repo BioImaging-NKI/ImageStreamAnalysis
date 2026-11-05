@@ -82,7 +82,12 @@ experiment = 'Example'
 include = true
 condition = 'control'      # optional, to compare conditions: the condition
 replicate = 'Donor 1'      # and the independent unit (donor) it comes from
+combine = 'Donor 1'        # optional: parts of one sample (several exports) get the same name: analysed as one
 ```
+
+Datasets of one experiment with the same `combine` name are analysed as one dataset of that name (see
+[Several exports of one sample](../analysis/input.md#several-exports-of-one-sample)). In the settings file of that
+dataset, the other parts are listed under `input.parts`.
 
 The reference condition, with which the other conditions are compared, goes in a section of its own. If it is empty
 or absent, the first condition in the file is used:

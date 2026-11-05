@@ -345,11 +345,74 @@ def test_overview_marks_the_rows_of_a_run(ideas_zip, monkeypatch):
 
 
 def test_object_ids_follow_the_frames():
+    from imagestream_analysis.io import EventStack
     from imagestream_analysis.pipeline import _with_object_ids
 
     t = pd.DataFrame({"Frame": [2, 1, 3]})
-    assert _with_object_ids(t, np.array([7, 9, 11]))["Object ID"].tolist() == [9, 7, 11]
-    assert "Object ID" not in _with_object_ids(t, None)
+    stack = EventStack(np.zeros((3, 1, 2, 2), np.uint16), ["a"], [0.0], 1.0, "x", 3, object_ids=np.array([7, 9, 11]))
+    assert _with_object_ids(t, stack)["Object ID"].tolist() == [9, 7, 11]
+    assert "Source" not in _with_object_ids(t, stack)
+    stack.sources, stack.source_names = np.array([0, 0, 1]), ["one", "two"]
+    assert _with_object_ids(t, stack)["Source"].tolist() == ["one", "one", "two"]
+    stack.object_ids = None
+    assert "Object ID" not in _with_object_ids(t, stack)
+
+
+def combined_project(ideas_zip, offset=30):
+    """Two exports of one sample: the synthetic zip, and a second zip with the same events, numbered differently,
+    with other channel numbers and a background raised by `offset` in every channel."""
+    data = ideas_zip["data"][ideas_zip["order"]]  # object order, as read
+    second = write_ideas_zip(ideas_zip["tmp"] / "export 2.zip", data + np.uint16(offset), list(range(1, 11)),
+                             [2, 4, 7, 10], dataset="Tube 1 b")
+    labelmap = ideas_zip["tmp"] / "labels twice.tif"
+    labels = ideas_zip["labels"][ideas_zip["order"]]
+    import tifffile
+
+    tifffile.imwrite(labelmap, np.concatenate([labels, labels]).astype(np.uint16), imagej=True,
+                     metadata={"axes": "TYX"})
+    p = make_project(ideas_zip, ideas_zip["tmp"] / "project")
+    p.settings.segmentation.labelmap_file = labelmap
+    p.zips[0].datasets[0].combine = "Tube 1"
+    p.zips.append(ZipEntry(second, 0.5, [2, 4, 7, 10], list(NAMES), {},
+                           [DatasetEntry("Tube 1 b", "Experiment 1", combine="Tube 1")]))
+    return p
+
+
+def test_parts_of_one_sample_are_analysed_as_one_dataset(ideas_zip):
+    p = combined_project(ideas_zip)
+    assert p.problems() == []
+    assert Project.load(p.save().parent).zips == p.zips  # combine is saved
+    samples = p.samples()
+    assert len(samples) == 1 and samples[0][1].name == "Tube 1" and len(samples[0][2].input.parts) == 1
+    table = run_project(p.folder)
+    assert len(table) == 1
+    row = table.iloc[0]
+    assert row["dataset"] == "Tube 1" and row["parts"] == 2 and row["zip"] == "export.zip + export 2.zip"
+    # the second part only has a higher background: everything above background, and so every result, is the same
+    assert row["cells"] == 40 and row["immune cells"] == 20 and row["with interface (MOI's name)"] == 20
+    out = p.folder / "Experiment 1" / "Tube 1"
+    cells = pd.read_csv(out / f"{CELL_TABLE}.tsv", sep="	")
+    assert cells["Source"].value_counts().to_dict() == {"export / Sample A": 20, "export 2 / Tube 1 b": 20}
+    a, b = (cells[cells["Source"] == s].sort_values(["Frame", "Label"]) for s in sorted(set(cells["Source"])))
+    ids = ("Source", "Object ID", "Frame", "index")  # and the labels, which count on in the second part
+    numeric = [c for c in cells.columns if c not in ids and "label" not in c.lower()
+               and pd.api.types.is_numeric_dtype(cells[c])]
+    assert np.allclose(a[numeric].to_numpy(float), b[numeric].to_numpy(float), equal_nan=True)
+    dashboard = (out / "dashboard.html").read_text(encoding="utf-8")
+    assert '"sources":["export / Sample A","export 2 / Tube 1 b"]' in dashboard
+
+
+def test_parts_that_do_not_fit_together(ideas_zip):
+    p = combined_project(ideas_zip)
+    p.zips[1].datasets[0].replicate = "donor 2"
+    p.zips[1].pixel_size = 0.33
+    p.zips[1].channel_names[3] = "Tumour"
+    msgs = " ".join(p.problems())
+    assert "different replicates" in msgs and "different pixel sizes" in msgs and "no channel named Tumor" in msgs
+    p = combined_project(ideas_zip)
+    p.zips[1].datasets[0].combine = "Sample A"  # the name of a dataset on its own
+    p.zips[0].datasets[0].combine = ""
+    assert any("already has this name" in m for m in p.problems())
 
 
 @pytest.mark.parametrize("value", [None, ""])

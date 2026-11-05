@@ -20,7 +20,10 @@ In the dataset tables of the import page (step 2), give each dataset that should
   Datasets without a replicate are left out, and the overview lists them.
 
 Several datasets with the same condition and the same replicate (for example two tubes from one donor) are pooled
-into one. They are technical repeats, not replicates: only independent units count as replicates.
+into one. They are technical repeats, not replicates: only independent units count as replicates. If they are parts
+of one sample (the same tube, exported twice), you can also join them into one dataset with *Combine as* (see
+[Several exports of one sample](input.md#several-exports-of-one-sample)): then every result of that dataset, not only
+the comparison, uses all its cells.
 
 You can set or change the labels after the analysis. The overview updates at once, and *Save settings* writes
 `condition comparison.tsv` again. On the command line, `imagestream-cli overview <project folder>` does the same.

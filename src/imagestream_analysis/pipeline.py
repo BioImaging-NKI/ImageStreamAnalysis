@@ -247,17 +247,22 @@ def marker_result(cells: pd.DataFrame, number: int, column: str, name: str, prof
     return out
 
 
-def _with_object_ids(table: pd.DataFrame, ids: np.ndarray | None) -> pd.DataFrame:
-    """Add the IDEAS object number of each row's event (column 'Frame', 1-based) at the end, when known."""
+def _with_object_ids(table: pd.DataFrame, stack: EventStack) -> pd.DataFrame:
+    """Add the IDEAS object number of each row's event (column 'Frame', 1-based) at the end, when known; for a
+    sample read in parts also the part ('Source'), since object numbers may repeat between parts."""
+    ids = stack.object_ids
     if ids is None or "Frame" not in table:
         return table
-    return table.assign(**{"Object ID": ids[table["Frame"].to_numpy(dtype=int) - 1]})
+    frames = table["Frame"].to_numpy(dtype=int) - 1
+    table = table.assign(**{"Object ID": ids[frames]})
+    if stack.sources is not None and stack.source_names:
+        table = table.assign(Source=np.array(stack.source_names, dtype=object)[stack.sources[frames]])
+    return table
 
 
 def save(result: Result, settings: Settings) -> None:
     out = result.out_dir
-    ids = result.stack.object_ids
-    save_table(_with_object_ids(classification_output(result.cells), ids), out / f"{CELL_TABLE}.tsv")
+    save_table(_with_object_ids(classification_output(result.cells), result.stack), out / f"{CELL_TABLE}.tsv")
     save_table(result.thresholds, out / f"{THRESHOLDS_TABLE}.tsv")
     save_table(result.contacts, out / f"{CONTACTS_TABLE}.tsv")
     if len(result.subsets):
@@ -265,8 +270,8 @@ def save(result: Result, settings: Settings) -> None:
     if len(result.pairs_table):
         save_table(result.pairs_table, out / f"{PAIRS_TABLE}.tsv")
     save_table(result.multiplets, out / f"{MULTIPLETS_TABLE}.tsv")
-    save_table(_with_object_ids(result.events, ids), out / f"{EVENT_TABLE}.tsv")
-    d = _with_object_ids(result.doublets, ids)
+    save_table(_with_object_ids(result.events, result.stack), out / f"{EVENT_TABLE}.tsv")
+    d = _with_object_ids(result.doublets, result.stack)
     d.insert(0, " ", np.arange(len(d)))  # the macro shows the row numbers in this table
     save_table(d, out / f"{DOUBLETS_TABLE}.tsv")
     save_stack(result.labels, out / "labelmap_final.tif", result.stack.pixel_size)
@@ -283,7 +288,7 @@ def save(result: Result, settings: Settings) -> None:
                                                                "Control windows", "membrane_profiles_normalized")):
                     f.unlink()
             continue
-        save_table(_with_object_ids(mem.table, ids), out / f"{MEMBRANE_TABLE}{sfx}.tsv")
+        save_table(_with_object_ids(mem.table, result.stack), out / f"{MEMBRANE_TABLE}{sfx}.tsv")
         save_table(mem.average, out / f"{AVERAGE_PROFILE}{sfx}.tsv")
         save_table(mem.histogram_interface, out / f"Histogram_interface_stdDevs_above_mean{sfx}.tsv")
         save_table(mem.histogram_control, out / f"Histogram_control_stdDevs_above_mean{sfx}.tsv")
@@ -328,7 +333,34 @@ def load(settings: Settings) -> EventStack:
     channels = sorted(set(inp.channels) | set(role_channels(settings)))
     name_of = dict(zip(inp.channels, inp.channel_names, strict=False))
     names = [name_of.get(c) or f"Ch{c}" for c in channels]
-    return ideas.read_dataset(path, dataset, channels, names, inp.pixel_size, inp.max_events)
+    stack = ideas.read_dataset(path, dataset, channels, names, inp.pixel_size, inp.max_events)
+    if not inp.parts:
+        if inp.name:
+            stack.name = inp.name
+        return stack
+    stacks, labels = [stack], [_part_label(path, dataset)]
+    for part in inp.parts:  # the other parts of the sample: the same channels, found by name
+        left = None if inp.max_events is None else inp.max_events - sum(s.n_events for s in stacks)
+        if left is not None and left <= 0:
+            break
+        p_path, p_dataset = Path(str(part["image"])), str(part.get("dataset", ""))
+        number_of = {str(n): int(c) for c, n in zip(part.get("channels", []), part.get("channel_names", []),
+                                                    strict=False)}
+        missing = [n for n in names if n not in number_of and not n.startswith("Ch")]
+        if missing:
+            raise ValueError(f"{p_path.name} / {p_dataset}: no channel named {', '.join(missing)}, which "
+                             f"{path.name} / {dataset} has (the parts of a sample need the same channels)")
+        numbers = [number_of.get(n, int(n[2:]) if n.startswith("Ch") and n[2:].isdigit() else -1) for n in names]
+        stacks.append(ideas.read_dataset(p_path, p_dataset, numbers, names, inp.pixel_size, left))
+        labels.append(_part_label(p_path, p_dataset))
+    combined = ideas.combine(stacks, inp.name or dataset, labels)
+    combined.channel_numbers = list(channels)
+    return combined
+
+
+def _part_label(path: Path, dataset: str) -> str:
+    """How a part is named in the tables and the dashboard: the zip's name without .zip, and the dataset."""
+    return f"{path.stem} / {dataset}"
 
 
 def subtype_marker_names(settings: Settings, stack: EventStack) -> list[str]:

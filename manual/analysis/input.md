@@ -32,6 +32,31 @@ analysis sees no other objects. This matters when you interpret the
     The extent of each object's own image is kept, so that cells cut by the edge of their image can be detected (see
     [Segmentation](segmentation.md#cells-at-the-image-edge)).
 
+## Several exports of one sample
+
+Sometimes one sample ends up in more than one export: it was acquired in two runs, or exported in two parts. These
+parts are not replicates; together they are one dataset. Give them the same name under *Combine as* on the
+[import page](../guide/import-page.md#2-ideas-exports) (they may come from different zips), and they are read and
+analysed as **one dataset** of that name: one result folder, one dashboard and one row in the overview, with every
+number computed on all their cells.
+
+- The parts need the same channel names and the same pixel size, and they belong to one experiment, condition and
+  replicate. The import page lists what does not fit, and the run does not start until it is fixed.
+- Each part keeps its own **background**: a second acquisition can have a slightly different background, and every
+  event is corrected with the background of its own part.
+- Object numbers can repeat between parts, so the tables get a column `Source` (the zip and dataset of each event)
+  next to `Object ID`. In the dashboard, the *Part* menu shows the events of one part at a time, so you can check
+  that the parts look alike.
+
+??? note "Technical: how the parts are joined"
+
+    Each part is read as described above, with its own background per channel. The events of the parts follow each
+    other (part after part, each in order of object number). The pixels of each part are shifted by the difference
+    between the highest background of the parts and its own, so that all parts share one background. Every
+    measurement subtracts the background, so the values above background stay those of the part. Segmentation,
+    classification and every other step then see one dataset. `input.max_events` counts the events of all parts
+    together, starting with the first part.
+
 ## ImageStreamCombiner stacks
 
 A `.tif` file made by [ImageStreamCombiner](https://github.com/BioImaging-NKI/ImageStreamCombiner), with one frame per

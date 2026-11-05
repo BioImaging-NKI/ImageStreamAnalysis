@@ -66,7 +66,7 @@ def project_to_json(p: Project) -> dict[str, Any]:
             "zips": [{"path": str(z.path), "pixel_size": z.pixel_size, "channels": z.channels,
                       "channel_names": z.channel_names, "roles": z.roles,
                       "datasets": [{"name": d.name, "experiment": d.experiment, "include": d.include,
-                                    "condition": d.condition, "replicate": d.replicate}
+                                    "condition": d.condition, "replicate": d.replicate, "combine": d.combine}
                                    for d in z.datasets]} for z in p.zips],
             "reference": p.reference}
 

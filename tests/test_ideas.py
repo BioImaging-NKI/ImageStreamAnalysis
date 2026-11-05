@@ -111,3 +111,26 @@ def test_the_plain_tiff_reader_gives_what_tifffile_gives(dtype, byteorder):
     packed = io.BytesIO()
     tifffile.imwrite(packed, image, compression="zlib")
     assert _plain_tiff(packed.getvalue()) is None  # compressed: left to tifffile
+
+
+def test_parts_of_a_sample_keep_their_own_background(tmp_path):
+    """ideas.combine: a second part with a higher background and smaller images is shifted to the common
+    background, so that the values above background stay its own."""
+    data, _ = make_events(3)
+    a = write_ideas_zip(tmp_path / "a.zip", data, [1, 2, 3], [1, 2, 3, 4])
+    b = write_ideas_zip(tmp_path / "b.zip", data[:2] + np.uint16(40), [1, 2], [1, 2, 3, 4], shrink=(0, 1))
+    sa = ideas.read_dataset(a, "Sample A", [1, 2], ["BF", "M"])
+    sb = ideas.read_dataset(b, "Sample A", [1, 2], ["BF", "M"])
+    both = ideas.combine([sa, sb], "both", ["a", "b"])
+    assert both.n_events == 5 and both.name == "both" and both.object_ids.tolist() == [1, 2, 3, 1, 2]
+    assert both.sources.tolist() == [0, 0, 0, 1, 1] and both.source_names == ["a", "b"]
+    assert both.medians == [max(x, y) for x, y in zip(sa.medians, sb.medians, strict=True)]
+    for i in range(2):  # above background: unchanged in each part
+        above_a = both.data[:3, i].astype(float) - both.medians[i]
+        assert np.allclose(above_a, sa.data[:, i].astype(float) - sa.medians[i], atol=0.5)
+        y0, x0, y1, x1 = both.extents[3]
+        above_b = both.data[3, i, y0:y1, x0:x1].astype(float) - both.medians[i]
+        assert np.allclose(above_b, sb.data[0, i].astype(float) - sb.medians[i], atol=0.5)
+    assert (both.extents[3] == [5, 5, data.shape[2] - 5, data.shape[3] - 5]).all()
+    with pytest.raises(ValueError, match="different channels"):
+        ideas.combine([sa, ideas.read_dataset(b, "Sample A", [1, 3], ["BF", "X"])], "x", ["a", "b"])

@@ -24,6 +24,9 @@ pairs, artefacts and cells with an interface. The filter row below the header ap
 - **Events**: shows all events, the events with immune cells and tumor cells, the events with one tumor cell and one
   immune cell, the events with an interface, or the events with touching cells. When you choose a contact in the
   [interaction matrix](#interactions), a chip for it is added here; click ✕ to remove it.
+- **Part**: only for a dataset combined from several exports (see
+  [Several exports of one sample](../analysis/input.md#several-exports-of-one-sample)): all parts, or the events of
+  one part. The event images then also show the part number.
 - **Sort**: sets the order of the events.
 - **Size**: sets the size of the event images. You can also hold <kbd>Ctrl</kbd> and scroll over the gallery. Small
   event images show only their event number; hover over one to see its IDEAS object number.

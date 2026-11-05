@@ -46,6 +46,12 @@ class InputSettings:
     channel_names: list[str] = field(default_factory=list)
     # The pixel size in µm per pixel. It is required for an IDEAS zip, because the files in the zip do not record it.
     pixel_size: float | None = None
+    # IDEAS zip only: more parts of the same sample (for example a second export of it), analysed together with the
+    # dataset above as one dataset. Each part is a table with image (the zip), dataset, channels and channel_names;
+    # its channels are matched by name. Each part keeps its own background. Empty: the dataset alone.
+    parts: list[dict[str, Any]] = field(default_factory=list)
+    # The name of the results (their folder, the dashboard). Empty means the name of the dataset (or the stack).
+    name: str = ""
 
 
 @dataclass
@@ -305,6 +311,10 @@ class Settings:
                 value = getattr(section, f.name)
                 if isinstance(value, Path) and not value.is_absolute() and str(value) not in ("", "."):
                     setattr(section, f.name, base / value)
+        for part in self.input.parts:
+            image = Path(str(part.get("image", "")))
+            if str(image) not in ("", ".") and not image.is_absolute():
+                part["image"] = str(base / image)
 
     def to_dict(self) -> dict[str, Any]:
         plain: dict[str, Any] = _plain(asdict(self))

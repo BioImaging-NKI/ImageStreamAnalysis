@@ -415,6 +415,7 @@ function renderZip(z) {
     el("th", { class: "num" }, "Complete"), el("th", {}, "Experiment"),
     el("th", { title: "control, treated, …: compared across the replicates in the overview (empty: not compared)" }, "Condition"),
     el("th", { title: "the independent unit the dataset comes from: a donor, an independent experiment. Give both conditions of a donor the same replicate" }, "Replicate"),
+    el("th", { title: "Parts of one sample (for example two exports of the same tube): give them the same name here, and they are analysed as one dataset of that name, with one dashboard and one overview row. Each part keeps its own background. Empty: the dataset on its own" }, "Combine as"),
     el("th", {}, "")));
   for (const d of z.datasets) {
     const di = info.datasets.find(x => x.name === d.name) || {};
@@ -425,10 +426,18 @@ function renderZip(z) {
       el("td", {}, el("input", { type: "text", title: "Datasets with the same experiment are classified together (with Classify together: experiment) and shown together in the overview; the results go to a folder of this name", value: d.experiment, onchange: e => { d.experiment = e.target.value.trim(); refreshOverview(); } })),
       ["condition", "replicate"].map(k => el("td", {}, el("input", { type: "text", size: 10, value: d[k] || "",
         onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } }))),
-      el("td", { class: "links" }, withIcon(el("button", { class: "small run-one", "data-name": d.name, "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
-        title: runOneTitle(d.name), onclick: () => run([d.name]) }, "Run"), "run"))));
+      el("td", {}, el("input", { type: "text", size: 12, value: d.combine || "", list: "combine-names", placeholder: "on its own",
+        title: "Give the parts of one sample the same name: they are analysed as one dataset of that name",
+        onchange: e => { combineAs(d, e.target.value.trim()); renderZips(); renderProblems(); refreshOverview(); } })),
+      el("td", { class: "links" }, withIcon(el("button", { class: "small run-one", "data-name": d.combine || d.name, "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
+        title: runOneTitle(d.combine || d.name), onclick: () => run([d.combine || d.name]) }, "Run"), "run"))));
   }
   card.append(el("div", { class: "scroll" }, dt));
+  const names = [...new Set(state.zips.flatMap(x => x.datasets).map(x => x.combine).filter(Boolean))];
+  card.append(el("datalist", { id: "combine-names" }, names.map(n => el("option", { value: n }))));
+  const groups = combinedGroups().filter(g => g.parts.some(p => z.datasets.includes(p)));
+  if (groups.length) card.append(el("p", { class: "hint" }, groups.map(g =>
+    `${g.name}: ${g.parts.length} part${g.parts.length > 1 ? "s" : ""} (${g.parts.map(p => p.name).join(", ")}), analysed as one dataset`).join("; ")));
 
   // channels
   card.append(el("h4", { "data-help": "analysis/input#channels-roles-and-pixel-size" }, "Channels (examples from the first dataset)"));
@@ -706,10 +715,27 @@ async function save() {
     return r;
   } catch (e) { toast(e.message); }
 }
-function runOneTitle(name) {  // what the run button of one dataset runs
-  const d = state.zips.flatMap(z => z.datasets).find(x => x.name === name);
+// parts of one sample: datasets of an experiment with the same "Combine as" name, analysed as one dataset of that name
+function combinedGroups() {
+  const groups = new Map();
+  for (const d of state.zips.flatMap(z => z.datasets)) if (d.include && d.combine) {
+    const key = JSON.stringify([d.experiment, d.combine]);
+    if (!groups.has(key)) groups.set(key, { name: d.combine, experiment: d.experiment, parts: [] });
+    groups.get(key).parts.push(d);
+  }
+  return [...groups.values()];
+}
+// a new "Combine as" name: the parts of one sample share its experiment, condition and replicate (taken from the
+// first part that has the name already)
+function combineAs(d, name) {
+  d.combine = name;
+  const first = name && state.zips.flatMap(z => z.datasets).find(x => x !== d && x.combine === name);
+  if (first) Object.assign(d, { experiment: first.experiment, condition: first.condition || "", replicate: first.replicate || "", include: true });
+}
+function runOneTitle(name) {  // what the run button of one dataset (or of a sample combined from parts) runs
+  const d = state.zips.flatMap(z => z.datasets).find(x => (x.combine || x.name) === name);
   if (state.settings.classification.pool === "experiment" && d) {
-    const others = state.zips.flatMap(z => z.datasets).filter(x => x.include && x.experiment === d.experiment && x.name !== name);
+    const others = state.zips.flatMap(z => z.datasets).filter(x => x.include && x.experiment === d.experiment && (x.combine || x.name) !== name);
     if (others.length) return `Run this dataset again, with the other ${others.length} dataset(s) of experiment '${d.experiment}': they are classified together`;
   }
   return "Run only this dataset (again); the others keep their results";
@@ -805,6 +831,7 @@ function showRun() {
 const NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 });
 // what each column of the overview means (hover texts; the same as in the manual, guide/overview.md)
 const COLUMN_HELP = {
+  parts: "the number of datasets (exports) combined into this one (Combine as, in the dataset tables)",
   "events": "events (objects) analysed", "cells": "cells after the clean-up, artefacts included",
   "artefacts": "detections positive in too many subtype markers: not counted as cells of a type",
   "single tumor + single immune cell": "events with exactly one tumor and one immune cell that touch",
@@ -850,7 +877,7 @@ async function refreshOverview() {
     if (seq === overviewSeq) box.replaceChildren(el("p", { class: "error" }, e.message)); return null; }
   if (seq !== overviewSeq) return o;
   if (!o.rows.length) { box.replaceChildren(el("p", { class: "hint" }, o.busy ? "Running: no results yet." : "No results yet.")); return o; }
-  const cols = o.columns.filter(c => !["zip", "folder", "seconds", "status"].includes(c));
+  const cols = o.columns.filter(c => !["zip", "folder", "seconds", "status"].includes(c) && (c !== "parts" || o.rows.some(r => r.parts > 1)));
   const others = o.rows.filter(r => r.status === "not in project");
   const shown = o.rows.filter(r => showOthers || r.status !== "not in project"), withState = shown.some(r => ROW_STATE[r.status]);
   const isNum = c => o.rows.some(r => typeof r[c] === "number");

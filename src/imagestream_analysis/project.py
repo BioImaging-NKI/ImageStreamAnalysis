@@ -21,6 +21,11 @@ their results. Stored as `project.toml` in the project's output folder; the resu
     include = true
     condition = 'treated'                                optional: the comparison of conditions
     replicate = 'donor 1'                                (comparison.py); [comparison] reference = 'control'
+    combine = 'sample A'                                 optional: parts of one sample (several exports of it)
+
+Datasets of one experiment with the same `combine` label are parts of one sample: they are read and analysed as one
+dataset of that name (one result folder, one dashboard, one overview row), each part with its own background. They
+need the same channel names, pixel size, condition and replicate.
 
 The roles go by name, so a zip whose channels are numbered differently needs only its own names. A zip may still
 have `roles = { tumor = 9, ... }` (channel numbers) that override the panel: projects written before 2026-10-31
@@ -62,6 +67,7 @@ class DatasetEntry:
     include: bool = True
     condition: str = ""  # control, treated, ...: compared across the replicates (comparison.py)
     replicate: str = ""  # the independent unit: a donor, an independent experiment
+    combine: str = ""  # parts of one sample: datasets of an experiment with the same label are analysed as one
 
 
 @dataclass
@@ -82,11 +88,20 @@ class Project:
     reference: str = ""  # the condition the others are compared with (empty: the first one)
 
     def samples(self) -> list[tuple[ZipEntry, DatasetEntry, Settings]]:
-        """The included datasets with their complete settings."""
+        """The included datasets with their complete settings. Datasets combined into one (the same experiment and
+        `combine` label) are one sample: an entry named after the label, the first dataset with the others as
+        input.parts."""
         out = []
+        combined: dict[tuple[str, str], Settings] = {}
         for z in self.zips:
             for d in z.datasets:
                 if not d.include:
+                    continue
+                key = (d.experiment or Path(z.path).stem, d.combine)
+                if d.combine and key in combined:
+                    combined[key].input.parts.append({"image": str(z.path), "dataset": d.name,
+                                                      "channels": list(z.channels),
+                                                      "channel_names": list(z.channel_names)})
                     continue
                 s = copy.deepcopy(self.settings)
                 s.input.image = Path(z.path)
@@ -96,8 +111,42 @@ class Project:
                 s.input.channel_names = list(z.channel_names)
                 s.input.output = self.folder / safe_name(d.experiment or Path(z.path).stem)
                 s.channels = self.channels_of(z)
+                if d.combine:
+                    s.input.name = d.combine
+                    combined[key] = s
+                    d = DatasetEntry(d.combine, d.experiment, True, d.condition, d.replicate, d.combine)
                 out.append((z, d, s))
         return out
+
+    def combine_problems(self) -> list[str]:
+        """Datasets combined into one that do not fit together, or whose name clashes with another dataset."""
+        msgs = []
+        groups: dict[tuple[str, str], list[tuple[ZipEntry, DatasetEntry]]] = {}
+        alone: dict[tuple[str, str], str] = {}
+        for z in self.zips:
+            for d in z.datasets:
+                if d.include:
+                    experiment = d.experiment or Path(z.path).stem
+                    if d.combine:
+                        groups.setdefault((experiment, d.combine), []).append((z, d))
+                    else:
+                        alone[(experiment, d.name)] = d.name
+        for (experiment, label), members in groups.items():
+            if (experiment, label) in alone:
+                msgs.append(f"Combine as '{label}': a dataset of experiment '{experiment}' already has this name")
+            for what in ("condition", "replicate"):
+                if len({getattr(d, what) for _, d in members}) > 1:
+                    msgs.append(f"Combine as '{label}': the parts have different {what}s (one sample has one)")
+            if len({z.pixel_size for z, _ in members}) > 1:
+                msgs.append(f"Combine as '{label}': the parts have different pixel sizes")
+            first = members[0][0]
+            need = {n for n in first.channel_names if n}
+            for z, d in members[1:]:
+                lacking = sorted(need - set(z.channel_names))
+                if lacking:
+                    msgs.append(f"Combine as '{label}': {Path(z.path).name} / {d.name} has no channel named "
+                                f"{', '.join(lacking)}")
+        return msgs
 
     def channels_of(self, z: ZipEntry) -> ChannelSettings:
         """The channel settings of a zip, by IDEAS channel number: the panel with the zip's overrides, the names
@@ -114,6 +163,7 @@ class Project:
             msgs.append("No datasets selected")
         if not self.settings.channels.immune:
             msgs.append("No immune-cell marker")
+        msgs += self.combine_problems()
         if self.settings.membrane.analysis and not self.settings.channels.has_marker_of_interest:
             msgs.append("The membrane analysis needs a marker of interest (or switch it off)")
         for z in self.zips:
@@ -148,8 +198,8 @@ class Project:
             for d in z.datasets:
                 lines += ["[[zip.dataset]]", f"name = {_toml_value(d.name)}",
                           f"experiment = {_toml_value(d.experiment)}", f"include = {_toml_value(d.include)}"]
-                lines += [f"{k} = {_toml_value(v)}" for k, v in (("condition", d.condition),
-                                                                  ("replicate", d.replicate)) if v]
+                lines += [f"{k} = {_toml_value(v)}" for k, v in (("condition", d.condition), ("replicate", d.replicate),
+                                                                  ("combine", d.combine)) if v]
                 lines.append("")
         return "\n".join(lines)
 
@@ -174,7 +224,8 @@ class Project:
                          [str(n) for n in z.get("channel_names", [])],
                          ChannelSettings.migrate(dict(z.get("roles", {}))),
                          [DatasetEntry(d["name"], d.get("experiment", ""), bool(d.get("include", True)),
-                                       str(d.get("condition", "")).strip(), str(d.get("replicate", "")).strip())
+                                       str(d.get("condition", "")).strip(), str(d.get("replicate", "")).strip(),
+                                       str(d.get("combine", "")).strip())
                           for d in z.get("dataset", [])])
                  for z in data.get("zip", [])]
         sections = {k: v for k, v in data.items() if k not in ("zip", "comparison")}
@@ -345,7 +396,7 @@ def _label(z: ZipEntry, d: DatasetEntry) -> str:
 
 def _failed(z: ZipEntry, d: DatasetEntry, settings: Settings, e: Exception) -> None:
     log.exception("%s / %s failed: %s", Path(z.path).name, d.name, e)
-    _write_info(Path(settings.input.output) / d.name, {"error": str(e)}, z, d)
+    _write_info(Path(settings.input.output) / d.name, {"error": str(e)}, z, d, settings)
 
 
 def _run_each(samples: list[Sample]) -> None:
@@ -360,7 +411,7 @@ def _run_each(samples: list[Sample]) -> None:
             _failed(z, d, settings, e)
             continue
         _write_info(result.out_dir, summarize(result, settings) | {"seconds": round(time.perf_counter() - t0, 1)},
-                    z, d)
+                    z, d, settings)
 
 
 def _run_pooled(samples: list[Sample]) -> None:
@@ -411,12 +462,16 @@ def _run_pooled(samples: list[Sample]) -> None:
             except Exception as e:  # noqa: BLE001 - one bad dataset must not stop the others
                 _failed(z, d, settings, e)
                 continue
-            _write_info(out, summarize(result, settings) | {"seconds": round(total, 1)}, z, d)
+            _write_info(out, summarize(result, settings) | {"seconds": round(total, 1)}, z, d, settings)
 
 
-def _write_info(folder: Path, summary: dict[str, Any], z: ZipEntry, d: DatasetEntry) -> None:
+def _write_info(folder: Path, summary: dict[str, Any], z: ZipEntry, d: DatasetEntry, settings: Settings) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    info = {"experiment": d.experiment, "zip": str(z.path), "dataset": d.name, "summary": summary}
+    info: dict[str, Any] = {"experiment": d.experiment, "zip": str(z.path), "dataset": d.name, "summary": summary}
+    if settings.input.parts:  # a sample read in parts: the zip and dataset of each
+        info["parts"] = [{"zip": str(settings.input.image), "dataset": settings.input.dataset},
+                         *({"zip": str(p.get("image", "")), "dataset": str(p.get("dataset", ""))}
+                           for p in settings.input.parts)]
     (folder / "summary.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
 
 
@@ -426,8 +481,10 @@ def overview(folder: str | Path) -> pd.DataFrame:
     rows = []
     for f in sorted(folder.glob("*/*/summary.json")):
         info = json.loads(f.read_text(encoding="utf-8"))
+        zips = [Path(p["zip"]).name for p in info.get("parts", [])] or [Path(info.get("zip", "")).name]
         rows.append({"experiment": info.get("experiment", ""), "dataset": info.get("dataset", ""),
-                     "zip": Path(info.get("zip", "")).name, "folder": str(f.parent.relative_to(folder))}
+                     "zip": " + ".join(dict.fromkeys(zips)), "parts": len(info.get("parts", [])) or 1,
+                     "folder": str(f.parent.relative_to(folder))}
                     | info.get("summary", {}))
     table = pd.DataFrame(rows)
     # the immune subtypes: 0 where a dataset has none, in one order (negative, then by number of markers, by name)

@@ -44,6 +44,16 @@ Immune cell`; `cell_of_interest` "T cell" → "Immune cell". Old settings files 
 - Background per channel and padding as the Combiner: the median over the objects of their median; every image is
   centred in the size of the largest one, padded with that background. Verified on the test data: the same
   backgrounds, size and pixels as the Combiner stack.
+- **Parts of one sample** (the user, 2026-11-05): datasets of one experiment with the same `combine` label in
+  `project.toml` (*Combine as* on the import page; they may come from different zips) are read as one dataset of that
+  name: `input.name`, and the other parts in `input.parts` (zip, dataset, channels and names; channels matched by
+  name). `ideas.combine` joins the events part after part, pads them to the largest size, and shifts each part's
+  pixels by (highest background of the parts − its own) per channel, so each part keeps its own background (every
+  measurement subtracts it). `EventStack.sources` / `source_names`: the tables get `Source` beside `Object ID`
+  (object numbers can repeat), the dashboard a *Part* filter, the overview a `parts` column. The parts must share
+  channel names, pixel size, condition and replicate (`Project.combine_problems`). Reason: two exports of one tube
+  were labelled as replicates, and per-dataset results (membrane location, subset preference, histograms) came out
+  twice on half the cells. Before, such datasets were only pooled in the comparison of conditions.
 
 ## 2. Marker normalization (`normalizeImage`, lines 1145-1160) ✅
 

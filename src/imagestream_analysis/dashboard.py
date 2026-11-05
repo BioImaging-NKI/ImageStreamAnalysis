@@ -199,6 +199,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "tile": [w, h],
         "n_events": t,
         "n_events_in_file": stack.n_events_in_file,
+        "sources": stack.source_names or [],
         "sheet": [SHEET_COLUMNS, SHEET_ROWS],
         "files": FILES,
         "channels": channels,
@@ -206,6 +207,7 @@ def build_data(result: Result, settings: Settings, channels: list[dict[str, Any]
         "artefact_min_positive": settings.classification.artefact_min_positive,
         "events": {
             "object": _column(ids) if ids is not None else None,
+            "source": _column(stack.sources) if stack.sources is not None else None,  # the part of each event
             "t_cells": _column(ev["Immune cells"]), "tumor_cells": _column(ev["Tumor cells"]),
             "interface": _column(ev["Tumor-immune interface"].astype(int)),
             # the macro's per-event measure, for every marker of interest (interfaces.event_table)

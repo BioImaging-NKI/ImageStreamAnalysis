@@ -16,7 +16,8 @@
 
 The tables are tab-separated text files (`.tsv`) with 3 decimals. `NaN` marks a value that does not exist, such as the
 mean of no values. For an IDEAS export, the tables with one row per cell or per event end with the column `Object ID`,
-which holds the IDEAS object number.
+which holds the IDEAS object number. A dataset combined from several exports also has the column `Source`: the zip
+and dataset of the event (object numbers can repeat between parts).
 
 | File | Contents |
 |---|---|
@@ -63,6 +64,7 @@ without the marker; the overview still reads such folders, but run them again to
 | `Subtype` | the immune subtype (for example "A+ B+" or "negative"); empty for other cells |
 | `Neighbours`, `Touching (labels)`, `Neighbour types` | the cells it touches: how many, which ones (by label), and their types |
 | `Object ID` | the IDEAS object number of the event |
+| `Source` | only for a dataset combined from several exports: the part (zip / dataset) of the event |
 
 ??? note "Technical: names that differ from the Fiji macro"
 

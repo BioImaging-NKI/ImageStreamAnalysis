@@ -242,6 +242,12 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - Overview rows of the import page: *Dashboard*, *Folder* and *Run again* are small buttons with icons.
 - Tooltips: every setting on the import page shows its comment from `config.py` (`config.setting_help`); new controls
   get a `title`. The manual is written in plain English, with the intricacies in *Technical* notes.
+- **Parts of one sample** (late 2026-11-05): *Combine as* (`combine` in `project.toml`) joins datasets of one
+  experiment into one dataset (`input.parts`, `ideas.combine`): one result folder, dashboard (*Part* filter) and
+  overview row; each part keeps its own background; tables get `Source`. Replicates stay for independent units.
+  The user asked whether the IDEAS gating invalidates the partner preference: no for a gate on which cells an event
+  holds (the chance model shuffles within events), yes for a gate on the contact itself; counts describe the gated
+  events only (manual, *What the selection in IDEAS means*).
 
 ### Where things stand, for the next session (2026-11-05)
 

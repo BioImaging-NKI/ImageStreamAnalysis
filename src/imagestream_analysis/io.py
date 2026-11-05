@@ -35,6 +35,8 @@ class EventStack:
     channel_numbers: list[int] | None = None  # number of each channel in data; None = 1..C
     object_ids: np.ndarray | None = None  # IDEAS object number of each event; None = unknown (Combiner stacks)
     extents: np.ndarray | None = None  # (T, 4) y0, x0, y1, x1 of each event's own image; None = see image_extents
+    sources: np.ndarray | None = None  # part (index in source_names) of each event; None = one part (ideas.combine)
+    source_names: list[str] | None = None
 
     @property
     def n_events(self) -> int:
