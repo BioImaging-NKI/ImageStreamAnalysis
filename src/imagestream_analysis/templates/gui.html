@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:,">
+<link rel="icon" href="__ISA_LOGO__">
 <title>ImageStream Analysis</title>
 <style>
 :root {
@@ -30,6 +30,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; bord
   background: var(--panel); position: sticky; top: 0; z-index: 2; }
 header h1 { font-size: 18px; margin: 0; font-weight: 600; }
 header .version { color: var(--muted); font-size: 12px; }
+header .logo { display: block; border-radius: 7px; margin-right: -2px; }
 header .spacer { flex: 1; }
 main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
@@ -60,7 +61,13 @@ th { color: var(--muted); font-weight: 500; font-size: 13px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.sig td { font-weight: 600; }
 td.links { white-space: nowrap; }
-td.links > * + * { margin-left: 6px; }
+td.links > * + * { margin-left: 4px; }
+/* the row buttons of the overview: small, with an icon; the dashboard is a link that looks like one */
+td.links .small, td.links a.small { font-size: .85em; padding: 2px 8px; line-height: 1.4; }
+a.small.btn { display: inline-block; background: var(--chip); border: 1px solid var(--line); border-radius: 5px; color: var(--text); text-decoration: none; }
+a.small.btn:hover { border-color: var(--accent); }
+a.btn svg.icon { width: 13px; height: 13px; vertical-align: -2px; margin-right: 5px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+td.links button.small svg.icon { width: 13px; height: 13px; vertical-align: -2px; margin-right: 5px; }
 .zip { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 10px 0; }
 .zip h3 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; }
 .zip h3 .title { flex: 1; min-width: 0; }
@@ -128,7 +135,7 @@ td.state { white-space: nowrap; }
 </head>
 <body data-help-home="guide/import-page">
 <header>
-  <h1>ImageStream Analysis</h1><span class="version">v__ISA_VERSION__</span>
+  <img class="logo" src="__ISA_LOGO__" alt="" width="30" height="30"><h1>ImageStream Analysis</h1><span class="version">v__ISA_VERSION__</span>
   <span class="spacer"></span>
   <button id="open-project" data-icon="load" title="Open the settings of a project (its project.toml)">Load settings…</button>
   <button id="save" data-icon="save" title="Save the settings of this project (project.toml in the output folder), without running">Save settings</button>
@@ -173,7 +180,7 @@ td.state { white-space: nowrap; }
     <ul id="problems" class="problems"></ul>
     <div class="row">
       <button id="run" class="primary" data-icon="run">Run all datasets</button>
-      <span class="hint" style="margin:0">or one dataset: <i>Run</i> in its row of step 2, or <i>run again</i> in the overview</span>
+      <span class="hint" style="margin:0">or one dataset: <i>Run</i> in its row of step 2, or <i>Run again</i> in the overview</span>
       <button id="stop" data-icon="stop" disabled>Stop</button>
     </div>
     <div id="run-state" class="run-state" role="status" aria-live="polite" hidden>
@@ -212,6 +219,7 @@ const ICONS = {
   load: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8V3"/><path d="M12 20v-7m-3 3 3-3 3 3"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   add: '<path d="M12 5v14M5 12h14"/>',
+  dashboard: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 16v-4M12 16V8M17 16v-6"/>',
   run: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
@@ -417,7 +425,7 @@ function renderZip(z) {
       el("td", {}, el("input", { type: "text", title: "Datasets with the same experiment are classified together (with Classify together: experiment) and shown together in the overview; the results go to a folder of this name", value: d.experiment, onchange: e => { d.experiment = e.target.value.trim(); refreshOverview(); } })),
       ["condition", "replicate"].map(k => el("td", {}, el("input", { type: "text", size: 10, value: d[k] || "",
         onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } }))),
-      el("td", {}, withIcon(el("button", { class: "run-one", "data-name": d.name, "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
+      el("td", { class: "links" }, withIcon(el("button", { class: "small run-one", "data-name": d.name, "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
         title: runOneTitle(d.name), onclick: () => run([d.name]) }, "Run"), "run"))));
   }
   card.append(el("div", { class: "scroll" }, dt));
@@ -809,6 +817,8 @@ const COLUMN_HELP = {
   "immune negative": "immune cells negative for every subtype marker",
   "membrane pair": "the membrane pair of this marker, for its enrichment columns that follow (Membrane of ... with ...)",
   "membranes": "measured cells of the membrane pair", "with interface": "of those, the cells that touch a partner",
+  "median log2 ratio": "median enrichment at the interface of the cells with an interface (membrane pair): log2 of the interface over the cell's own membrane that touches no cell; 1 = twice as bright, 0 = no difference (the main readout)",
+  "median control log2 ratio (windows)": "the same for random windows on the free membrane of cells without an interface (about 0)",
   "median stdDevs above mean": "median enrichment at the interface, in SD of the free membrane, of the cells with an interface (membrane pair)",
   "median control (windows)": "the same for random windows on the free membrane of cells without an interface",
 };
@@ -853,11 +863,12 @@ async function refreshOverview() {
     const st = ROW_STATE[r.status], noResults = r.status === "waiting";
     const links = el("td", { class: "links" },
       r.error || noResults ? "" : el("a", { href: `/files/${TOKEN}/${r.folder.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}/dashboard.html`,
-                               target: "_blank", rel: "noopener", title: "The results of this dataset: events, cell types, contacts and membranes (opens in a new tab)" }, "dashboard"),
-      noResults ? "" : el("button", { class: "link", title: "Open the result folder of this dataset", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"),
-      r.status === "not in project" ? "" : el("button", { class: "link run-one", "data-name": String(r.dataset), disabled: problems().length > 0 || !!polling,
+                               target: "_blank", rel: "noopener", class: "btn small", title: "The results of this dataset: events, cell types, contacts and membranes (opens in a new tab)" }, "Dashboard"),
+      noResults ? "" : el("button", { class: "small", title: "Open the result folder of this dataset", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "Folder"),
+      r.status === "not in project" ? "" : el("button", { class: "small run-one", "data-name": String(r.dataset), disabled: problems().length > 0 || !!polling,
                      title: polling ? "A run is going on: wait for it to end, or Stop it" : runOneTitle(String(r.dataset)),
-                     onclick: () => run([String(r.dataset)]) }, "run again"));
+                     onclick: () => run([String(r.dataset)]) }, "Run again"));
+    for (const [b, icon] of [[links.children[0], "dashboard"], [links.children[1], "folder"], [links.children[2], "refresh"]]) if (b) withIcon(b, icon);
     const stateCell = withState ? el("td", { class: "state" }, st ? el("span", { class: "chip " + st[0], title: st[2] },
       st[0] === "busy" ? el("span", { class: "spinner" }) : null, st[1]) : "") : null;
     table.append(el("tr", { class: st && st[3] ? "dim" : "", title: st ? st[2] : null }, links, stateCell, cols.map(c => {
@@ -870,7 +881,7 @@ async function refreshOverview() {
   if (others.length) box.append(el("p", { class: "hint", style: "margin:8px 0 0" },
     `${others.length} result folder(s) in this output folder are not part of the project (a dataset removed or unticked, or its experiment renamed): ` +
     "they are left out of overview.tsv, the partner preference and the comparison. Their files are kept. ",
-    el("button", { class: "link", onclick: () => { showOthers = !showOthers; refreshOverview(); } }, showOthers ? "Hide them" : "Show them")));
+    el("button", { class: "small", title: "Show or hide the result folders that are not part of the project", onclick: () => { showOthers = !showOthers; refreshOverview(); } }, showOthers ? "Hide them" : "Show them")));
   // the summed tables are written at the end of a run: during one, they are those of the previous run
   const outdated = o.busy && ((o.interactions && o.interactions.length) || o.comparison);
   if (outdated) box.append(el("p", { class: "outdated-note" }, "A run is going on: the partner preference and the comparison below are those of the previous results, and are updated when the run ends."));
@@ -895,7 +906,7 @@ function comparisonTables(c) {
   // the subset preference, then the membrane enrichment of each marker of interest ("membrane enrichment (<marker>)")
   const membrane = [...new Set(c.rows.map(r => r.measure).filter(m => m.startsWith("membrane enrichment")))];
   for (const [measure, effect, help] of [["subset preference", "ratio (condition / reference)", "observed / expected of the condition divided by that of the reference"],
-                                         ...membrane.map(m => [m, "difference (median SD)", "median SD above mean of the condition minus that of the reference"])]) {
+                                         ...membrane.map(m => [m, "difference (log2 ratio)", "median log2 ratio interface / free membrane of the condition minus that of the reference (1 = the enrichment doubled)"])]) {
     const rows = c.rows.filter(r => r.measure === measure);
     if (!rows.length) continue;
     const tested = rows.filter(r => r.p != null).sort((a, b) => a.p - b.p);

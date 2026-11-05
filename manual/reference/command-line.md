@@ -7,6 +7,7 @@ several exports, or a **settings file**, for one dataset. Both are [TOML](https:
 
 ```powershell
 uv run imagestream-cli gui                          # the import page (also: uv run imagestream)
+uv run imagestream-cli shortcut                     # a shortcut to the import page on the Desktop and in the Start menu
 uv run imagestream-cli run-project D:\data\project  # all datasets of a project (project.toml or its folder)
 uv run imagestream-cli run-project D:\data\project --dataset "Donor 2"   # only this dataset (repeat for several)
 uv run imagestream-cli overview D:\data\project     # rewrite the overview tables, without analyzing (after new conditions)

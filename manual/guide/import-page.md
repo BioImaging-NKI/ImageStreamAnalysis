@@ -140,7 +140,7 @@ eight processor cores), so the computer can be busy for a while during that step
 While a run is going on, a blue bar under the button says *Running…*, with a progress bar, the dataset in progress
 (*Dataset 2 of 3*, or *Measuring* / *Finishing dataset 2 of 3* when the datasets of an experiment are classified
 together) and the time so far. The same state is shown next to the title of step 5. *Run all datasets* reads
-*Running…* and, like every other *Run* and *run again* button, cannot be clicked until the run ends. *Stop* ends the
+*Running…* and, like every other *Run* and *Run again* button, cannot be clicked until the run ends. *Stop* ends the
 run. The log below shows the details. At the end, the bar shows one of:
 
 - *Done* (green): every dataset of the run was analyzed, and the overview is up to date.
@@ -149,7 +149,7 @@ run. The log below shows the details. At the end, the bar shows one of:
   *previous run* in the overview.
 - *Failed (exit code N)* (red): the run itself stopped with an error. The log says why.
 
-To run **one dataset** (again), click *Run* in its row of the dataset table in step 2, or *run again* in its row of the
+To run **one dataset** (again), click *Run* in its row of the dataset table in step 2, or *Run again* in its row of the
 overview. The other datasets keep their results, and the overview is written again from all of them. With *Classify
 together* set to *experiment*, a dataset is classified together with the other datasets of its experiment. Its whole
 experiment then runs, so that all of them keep one set of thresholds; the tooltip of the button says so. Cellpose is

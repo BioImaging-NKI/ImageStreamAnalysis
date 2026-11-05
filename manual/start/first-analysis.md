@@ -81,7 +81,7 @@ preference of each experiment is shown.
 
 ## 7. The dashboard
 
-Click *dashboard* in the row of Donor 1. The [dashboard](../guide/dashboard.md) shows every event, with each cell
+Click *Dashboard* in the row of Donor 1. The [dashboard](../guide/dashboard.md) shows every event, with each cell
 outlined in the color of its cell type. All results on the page are linked: when you hover over or click a cell
 anywhere, it is highlighted in every view.
 
@@ -93,6 +93,7 @@ Things to try:
 - **Interactions**: click a square of the matrix, for example *tumor* × *Subtype A+*, to show only the events with
   that contact. Tick *contacts* to draw the contacts in the event images.
 - **Membrane enrichment**: under *interface with*, choose **immune cells Subtype A+**. In the example, the marker of
-  interest gathers at the contacts with these cells, but not at the contacts with the other cells.
+  interest gathers at the contacts with these cells (about 1.8 times as bright as the free membrane, a log2 ratio of
+  about 0.9, with a wide spread between cells), but not at the contacts with the other cells.
 
 The tables and files that the run writes are described in [The output folder](../guide/output-folder.md).

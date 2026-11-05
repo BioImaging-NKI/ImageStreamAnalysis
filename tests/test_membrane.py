@@ -98,6 +98,11 @@ def test_enrichment_alignment_and_control():
     aligned = res.profiles[0, : res.lengths[0]]
     assert abs(int(np.argmax(np.convolve(aligned, np.ones(5) / 5, "same"))) - INTERFACE_OFFSET) <= 3
     assert res.average["profile"].isna().sum() == 0 or len(res.average) == 0
+    # the main readout: log2 of the same ratio; its control windows about 0, one per window
+    from imagestream_analysis.membrane import LOG2
+    assert t.loc[0, LOG2] == pytest.approx(np.log2(t.loc[0, "Ratio interface/non-interface"]))
+    assert len(res.control_log2) == 10 and abs(t.loc[1, "control log2 ratio"]) < 0.5
+    assert "log2 ratio profile" in res.average
     assert res.histogram_interface["counts"].sum() == 1 and res.histogram_control["counts"].sum() == 10
 
 
@@ -357,3 +362,4 @@ def test_the_carrier_does_not_depend_on_the_band():
     assert len(found) == 1 and next(iter(found))[0] == "Tumor"
     table = pair_table(cells.assign(**{"Mean ch1 (M)": 1.0}), prof, "Mean ch1 (M)")
     assert "median above same-type contacts" in table and SAME == "stdDevs above same-type contacts"
+    assert {"median log2 ratio interface/free", "median log2 ratio above same-type contacts"} <= set(table)

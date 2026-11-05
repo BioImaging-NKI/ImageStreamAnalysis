@@ -97,8 +97,8 @@ def dashboard_shots(page: Page, url: str, token: str, want: set[str]) -> None:
     page.wait_for_timeout(600)
     save(page.locator("#membrane-card"), "dash_pairs", want)
     page.locator("#pairs-box summary").click()
-    # a cell with an interface, selected
-    page.evaluate("""() => { const k = M.sd.findIndex(v => v != null && v > 3); select(M.cell[k]); }""")
+    # a cell with an interface at least twice as bright as its free membrane (log2 ratio > 1), selected
+    page.evaluate("""() => { const k = M.sd.findIndex(v => v != null && v > 1); select(M.cell[k]); }""")
     page.wait_for_timeout(800)
     save(page.locator("#cellcard"), "dash_cell", want)
     # the events with a contact between tumor cells and Subtype A cells

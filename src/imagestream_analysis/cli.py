@@ -1,4 +1,4 @@
-"""Command line: imagestream-cli run settings.toml | run-project | overview | gui | example-settings"""
+"""Command line: imagestream-cli run settings.toml | run-project | overview | gui | shortcut | example-settings"""
 
 from __future__ import annotations
 
@@ -27,6 +27,9 @@ def main(argv: list[str] | None = None) -> int:
     gui_p = sub.add_parser("gui", help="open the import and run page in the browser")
     gui_p.add_argument("--port", type=int, default=0, help="port (default: a free one)")
     gui_p.add_argument("--no-browser", action="store_true", help="do not open the browser")
+    short_p = sub.add_parser("shortcut", help="put a shortcut to the import page, with the logo, on the Desktop and in "
+                                              "the Start menu (Windows)")
+    short_p.add_argument("--no-desktop", action="store_true", help="only in the Start menu")
     args = parser.parse_args(argv)
 
     if args.command == "example-settings":
@@ -37,6 +40,13 @@ def main(argv: list[str] | None = None) -> int:
         from .launcher import serve
 
         serve(args.port, open_browser=not args.no_browser)
+        return 0
+
+    if args.command == "shortcut":
+        from .shortcut import make_shortcuts
+
+        for path in make_shortcuts(desktop=not args.no_desktop):
+            print(path)
         return 0
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")

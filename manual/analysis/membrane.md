@@ -216,21 +216,49 @@ neither: they are left out of the comparison.
 
 ## The score
 
-For every measured cell that has an interface, the analysis reports:
+For every measured cell that has an interface, the analysis compares the mean of the profile at the interface with
+the mean of the free membrane (both after the background is subtracted). The main score is the **log2 ratio**:
 
-- **interface Mean** and **non-interface Mean**: the mean of the profile at the interface and on the free membrane,
-  and the ratio of the two;
-- **stdDevs above mean**: how far the interface lies above the free membrane, in standard deviations of the free
-  membrane:
+$$\text{log2 ratio} = \log_2 \frac{\overline{\text{interface}}}{\overline{\text{free}}}$$
+
+It reads as a fold change: **0** means the interface is as bright as the free membrane, **1** twice as bright, **2**
+four times, and **−1** half as bright. A log2 ratio of 0.5 is about 40 % more marker at the contact.
+
+The tables also keep the macro's score, **SD above mean**: how far the interface lies above the free membrane, in
+standard deviations of the free membrane:
 
 $$\text{SD above mean} = \frac{\overline{\text{interface}} - \overline{\text{free}}}{\text{SD}(\text{free})}$$
 
-A score of 2 means: the interface is as much brighter than the average free membrane as two standard deviations of
-the free membrane. The profiles are expressed in the same unit, and aligned so that the center of the longest
-interface of each cell lies at position 20. Their average, over the cells with an interface, shows the shape of the
-enrichment.
+The profiles are aligned so that the center of the longest interface of each cell lies at position 20. Their
+average, over the cells with an interface, shows the shape of the enrichment.
 
 ![Membrane enrichment in the dashboard](../images/dash_membrane.png)
+
+??? note "Technical: why the log2 ratio, and not SD above mean"
+
+    Both scores compare the interface with the cell's own free membrane. They differ in what they divide by: the
+    ratio divides by the mean of the free membrane, the SD score by its spread.
+
+    - **The spread mixes in other things.** The standard deviation of the free membrane grows with patchy staining
+      (clusters, microvilli), with noise, and with where the band lies. A cell with an evenly stained membrane gets a
+      large SD score for a small enrichment; a patchy cell gets a small score for a large one. If a treatment makes
+      the marker more clustered without bringing more of it to the contact, the SD score changes and the ratio does
+      not.
+    - **Brightness.** Dim cells are relatively noisier, so their SD scores shrink, and bright cells get large ones.
+      The ratio does not depend on how much marker a cell carries.
+    - **Stability.** A mean from a short free membrane is estimated much better than a standard deviation, so the
+      ratio has fewer extreme values.
+    - **Statistics.** log2 ratios are symmetric (twice as bright = +1, half = −1) and close to a normal distribution,
+      which suits the tests of the [comparison of conditions](comparing-conditions.md).
+    - **Meaning.** "1.4 times as bright" can be judged biologically and compared with other studies; "2 SD" depends
+      on the cell.
+
+    **Its weak point is the background.** A ratio needs a correct zero: an offset that is subtracted too little or too
+    much biases it, while the SD score does not care. And a cell whose free membrane is about as dark as the background
+    has no meaningful ratio: the program leaves the log2 ratio empty when either mean is 0 or below. So the log2 ratio
+    is reliable for the cell type that carries the marker, and much less so for a type that hardly carries it (the
+    marker check marks such pairs with "–"). The SD score does say whether the interface stands out from the cell's
+    own fluctuations; the control windows answer that for both scores.
 
 ??? note "Technical: why the free membrane is the baseline"
 
@@ -240,36 +268,41 @@ enrichment.
     the enrichment. Here the baseline is the membrane that touches no cell. On validation data, this raised the median
     enrichment by about 0.2 SD, while the control stayed the same.
 
-### Three ways to score an interface
+### Ways to score an interface
 
-The dashboard's *Measure* menu offers three scores. The tables of the output folder contain all three.
+The dashboard's *Measure* menu offers five scores. The tables of the output folder contain all of them.
 
 | Measure | What it compares | When to use it |
 |---|---|---|
-| **SD above own membrane** (default) | the interface with the cell's own free membrane | when the partners carry little or none of the marker (the marker check is green) |
-| **SD above same-type contacts** | the same score, minus the median score of the measured cells at contacts with cells of their own kind | when the partners carry the marker too: it asks whether the contact with *this* partner is brighter than a contact between two cells of the measured kind |
+| **log2 ratio to own membrane** (default) | the interface with the cell's own free membrane, as a fold change | when the partners carry little or none of the marker (the marker check is green) |
+| **log2 ratio above same-type contacts** | the same, minus the median log2 ratio of the measured cells at contacts with cells of their own kind | when the partners carry the marker too: it asks whether the contact with *this* partner is brighter than a contact between two cells of the measured kind |
+| **SD above own membrane** | as the first, in standard deviations of the free membrane (the macro's score) | to compare with results of the Fiji macro |
+| **SD above same-type contacts** | as the second, in standard deviations | as above |
 | **SD above both membranes** (experimental) | the interface with the own free membrane plus the partner's free membrane | to explore; read the note below before relying on it |
 
-Why a second and a third measure? At an interface, the membranes of the two cells lie so close together that the
+Why the same-type versions? At an interface, the membranes of the two cells lie so close together that the
 microscope cannot separate them. If the partner carries the marker too, the interface contains two stained
-membranes, and it looks brighter even without any enrichment. *SD above own membrane* cannot tell this apart from a
-real enrichment.
+membranes, and it looks brighter even without any enrichment. A score against the own membrane cannot tell this apart
+from a real enrichment.
 
-*SD above same-type contacts* uses the data themselves as the reference. A contact between two tumor cells also
-places two stained membranes side by side, with the same kind of geometry, but with no partner-specific biology. If
-a tumor–immune contact scores higher than a tumor–tumor contact, that difference is what the immune partner adds. A
-score of 0 means "as bright as a contact between two cells of the measured kind".
+The same-type versions use the data themselves as the reference. A contact between two tumor cells also places two
+stained membranes side by side, with the same kind of geometry, but with no partner-specific biology. If a
+tumor–immune contact scores higher than a tumor–tumor contact, that difference is what the immune partner adds. A
+score of 0 means "as bright as a contact between two cells of the measured kind"; in log2, a value of 0.5 means 40 %
+brighter than such a contact.
 
-??? note "Technical: SD above same-type contacts, exactly"
+??? note "Technical: the scores above same-type contacts, exactly"
 
-    For the measured cells of a pair (*Membrane of*), the program takes the score (*SD above mean*) of each of them at
-    its contacts with cells of the same selection: tumor cells with tumor cells, *Immune Subtype A+* cells with
-    *Immune Subtype A+* cells, and so on. The median of these scores is the **reference**; it needs at least 10 cells
-    with such a contact (otherwise the measure is empty). Each cell's score minus the reference is its *SD above
-    same-type contacts*. In the files: the column `stdDevs above same-type contacts` of `Membrane intensity analysis -
-    <marker>.tsv`, and `median above same-type contacts` in `Membrane pairs.tsv`. In the dashboard, the histograms,
-    the heatmap order, the *All pairs* table, the cell card and the *Cells* table follow the measure; the average
-    profile stays in SD above the own membrane, with a dashed line at the reference.
+    For the measured cells of a pair (*Membrane of*), the program takes the score of each of them at its contacts with
+    cells of the same selection: tumor cells with tumor cells, *Immune Subtype A+* cells with *Immune Subtype A+*
+    cells, and so on. The median of these scores is the **reference**; it needs at least 10 cells with such a contact
+    (otherwise the measure is empty). Each cell's score minus the reference is its score above same-type contacts. In
+    log2 this is a ratio of ratios: how much brighter the contact with the partner is than a same-type contact. In the
+    files: the columns `log2 ratio above same-type contacts` and `stdDevs above same-type contacts` of `Membrane
+    intensity analysis - <marker>.tsv`, and `median log2 ratio above same-type contacts` and `median above same-type
+    contacts` in `Membrane pairs.tsv`. In the dashboard, the histograms, the heatmap order, the *All pairs* table, the
+    cell card and the *Cells* table follow the measure; the average profile stays that of the own membrane, with a
+    dashed line at the reference.
 
     **When it is not a fair reference.** It assumes that a contact with the partner is, apart from the biology,
     like a contact between two measured cells. That holds best when the partner carries about as much of the marker as
@@ -304,7 +337,7 @@ score of 0 means "as bright as a contact between two cells of the measured kind"
     **How to read it, if at all.** A positive excess means more marker at the contact than both membranes carry
     elsewhere, whichever cell holds it. Because it tends to be too low, a negative value is not evidence of depletion.
     Check the same-type contacts of your own data in the *All pairs* table first. The comparison of conditions uses
-    *SD above own membrane*.
+    the log2 ratio to the own membrane.
 
 ??? note "Technical: across the band — maximum or sum"
 
@@ -317,16 +350,18 @@ score of 0 means "as bright as a contact between two cells of the measured kind"
 ## The control
 
 Cells without an interface get **control windows**: *Control windows per cell* (default 10) windows at random places
-on their free membrane. Each window is as long as the median interface and is scored like an interface. The histogram
-of the controls shows how much a stretch of free membrane varies by chance in this dataset.
+on their free membrane. Each window is as long as the median interface and is scored like an interface, with both
+scores. The histogram of the controls shows how much a stretch of free membrane varies by chance in this dataset; its
+log2 ratio lies around 0.
 
-Both histograms (in the dashboard and in the files `Histogram_interface_stdDevs_above_mean - <marker>.tsv` and
-`Histogram_control_stdDevs_above_mean - <marker>.tsv`) start at −5 SD and share one scale. If *Histogram maximum* and
-*Histogram bin width* are left empty, the scale is automatic. The maximum is the 99th percentile of the interface
-values or of the control windows, whichever is higher, but at least 5 SD, and it is rounded up to a whole number of
-bins. The bin width is the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, and so on, that gives at most 60 bins.
-Values above the maximum are not counted. You can change the scale in the dashboard without running the analysis
-again.
+In the dashboard, both histograms share one scale. For the log2 ratio it starts at −3 (one eighth) and reaches at least
+2 (four times). For the SD scores it starts at −5 SD, as in the files `Histogram_interface_stdDevs_above_mean -
+<marker>.tsv` and `Histogram_control_stdDevs_above_mean - <marker>.tsv` (which stay in SD, as the macro's). If
+*Histogram maximum* and *Histogram bin width* are left empty, the scale is automatic. The maximum is the 99th
+percentile of the interface values or of the control windows, whichever is higher, but at least 5 SD (2 in log2), and
+it is rounded up to a whole number of bins. The bin width is the smallest of 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, and
+so on, that gives at most 60 bins. Values above the maximum are not counted. The two settings apply to the SD scale;
+you can change either scale in the dashboard without running the analysis again.
 
 **The control windows are not a control for the interface itself.** Because they lie on free membrane, they cannot
 show what touching does to the measurement apart from the marker: two stained membranes side by side, a partner's
@@ -334,13 +369,13 @@ signal blurring into the interface, and the outline lying differently at a conta
 
 - **Compare pairs**, not an interface with the control windows. Compare the same measured cells with partners that do
   carry a receptor or ligand and with partners that do not (for example *Immune A+* against *Immune negative*). Or
-  compare with contacts between cells of the measured kind (*SD above same-type contacts*, or set *Interface with* to
+  compare with contacts between cells of the measured kind (*log2 ratio above same-type contacts*, or set *Interface with* to
   the measured type itself). The dashboard shows all pairs at once (*All pairs* in the membrane card). In the example
   below, the tumor cells' membrane is enriched mainly at contacts with *Subtype A+* cells.
 
 ![All pairs of the membrane card](../images/dash_pairs.png)
 
-- A small shift (a ratio below about 1.5, or 1–2 SD) is within what the effects above can produce; a large effect that
+- A small shift (a ratio below about 1.5, a log2 ratio below about 0.6, or 1–2 SD) is within what the effects above can produce; a large effect that
   is specific to one pair is not.
 - Check in the dashboard that the band lies on the membrane (*Cell* card, *membrane band*; membrane card, *Across the
   membrane*).
@@ -371,7 +406,7 @@ signal blurring into the interface, and the outline lying differently at a conta
     against the rest of that free membrane. The macro used one window of 25 px per membrane; many windows of the
     typical interface length give a better estimate of the null distribution. The windows are random and not seeded,
     so the control differs slightly from run to run (the dashboard uses a fixed seed). All windows are listed in
-    `Control windows stdDevs above mean - <marker>.tsv`.
+    `Control windows stdDevs above mean - <marker>.tsv`, with both scores.
 
 ## Where the marker is expressed
 
@@ -387,7 +422,7 @@ the dashboard:
 |---|---|---|
 | below 25 % | ✓ green | The marker is mainly on the measured cells. |
 | 25–80 % | ! amber | The partners carry part of the marker, so part of the interface signal may come from them. |
-| 80–125 % | ! amber | The marker is on both cell types at a similar level. Two stained membranes side by side look like enrichment; use *SD above same-type contacts*, or compare with contacts between cells of the same type. |
+| 80–125 % | ! amber | The marker is on both cell types at a similar level. Two stained membranes side by side look like enrichment; use *log2 ratio above same-type contacts*, or compare with contacts between cells of the same type. |
 | 125 % or more | ! red | The marker is brighter on the partners. Check the pair (*Membrane of*, *Interface with*). |
 | (any) | – gray | The measured cells hardly carry the marker (below 25 % of the brightest cell type), so their enrichment is not informative. |
 
@@ -410,7 +445,7 @@ the dashboard:
     doubling, whatever the biology.
 
 If the badge is amber or red, you can choose the pair the other way round (if the marker is on the partners), use
-*SD above same-type contacts*, compare with a pair whose partners do not carry the marker, or treat the result as an
+*log2 ratio above same-type contacts*, compare with a pair whose partners do not carry the marker, or treat the result as an
 upper limit.
 
 **Look at the subsets, on both sides.** The default pair (all cells of the type that carries the marker, with all

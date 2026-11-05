@@ -8,6 +8,7 @@ there. A second start shows the running page again.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 import os
@@ -28,16 +29,19 @@ READY = b"imagestream-analysis"  # /ping of the real page server
 LOADING = b"imagestream-analysis-loading"  # /ping while it is still starting
 
 WAITING_PAGE = b"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ImageStream Analysis</title>
+<link rel="icon" href="__ISA_LOGO__">
 <meta name="viewport" content="width=device-width, initial-scale=1"><style>
 :root { color-scheme: light dark; }
 body { margin: 0; height: 100vh; display: grid; place-items: center; font: 15px system-ui, sans-serif;
   background: Canvas; color: CanvasText; }
 .box { text-align: center; }
+.logo { display: block; width: 96px; height: 96px; margin: 0 auto 22px; border-radius: 22px; }
 .spin { width: 44px; height: 44px; margin: 0 auto 18px; border-radius: 50%; border: 4px solid #2a78d633;
   border-top-color: #2a78d6; animation: turn .9s linear infinite; }
 @keyframes turn { to { transform: rotate(360deg); } }
 .sub { opacity: .65; font-size: 13px; margin-top: 6px; }
-</style></head><body><div class="box"><div class="spin"></div><div>Starting ImageStream Analysis&hellip;</div>
+</style></head><body><div class="box"><img class="logo" src="__ISA_LOGO__" alt="">
+<div class="spin"></div><div>Starting ImageStream Analysis&hellip;</div>
 <div class="sub">Loading the analysis modules; this takes a few seconds.</div></div><script>
 async function poll() {
   try {
@@ -48,6 +52,11 @@ async function poll() {
 }
 poll();
 </script></body></html>"""
+try:  # the logo (templates/logo.svg), inline; standard library only, as the rest of this module
+    _LOGO = (Path(__file__).parent / "templates" / "logo.svg").read_bytes()
+    WAITING_PAGE = WAITING_PAGE.replace(b"__ISA_LOGO__", b"data:image/svg+xml;base64," + base64.b64encode(_LOGO))
+except OSError:
+    WAITING_PAGE = WAITING_PAGE.replace(b"__ISA_LOGO__", b"data:,")
 
 
 class Waiting(BaseHTTPRequestHandler):

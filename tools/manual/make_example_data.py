@@ -21,7 +21,8 @@ Deterministic (fixed seeds).
 
 Made more like real data on 2026-11-05 (the user): cell sizes vary more (log-normal radii), outlines are not round
 (a few smooth bumps), markers vary more between cells and within a cell (texture, a patchy membrane), some events
-are out of focus, and the enrichment at Subtype A contacts is weaker and not at every contact.
+are out of focus, and the enrichment at Subtype A contacts is not at every contact (3 of 4) and varies between
+cells; its strength was raised again the same day, so that it clearly exceeds contacts between two tumor cells.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ import numpy as np
 import tifffile
 from scipy import ndimage as ndi
 
+EXTRA = 110  # the median extra marker of interest at an enriched contact (the free membrane: about 55)
 CHANNELS = {1: "BF", 2: "Marker", 3: "Tumor", 4: "Immune", 7: "Subtype A", 8: "Subtype B", 9: "Unused"}
 BACKGROUND = {1: 820, 2: 14, 3: 40, 4: 45, 7: 30, 8: 28, 9: 25}
 DATASETS = {"Donor 1": (11, 320, 1.0), "Donor 2": (12, 280, 0.85)}  # seed, objects, brightness
@@ -109,12 +111,13 @@ def draw_event(rng: np.random.Generator, cells: list[dict],
             img[3][own] += (rng.lognormal(np.log(380), 0.45) * brightness * texture(2.5, 0.3))[own]
             img[2][rim[k]] += (rng.lognormal(np.log(55), 0.5) * brightness * texture(1.5, 0.45))[rim[k]]
             img[2][own] += rng.lognormal(np.log(6), 0.5) * brightness  # a little inside the cell too
-            # the marker of interest gathers where the cell touches a Subtype A cell (not always, and less than before)
+            # the marker of interest gathers where the cell touches a Subtype A cell: at 3 of 4 such contacts, by an
+            # amount that varies much between cells (a median of about twice the free membrane, 2026-11-05)
             for j, d in enumerate(cells, start=1):
                 touches = d["kind"] == "A" and ndi.binary_dilation(labels == j, iterations=2)[own].any()
                 if touches and rng.random() < 0.75:
                     zone = own & ndi.binary_dilation(labels == j, iterations=3)
-                    img[2][zone] += rng.lognormal(np.log(38), 0.5) * brightness
+                    img[2][zone] += rng.lognormal(np.log(EXTRA), 0.75) * brightness
         else:
             img[4][own] += (rng.lognormal(np.log(340), 0.45) * brightness * texture(1.5, 0.3))[own]
             img[2][rim[k]] += rng.lognormal(np.log(8), 0.6) * brightness

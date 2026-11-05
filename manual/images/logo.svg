@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#25324a"/><stop offset="1" stop-color="#121722"/></linearGradient>
+<radialGradient id="tumor" cx=".38" cy=".34" r=".75"><stop offset="0" stop-color="#ff9a68"/><stop offset=".7" stop-color="#e5602b"/><stop offset="1" stop-color="#b8441a"/></radialGradient>
+<radialGradient id="immune" cx=".38" cy=".34" r=".75"><stop offset="0" stop-color="#7db6ff"/><stop offset=".7" stop-color="#3577d6"/><stop offset="1" stop-color="#20539e"/></radialGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+</defs>
+<rect width="64" height="64" rx="14" fill="url(#bg)"/>
+<path d="M7 14.5H57M7 49.5H57" stroke="#ffffff" stroke-opacity=".13" stroke-width="1.3" stroke-linecap="round"/>
+<path d="M4.5 28.5H9M3 32H8.5M4.5 35.5H9" stroke="#9cc4ff" stroke-opacity=".45" stroke-width="1.4" stroke-linecap="round"/>
+<circle cx="19" cy="32" r="8.6" fill="url(#immune)" stroke="#b9d7ff" stroke-width="1.6"/>
+<circle cx="40.6" cy="32" r="13" fill="url(#tumor)" stroke="#ffc2a1" stroke-width="1.8"/>
+<path d="M28.3 25.4A13 13 0 0 0 28.3 38.6" fill="none" stroke="#3ff2b4" stroke-width="5" stroke-linecap="round" opacity=".55" filter="url(#glow)"/>
+<path d="M28.3 25.4A13 13 0 0 0 28.3 38.6" fill="none" stroke="#5cf7c4" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

@@ -46,3 +46,14 @@ def test_help_is_embedded_in_the_pages():
         assert "#helpPanel {" in page and "const HELP" in page and 'id="helpBtn"' in page
         raw = re.search(r'<script id="isa-help" type="application/json">(.*?)</script>', page, re.DOTALL).group(1)
         assert json.loads(raw)["pages"]
+
+
+def test_the_logo_is_filled_in():
+    """The pages and the waiting page carry the logo (templates/logo.svg) as a data URL, not the placeholder."""
+    from imagestream_analysis import launcher
+    from imagestream_analysis.dashboard import page_template
+
+    for name in ("gui.html", "dashboard.html"):
+        page = page_template(name)
+        assert "__ISA_LOGO__" not in page and 'rel="icon" href="data:image/svg+xml;base64,' in page
+    assert b"__ISA_LOGO__" not in launcher.WAITING_PAGE and b"data:image/svg+xml;base64," in launcher.WAITING_PAGE

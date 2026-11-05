@@ -305,7 +305,13 @@ def page_template(name: str) -> str:
     def read(name: str) -> str:
         return resources.files("imagestream_analysis").joinpath("templates", name).read_text(encoding="utf-8")
     return (read(name).replace("/*__ISA_HELP_CSS__*/", read("help.css")).replace("/*__ISA_HELP_JS__*/", read("help.js"))
-            .replace("__ISA_HELP__", read("help.json").replace("</", "<\\/")))
+            .replace("__ISA_HELP__", read("help.json").replace("</", "<\\/")).replace("__ISA_LOGO__", logo_url()))
+
+
+def logo_url() -> str:
+    """The logo as a data URL (favicon and header of the pages; templates/logo.svg, made by tools/make_logo.py)."""
+    svg = resources.files("imagestream_analysis").joinpath("templates", "logo.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode("ascii")
 
 
 def write_dashboard(result: Result, settings: Settings) -> Path:

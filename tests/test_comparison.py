@@ -126,14 +126,14 @@ def test_membrane_pairs(tmp_path):
     shift = {"control": 0.0, "treated": 1.0}
     for k, (name, cond, _rep, _) in enumerate(data):
         rows = [{"membrane of": "Tumor", "interface with": "Immune A+", "cells with an interface": 30,
-                 "median stdDevs above mean": 1.0 + shift[cond] + 0.1 * k, "marker check": "mainly on the measured "
-                 "cells"},
+                 "median log2 ratio interface/free": 1.0 + shift[cond] + 0.1 * k,
+                 "marker check": "mainly on the measured cells"},
                 {"membrane of": "Tumor", "interface with": "Immune negative", "cells with an interface": 4,
-                 "median stdDevs above mean": 0.5, "marker check": "partners carry part"},
+                 "median log2 ratio interface/free": 0.5, "marker check": "partners carry part"},
                 {"membrane of": "Immune A+", "interface with": "Tumor", "cells with an interface": 30,  # not this side
-                 "median stdDevs above mean": 0.0, "marker check": ""},
+                 "median log2 ratio interface/free": 0.0, "marker check": ""},
                 {"membrane of": "Tumor", "interface with": "Tumor", "cells with an interface": 30,  # a control pair
-                 "median stdDevs above mean": 0.0, "marker check": ""}]
+                 "median log2 ratio interface/free": 0.0, "marker check": ""}]
         pd.DataFrame(rows).assign(**{"marker": "MOI", "marker on": "Tumor"}).to_csv(
             tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
     result = compare(p, table)[0]
@@ -148,9 +148,9 @@ def _pairs(marker, on, value, n=30):
     """Membrane pairs.tsv rows of one marker: its carrier with the other type, and the other way round."""
     other = "Immune" if on == "Tumor" else "Tumor"
     common = {"marker": marker, "marker on": on, "cells with an interface": n}
-    return [common | {"membrane of": on, "interface with": other, "median stdDevs above mean": value,
+    return [common | {"membrane of": on, "interface with": other, "median log2 ratio interface/free": value,
                       "marker check": "mainly on the measured cells"},
-            common | {"membrane of": other, "interface with": on, "median stdDevs above mean": -value,
+            common | {"membrane of": other, "interface with": on, "median log2 ratio interface/free": -value,
                       "marker check": ""}]
 
 
@@ -176,6 +176,13 @@ def test_membrane_pairs_per_marker_of_interest(tmp_path):
             tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
     result, notes, _, _ = compare(p, table)
     assert not result["measure"].str.startswith(MEMBRANE).any() and any("run the analysis again" in n for n in notes)
+    # files written before 2026-11-05: SD above mean only, no log2 ratio: left out, with a note
+    for name, *_ in data:
+        pd.DataFrame(_pairs("MOI", "Tumor", 1.0)).rename(
+            columns={"median log2 ratio interface/free": "median stdDevs above mean"}).to_csv(
+            tmp_path / "E" / name / "Membrane pairs.tsv", sep="\t", index=False)
+    result, notes, _, _ = compare(p, table)
+    assert not result["measure"].str.startswith(MEMBRANE).any() and any("no log2 ratio" in n for n in notes)
 
 
 def test_write_and_round_trip(tmp_path):

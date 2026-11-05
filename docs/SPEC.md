@@ -615,9 +615,37 @@ with the band's width and placement, and with it the default pair.
   the membrane table, `median above same-type contacts` in `Membrane pairs.tsv`, a third *Measure* in the
   dashboard (live, `sameReference`; the average profile stays in SD above the own membrane with a dashed line at the
   reference). It is the empirical answer to "two stained membranes side by side", where the excess's additivity
-  failed. Caveat (manual): too strict when the partner carries much less marker than the measured cells (the example
-  shows it: tumor-tumor contacts score higher than any tumor-immune pair), too lenient when it carries more.
+  failed. Caveat (manual): too strict when the partner carries much less marker than the measured cells (the first
+  example of 2026-11-05 showed it: tumor-tumor contacts scored higher than any tumor-immune pair), too lenient when
+  it carries more. The example was then made stronger (Subtype A+ contacts about 1.85x, tumor-tumor about 1.35x).
 - The excess stays, labelled experimental everywhere (menu, tooltips, manual).
+
+## The log2 ratio as the main readout (the user, 2026-11-05) ✅
+
+Deviation from the macro, which scores `stdDevs above mean` = (interface − free mean) / free SD.
+- **What:** `membrane.LOG2` = log2(interface mean / free mean), both background-subtracted (the profiles are), NaN
+  when either mean is ≤ 0 (`_log2`, `_log2_of`). It sits beside `Ratio interface/non-interface` in the membrane
+  table, together with `LOG2_SAME` (minus the median log2 ratio at same-type contacts, as `SAME`), `control log2
+  ratio` (mean over the cell's windows; every window also in `Control windows stdDevs above mean`), `log2 ratio
+  profile` in the average profile (mean over cells of log2(position / free mean), positions ≤ 0 left out), and
+  `median log2 ratio interface/free` / `median log2 ratio above same-type contacts` in `Membrane pairs.tsv`. The
+  overview has `median log2 ratio (<marker>)` and `median control log2 ratio (windows) (<marker>)` before the SD
+  columns.
+- **Default everywhere a single number is chosen:** the comparison of conditions (`comparison.VALUE`; results without
+  the column are left out with a note "run them again"), the overview, and the dashboard's *Measure* (`ratio`; also
+  `ratio_same`; views saved before have `measureVersion` missing and open on the new default). The SD measures stay
+  in the menu and the tables; the histogram files and `membrane_profiles_normalized` stay in SD (macro names).
+- **Why** (to the user, 2026-11-05): the SD of the free membrane mixes patchiness, noise and band placement, so the
+  SD score conflates enrichment with membrane heterogeneity and with brightness (dim cells are relatively noisier);
+  the mean is a more stable denominator than the SD of a short free membrane; log2 ratios are symmetric and near
+  normal across replicates; a fold change is interpretable and comparable with the literature; the same-type
+  reference becomes a ratio of ratios.
+- **Cost:** sensitive to the background offset, meaningless for a type that hardly carries the marker (NaN at ≤ 0;
+  the marker check flags "–"). The comparison's test is unchanged (scale-free; the calibration of section 5 of
+  `tools/stats/calibrate_comparison.py` simulates generic skewed scores and holds for either unit).
+- Dashboard: histograms from −3 (minimum top 2) for log2, from −5 SD for SD (`HIST_VIEWS` keeps a scale per kind;
+  the settings `max_histogram_value` / `histogram_bin_width` apply to SD); heatmap ±2 in log2, ±6 SD.
+- On the example data the pair table matches the dashboard's live values (Tumor with Immune 0.13 both).
 
 ## Zero intensities in the clustering (2026-11-03)
 

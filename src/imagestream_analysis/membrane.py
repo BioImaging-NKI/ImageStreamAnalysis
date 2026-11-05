@@ -55,6 +55,7 @@ class MembraneResult:
     window: int  # control window length (pixels along the membrane)
     # the same profiles minus the partner's free membrane at the interface positions (excess over both membranes)
     excess_profiles: np.ndarray | None = None
+    control_log2: np.ndarray | None = None  # log2 ratio of the same control windows (LOG2)
 
 
 EXCESS = "excess stdDevs above both membranes"  # the column of the excess (partner_excess) in the membrane table
@@ -62,6 +63,11 @@ EXCESS = "excess stdDevs above both membranes"  # the column of the excess (part
 # an empirical reference for two stained membranes side by side, where the excess's assumption failed
 SAME = "stdDevs above same-type contacts"
 MIN_SAME = 10  # fewer measured cells with a same-type contact: no reference (NaN)
+# the main readout (2026-11-05): log2 of interface mean / mean of the own membrane that touches no cell (both
+# background-subtracted). A fold change: independent of how patchy or noisy the free membrane is, and symmetric.
+# NaN when either mean is not above 0 (a cell that hardly carries the marker).
+LOG2 = "log2 ratio interface/non-interface"
+LOG2_SAME = "log2 ratio above same-type contacts"  # LOG2 minus the median LOG2 at same-type contacts (as SAME)
 
 
 def free_means(membranes: Profiles) -> dict[int, float]:
@@ -138,6 +144,14 @@ def _runs(flags: np.ndarray) -> list[tuple[int, int]]:
     edges = np.diff(np.concatenate([[0], rolled.astype(np.int8), [0]]))
     starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
     return [((int(a) + start) % n, int(b - a)) for a, b in zip(starts, ends, strict=True)]
+
+
+def _log2(window: np.ndarray, rest: np.ndarray) -> float:
+    """log2(window mean / rest mean); NaN when either is empty or not above 0 (LOG2)."""
+    if len(window) == 0 or len(rest) == 0:
+        return float("nan")
+    a, b = float(window.mean()), float(rest.mean())
+    return float(np.log2(a / b)) if a > 0 and b > 0 else float("nan")
 
 
 def _score(window: np.ndarray, rest: np.ndarray) -> float:
@@ -908,10 +922,11 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
     free_of = np.full(top, np.nan)  # every cell's free mean, by label (free_means)
     free_of[membranes.labels.astype(np.int64)] = mean_free
     partner_free = free_of[np.clip(track, 0, None)]
-    same_of: dict[str, float] = {}
+    same_of: dict[str, tuple[float, float]] = {}
 
-    def _same_reference(rs: list[str]) -> float:
-        """The median score of these cells at contacts with cells of the same selection (SAME)."""
+    def _same_reference(rs: list[str]) -> tuple[float, float]:
+        """The median score and the median log2 ratio of these cells at contacts with cells of the same selection
+        (SAME, LOG2_SAME)."""
         own = labels[select(cells, rs)].to_numpy(dtype=np.int64)
         idx = np.array([index[int(lab)] for lab in own if int(lab) in index], dtype=np.int64)
         member = np.zeros(top, dtype=bool)
@@ -923,7 +938,10 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
         ok = idx[(n_s[idx] > 0) & (n_free[idx] > 1)]
         sc = np.divide(m_s[ok] - mean_free[ok], sd_free[ok], out=np.full(len(ok), np.nan), where=sd_free[ok] > 0)
         sc = sc[np.isfinite(sc)]
-        return float(np.median(sc)) if len(sc) >= MIN_SAME else float("nan")
+        lr = _log2_of(m_s[ok], mean_free[ok])
+        lr = lr[np.isfinite(lr)]
+        return (float(np.median(sc)) if len(sc) >= MIN_SAME else float("nan"),
+                float(np.median(lr)) if len(lr) >= MIN_SAME else float("nan"))
 
     out = []
     for rs, cs in combos:
@@ -943,11 +961,14 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
         ok = chosen[(n_f[chosen] > 0) & (n_free[chosen] > 1)]
         sd = sd_free[ok]
         scores = np.divide(mean_f[ok] - mean_free[ok], sd, out=np.full(len(ok), np.nan), where=sd > 0)
-        same = same_of.setdefault(r, _same_reference(rs))
+        same, same_log2 = same_of.setdefault(r, _same_reference(rs))
+        log2s = _log2_of(mean_f[ok], mean_free[ok])
         excesses = np.divide(scores * sd - pm[ok], sd, out=np.full(len(ok), np.nan), where=sd > 0)
         ratios = np.divide(mean_f[ok], mean_free[ok], out=np.full(len(ok), np.nan), where=mean_free[ok] != 0)
         check = expression_check(cells, membranes, moi_column, rs, cs)
         out.append({"membrane of": r, "interface with": c, "cells with an interface": len(ok),
+                    "median log2 ratio interface/free": _nanmedian(log2s),
+                    "median log2 ratio above same-type contacts": _nanmedian(log2s) - same_log2,
                     "median stdDevs above mean": float(np.nanmedian(scores)) if np.isfinite(scores).any() else np.nan,
                     "median ratio interface/free": float(np.nanmedian(ratios)) if np.isfinite(ratios).any() else np.nan,
                     "median excess above both membranes": (float(np.nanmedian(excesses))
@@ -956,6 +977,18 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
                                                         if np.isfinite(scores).any() else np.nan),
                     "marker check": check["level"], "partners / measured": check["partners / measured"]})
     return pd.DataFrame(out)
+
+
+def _log2_of(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """log2(a / b) per element; NaN where either is not above 0 (LOG2)."""
+    ok = (a > 0) & (b > 0)
+    out: np.ndarray = np.full(len(a), np.nan)
+    out[ok] = np.log2(a[ok] / b[ok])
+    return out
+
+
+def _nanmedian(v: np.ndarray) -> float:
+    return float(np.nanmedian(v)) if np.isfinite(v).any() else float("nan")
 
 
 def pair_of(settings: MembraneSettings, carried_by: str, marker: str = "") -> tuple[list[str], list[str]]:
@@ -993,6 +1026,10 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
                                                                                           strict=True)
                                if np.isin(t, own_labels).any()) if np.isfinite(s)]
     same_ref = float(np.median(same_scores)) if len(same_scores) >= MIN_SAME else float("nan")
+    same_log2 = [s for s in (_log2(p[np.isin(t, own_labels)], p[t == 0]) for p, t in zip(raw_profiles, tracks,
+                                                                                         strict=True)
+                             if np.isin(t, own_labels).any()) if np.isfinite(s)]
+    same_log2_ref = float(np.median(same_log2)) if len(same_log2) >= MIN_SAME else float("nan")
     log.info("Same-type contacts of the %s cells: %s", " / ".join(wanted),
              f"median {same_ref:.2f} SD above mean ({len(same_scores)} cells): the reference of '{SAME}'"
              if np.isfinite(same_ref) else f"{len(same_scores)} cells, fewer than {MIN_SAME}: no reference")
@@ -1004,7 +1041,7 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
     window = int(round(np.median(iface_lengths))) if len(iface_lengths) else 25
     log.info("Membranes of %d %s, %d with an interface; control window %d px", n, names, has.sum(), window)
 
-    table, aligned, aligned_excess, control_all = [], [], [], []
+    table, aligned, aligned_excess, aligned_log2, control_all, control_log2 = [], [], [], [], [], []
     for p, f, free, track, (frame, label) in zip(raw_profiles, iface_flags, free_flags, tracks, rows, strict=True):
         rest = p[free]  # the membrane that touches no cell
         i_mean = float(p[f].mean()) if f.any() else float("nan")
@@ -1013,35 +1050,48 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
         row = {"Frame": frame, "Label": label, "membrane length": len(p), "interface length": int(f.sum()),
                "interface Mean": i_mean, "non-interface Mean": r_mean, "non-interface stdDev": r_sd,
                "Ratio interface/non-interface": i_mean / r_mean if r_mean else float("nan"),
+               LOG2: _log2(p[f], rest), "control log2 ratio": float("nan"),
                "stdDevs above mean": _score(p[f], rest), "control stdDevs above mean": float("nan")}
         partner_mean, sub = partner_excess(p, f, track, free_of)
         ok_sd = bool(r_sd) and np.isfinite(r_sd)
         row[EXCESS] = row["stdDevs above mean"] - partner_mean / r_sd if ok_sd else float("nan")
         row[SAME] = row["stdDevs above mean"] - same_ref
+        row[LOG2_SAME] = row[LOG2] - same_log2_ref
         normalized = (p - r_mean) / r_sd if ok_sd else np.full(len(p), np.nan)
+        fold = np.full(len(p), np.nan)  # log2 of every position over the free mean (the log2 average profile)
+        if r_mean > 0:
+            pos = p > 0
+            fold[pos] = np.log2(p[pos] / r_mean)
         excess = normalized - sub / r_sd if ok_sd else normalized
         if f.any():
             start, run = max(_runs(f), key=lambda r: r[1])  # the longest interface (the macro: the first one)
             normalized = np.roll(normalized, INTERFACE_OFFSET - (start + run // 2))
             excess = np.roll(excess, INTERFACE_OFFSET - (start + run // 2))
+            fold = np.roll(fold, INTERFACE_OFFSET - (start + run // 2))
         elif free.sum() > window:  # windows on the membrane that touches no cell, read as one closed line
             q = p[free]
-            scores = []
+            scores, folds = [], []
             for s in rng.integers(0, len(q), settings.control_repeats):
                 mask = np.zeros(len(q), bool)
                 mask[(s + np.arange(window)) % len(q)] = True
                 scores.append(_score(q[mask], q[~mask]))
+                folds.append(_log2(q[mask], q[~mask]))
             control_all += scores
-            row["control stdDevs above mean"] = float(np.nanmean(scores))
+            control_log2 += folds
+            row["control stdDevs above mean"] = _nanmean(scores)
+            row["control log2 ratio"] = _nanmean(folds)
         table.append(row)
         aligned.append(normalized)
         aligned_excess.append(excess)
+        aligned_log2.append(fold)
 
     profiles = np.full((n, int(lengths.max(initial=0))), np.nan)
     excess_profiles = profiles.copy()
-    for i, (a, e) in enumerate(zip(aligned, aligned_excess, strict=True)):
+    log2_profiles = profiles.copy()
+    for i, (a, e, g) in enumerate(zip(aligned, aligned_excess, aligned_log2, strict=True)):
         profiles[i, : len(a)] = a
         excess_profiles[i, : len(e)] = e
+        log2_profiles[i, : len(g)] = g
     table_df = pd.DataFrame(table)
     with_if = profiles[has]
     length = 0
@@ -1053,9 +1103,16 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
         return out
 
     average = pd.DataFrame({"position (px)": np.arange(length), "profile": mean_profile(with_if),
-                            "excess profile": mean_profile(excess_profiles[has])})
+                            "excess profile": mean_profile(excess_profiles[has]),
+                            "log2 ratio profile": mean_profile(log2_profiles[has])})
     control = np.array(control_all, dtype=float)
     sd_values = table_df["stdDevs above mean"].to_numpy(dtype=float) if n else np.zeros(0)
     top, _, n_bins = histogram_scale(sd_values, control, settings.max_histogram_value, settings.histogram_bin_width)
     return MembraneResult(table_df, profiles, lengths, has, average, _histogram(sd_values, top, n_bins),
-                          _histogram(control, top, n_bins), control, window, excess_profiles)
+                          _histogram(control, top, n_bins), control, window, excess_profiles,
+                          np.array(control_log2, dtype=float))
+
+
+def _nanmean(v: list[float]) -> float:
+    a = np.asarray(v, dtype=float)
+    return float(np.nanmean(a)) if np.isfinite(a).any() else float("nan")

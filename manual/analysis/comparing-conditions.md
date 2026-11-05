@@ -6,7 +6,7 @@ experiment (usually donors). It compares two measures between conditions:
 
 - the [subset preference](interactions.md#subset-preference-which-immune-cells-touch): the ratio observed / expected
   of the contacts of each immune subtype with tumor cells and with the other subtypes;
-- the [membrane enrichment](membrane.md): the median enrichment (in SD above the mean) of every membrane pair of the
+- the [membrane enrichment](membrane.md): the median enrichment (the log2 ratio of interface and free membrane) of every membrane pair of the
   cell type that carries the marker with the other cell type. With several markers of interest, each marker is a
   measure of its own, for example *membrane enrichment (Marker)*.
 
@@ -47,7 +47,7 @@ significant first:
 | Column | Meaning |
 |---|---|
 | *ratio (condition / reference)* | For the subset preference: observed / expected in the condition, divided by observed / expected in the reference. A value above 1 means that these cells touch more often after the treatment. |
-| *difference (median SD)* | For the membrane enrichment: the median enrichment in the condition minus the median enrichment in the reference. |
+| *difference (log2 ratio)* | For the membrane enrichment: the median log2 ratio in the condition minus that in the reference. +1 means that the enrichment doubled; for example from 1.5 to 3 times as bright as the free membrane. |
 | *95% interval* | The range that contains the true change with 95 % confidence, judged from the spread between the replicates. |
 | *p* | The probability of a change at least this large between the replicates if the conditions did not differ. |
 | *q* | *p* corrected for the number of pairs tested. A pair with *q* below 0.05 is shown in bold. |
@@ -83,7 +83,8 @@ evidence that nothing changed. Look at the interval instead: it shows which chan
     the unit. The value of the unit is $y = \ln\big((O + 0.5) / (E + 0.5)\big)$: the log of observed / expected,
     with 0.5 added to both so that a pair without contacts still has a value. Each immune–immune pair is tested
     once, because *S*–*T* and *T*–*S* are the same contacts. For the membrane enrichment, the value of the unit is
-    the median SD above mean of its datasets, weighted by their numbers of cells with an interface. Only the pairs of
+    the median log2 ratio of its datasets, weighted by their numbers of cells with an interface (until 2026-11-05:
+    the median SD above mean; results of older versions have no log2 ratio and must be run again). Only the pairs of
     the cell type that carries the marker with the other cell type are tested (*Membrane of* that type or one of its
     subsets, and *Interface with* the other cell type or one of its subsets). The pairs within one cell type are
     controls, not hypotheses. Each marker of interest is tested on its own, and the cell type that carries it comes from
@@ -175,7 +176,7 @@ evidence that nothing changed. Look at the interval instead: it shows which chan
     A cell type that is placed next to the tumor cell more than twice as often changes observed / expected by only
     4 %, because most events offer little choice. Keep this in mind when you plan the number of donors and events.
 
-    **Membrane enrichment**: the scores per cell were drawn from a skewed distribution (a normal core, with a quarter
+    **Membrane enrichment**: the scores per cell (the test does not depend on their unit) were drawn from a skewed distribution (a normal core, with a quarter
     of the cells in an exponential tail), with 10–200 cells with an interface per sample and donors that differed.
     With no difference between the conditions, the paired test of the medians gave *p* < 0.05 in 0.043–0.053 of the
     experiments, with 2–6 donors.

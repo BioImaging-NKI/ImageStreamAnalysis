@@ -12,6 +12,8 @@ copyright: ImageStream Analysis · Netherlands Cancer Institute · GPL-3.0-or-la
 
 theme:
   name: material
+  logo: images/logo.svg
+  favicon: images/logo.svg
   font: false  # system fonts: no requests to Google
   palette:
     - media: "(prefers-color-scheme: light)"

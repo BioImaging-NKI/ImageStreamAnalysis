@@ -53,6 +53,15 @@ uv run imagestream
 This command opens the [import page](../guide/import-page.md) in your browser. `uv run imagestream-cli` starts the
 [command line](../reference/command-line.md) instead.
 
+To start it without a terminal from now on, make a shortcut once:
+
+```powershell
+uv run imagestream-cli shortcut
+```
+
+This puts *ImageStream Analysis*, with the program's logo, on the Desktop and in the Start menu (`--no-desktop`: only
+in the Start menu). Run it again after you move or reinstall the program.
+
 ??? note "Technical: why Cellpose runs in another process"
 
     The segmentation runs as a separate process (`_cellpose_runner.py`), with the Python that you name. The montage

@@ -191,7 +191,7 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **The excess over both membranes** (2026-11-03): beside `stdDevs above mean`, the column `excess stdDevs above both
   membranes` subtracts the partner's free membrane at the interface; the dashboard has a *Measure* menu. On real
   data the additivity it assumes failed (same-type contacts clearly negative, see SPEC.md); the comparison of
-  conditions stays on `stdDevs above mean`. The dashboard's switch *across the band: maximum / sum* (sums kept in
+  conditions stayed on `stdDevs above mean` (since 2026-11-05: the log2 ratio). The dashboard's switch *across the band: maximum / sum* (sums kept in
   `Profiles.sums`; the tables keep the maximum): the sum brings same-type contacts closer to 0, not yet to 0.
   A fitted scale factor was examined and not adopted (2026-11-03; SPEC.md): it depends on the partner's cell type.
 - The dashboard's per-event panel "Marker of interest at the interface" is removed (superseded by the pair analysis);
@@ -228,14 +228,29 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
 - **Cellpose 4 input**: with `cpsam` the montage has three separate channels (brightfield variance, tumor marker,
   immune markers, each normalized); `marker_location` only chooses the Cellpose 3 recipe (as the macro).
 - The example data of the manual are more realistic (sizes, shapes, noise, weaker and not universal enrichment).
+- **The log2 ratio is the main readout** (asked the same day): log2(interface mean / free mean) per cell
+  (`membrane.LOG2`, `LOG2_SAME`), the default *Measure* in the dashboard, the overview's first enrichment column and
+  the value of the comparison of conditions (`comparison.VALUE`). SD above mean stays beside it (tables, menu); the
+  histogram files stay in SD. Reasons and caveats (background offset, non-carriers): SPEC.md.
+- **Example data** (late 2026-11-05): the enrichment at Subtype A+ contacts stays at 3 of 4 contacts, with a stronger
+  and more variable extra (`EXTRA` in `make_example_data.py`): tumor membranes about 1.85x at A+ contacts against
+  about 1.35x at tumor-tumor contacts, so the walk-through's point shows.
+- **Logo** (`tools/make_logo.py` writes `templates/logo.svg`, `logo.ico` and `manual/images/logo.svg`; the icon is the
+  SVG rendered by Edge): favicon and header of both pages (`__ISA_LOGO__`, filled by `dashboard.page_template`), the
+  waiting page of `launcher.py`, the manual and the README. `imagestream.exe` is a launcher rewritten by every install
+  and cannot keep an icon: `imagestream-cli shortcut` (`shortcut.py`) makes Desktop and Start-menu shortcuts with it.
+- Overview rows of the import page: *Dashboard*, *Folder* and *Run again* are small buttons with icons.
 - Tooltips: every setting on the import page shows its comment from `config.py` (`config.setting_help`); new controls
   get a `title`. The manual is written in plain English, with the intricacies in *Technical* notes.
 
 ### Where things stand, for the next session (2026-11-05)
 
-- Everything is committed on `main` and pushed (with the demo uploaded to the `example-data` release first).
-- Open ideas, not started: the sum over a narrow window centred on the membrane as the projection; log2 ratio as
-  the main readout; control windows on the same cell's free membrane; flagging tilted contacts by the width of the
+- Everything is committed on `main` and pushed (with the demo uploaded to the `example-data` release first), late on
+  2026-11-05: the log2 ratio as the main readout, the stronger example, the logo, the shortcut command.
+- Cellpose on a shared GPU: two runs at once (for example the user's `cpsam` project run and the example's `cyto3`)
+  slowed each other from seconds to many minutes. Run the example when the GPU is free. Task Manager on this laptop
+  shows no CUDA engine; use `nvidia-smi` (the Intel GPU's load is the desktop, not Cellpose).
+- Open ideas, not started: the sum over a narrow window centred on the membrane as the projection; control windows on the same cell's free membrane; flagging tilted contacts by the width of the
   contact profile; per-cell offsets are an option (`band_centre = "cell"`), per type is the default.
 - Diagnostic scripts of the membrane-location and speed work: `data/diagnostics/2026-11-04_membrane_location_speed/`
   (gitignored, synced with the folder), results in `CLAUDE.local.md`.

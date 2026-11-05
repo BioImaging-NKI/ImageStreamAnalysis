@@ -287,7 +287,9 @@ def save(result: Result, settings: Settings) -> None:
         save_table(mem.average, out / f"{AVERAGE_PROFILE}{sfx}.tsv")
         save_table(mem.histogram_interface, out / f"Histogram_interface_stdDevs_above_mean{sfx}.tsv")
         save_table(mem.histogram_control, out / f"Histogram_control_stdDevs_above_mean{sfx}.tsv")
-        save_table(pd.DataFrame({"control stdDevs above mean": mem.control_scores}),
+        save_table(pd.DataFrame({"control stdDevs above mean": mem.control_scores,
+                                 "control log2 ratio": (mem.control_log2 if mem.control_log2 is not None
+                                                        else np.full(len(mem.control_scores), np.nan))}),
                    out / f"Control windows stdDevs above mean{sfx}.tsv")
         profiles = mem.profiles.astype(np.float32)[None]  # rows = the cells of the membrane table
         save_stack(profiles, out / f"membrane_profiles_normalized{sfx}.tif", result.stack.pixel_size)

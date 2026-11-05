@@ -10,8 +10,8 @@ comparison of the conditions. The same information is written to `overview.tsv`,
 
 ## The table
 
-The table has one row per dataset. The *dashboard* link opens the dashboard of the dataset, *folder* opens its
-folder, and *run again* runs only that dataset again (see [Run](import-page.md#4-run)). For a dataset that failed, the row shows the error instead. Hover over a column header to see what the column
+The table has one row per dataset. The *Dashboard* button opens the dashboard of the dataset, *Folder* opens its
+folder, and *Run again* runs only that dataset again (see [Run](import-page.md#4-run)). For a dataset that failed, the row shows the error instead. Hover over a column header to see what the column
 means:
 
 | Column | Meaning |
@@ -35,7 +35,8 @@ Then come the columns of each marker of interest. Their names end in the name of
 | *median Tumor (or Immune) membrane ratio, doublets* | computed in the events of *single tumor + single immune cell*, for the cell type that carries the marker: the mean of the marker in that cell's membrane band at the interface, divided by that in the rest of its band. This is the macro's ratio. It uses all partners of the other type, whatever the membrane pair, and has no control; see [the per-event table](../analysis/membrane.md#the-per-event-table) |
 | *membrane pair* | the pair that the enrichment columns after it describe: *Membrane of* … *with* … |
 | *membranes*, *with interface* | the number of measured cells of that pair, and how many of them touch a partner |
-| *median stdDevs above mean*, *median control (windows)* | the median enrichment of the cells with an interface, and that of the control windows |
+| *median log2 ratio*, *median control log2 ratio (windows)* | the median enrichment of the cells with an interface, as the log2 ratio of the interface and the free membrane (1 = twice as bright), and that of the control windows (about 0); the main readout |
+| *median stdDevs above mean*, *median control (windows)* | the same in standard deviations of the free membrane (the macro's score) |
 
 The enrichment columns describe the membrane pair of each marker. If you click *Apply to the project…* in a dashboard
 with another pair selected, they describe that pair, so always note the pair together with the numbers. Every other

@@ -45,7 +45,7 @@ import pandas as pd
 from .comparison import write_comparison
 from .config import ChannelSettings, Pool, Settings, _from_dict, _toml_value
 from .io import safe_name, save_table
-from .membrane import selector_problems
+from .membrane import LOG2, selector_problems
 
 log = logging.getLogger(__name__)
 PROJECT_FILE = "project.toml"
@@ -270,6 +270,9 @@ def summarize(result: Any, settings: Settings) -> dict[str, Any]:
                 f"membrane pair ({n})": f"{' / '.join(mk.cells)} with {' / '.join(mk.partners)}",
                 f"membranes ({n})": int(len(t)),
                 f"with interface ({n})": int(mem.has_interface.sum()),
+                f"median log2 ratio ({n})": _median(t[LOG2]),
+                f"median control log2 ratio (windows) ({n})": _median(pd.Series(
+                    mem.control_log2 if mem.control_log2 is not None else [], dtype=float)),
                 f"median stdDevs above mean ({n})": _median(t["stdDevs above mean"]),
                 f"median control (windows) ({n})": _median(pd.Series(mem.control_scores)),
             }

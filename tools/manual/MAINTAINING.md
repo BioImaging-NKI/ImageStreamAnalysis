@@ -79,6 +79,9 @@ a larger change). Retake them at the next refresh and empty this list.
 
 (Empty: refreshed on 2026-11-05.)
 
+The logo: `python tools/make_logo.py` (the SVG is the drawing; the icon is rendered from it by Edge). It writes
+`templates/logo.svg` and `logo.ico` and `manual/images/logo.svg`; retake the screenshots after changing it.
+
 ## Refresh, check, publish
 
 1. `python tools/manual/make_example_project.py` (if the analysis or the dashboard changed)

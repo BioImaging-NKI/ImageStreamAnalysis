@@ -6,8 +6,8 @@ their membranes weighted by cells). Per condition against the reference conditio
 per marker of interest, every membrane pair of the cell type that carries the marker with the other type:
 
 - paired, when two or more replicates have both conditions: a paired t-test on the per-replicate differences
-  (log observed/expected for the subset preference, median SD above mean for the membrane enrichment); replicates
-  with only one of the two conditions are left out;
+  (log observed/expected for the subset preference, median log2 ratio interface / free membrane for the membrane
+  enrichment); replicates with only one of the two conditions are left out;
 - otherwise unpaired, when each condition has two or more replicates: Welch's t-test;
 - otherwise no test (the per-replicate values only).
 
@@ -40,6 +40,9 @@ COMPARISON_FILE = "condition comparison.tsv"
 MIN_INTERFACES = 10  # fewer cells with an interface in a replicate: the membrane pair is not tested
 SUBSETS = "subset preference"
 MEMBRANE = "membrane enrichment"  # per marker of interest: "membrane enrichment (<marker>)"
+# the value of the membrane enrichment (2026-11-05; before: "median stdDevs above mean"): a fold change, independent of
+# how patchy or noisy the free membrane is, and closer to normal across replicates
+VALUE = "median log2 ratio interface/free"
 PAIRS = "Membrane pairs.tsv"
 OK_CHECK = "mainly on the measured cells"  # the marker check that needs no note (membrane.CHECK_LEVELS)
 COLUMNS = ["measure", "cell type", "partner", "condition", "reference", "design", "replicates", "effect", "95% low",
@@ -137,6 +140,11 @@ def marker_sides(folder: Path, units: pd.DataFrame) -> tuple[dict[str, tuple[str
     t = _read_pairs(folder, units)
     sides: dict[str, tuple[str, str]] = {}
     notes = []
+    old = sorted({str(f) for f in t["folder"]} if VALUE not in t
+                 else {str(f) for f, g in t.groupby("folder") if g[VALUE].isna().all()})
+    if old:
+        notes.append(f"Membrane enrichment: the results of {', '.join(old)} have no log2 ratio (made by an older "
+                     "version): run them again; left out")
     for marker in dict.fromkeys(t["marker"]):
         per_dataset = t[t["marker"] == marker].drop_duplicates("folder")["marker on"]
         votes = Counter(v for v in per_dataset if v in ("Tumor", "Immune"))
@@ -238,8 +246,8 @@ def _membranes_of(marker: str, side: str) -> ValueFn:
 
 def _membranes(folder: Path, units: pd.DataFrame, marker: str, side: str) -> dict[tuple[str, str], dict[str, Any]]:
     """Per membrane pair of the cell type that carries the marker (`side`; its subtypes, its markers) with the other
-    cell type: the median SD above mean of the datasets of one replicate and condition (weighted by their cells with
-    an interface); ok with MIN_INTERFACES of them."""
+    cell type: the median log2 ratio (VALUE) of the datasets of one replicate and condition (weighted by their cells
+    with an interface); ok with MIN_INTERFACES of them."""
     t = _read_pairs(folder, units)
     if not len(t):
         return {}
@@ -247,11 +255,13 @@ def _membranes(folder: Path, units: pd.DataFrame, marker: str, side: str) -> dic
     tumor = side == "Tumor"
     mine = t["membrane of"].astype(str).str.startswith("Tumor") == tumor
     theirs = t["interface with"].astype(str).str.startswith("Tumor") != tumor
-    t = t[mine & theirs & t["median stdDevs above mean"].notna()]
+    if VALUE not in t:
+        return {}
+    t = t[mine & theirs & t[VALUE].notna()]
     out = {}
     for (m, w), g in t.groupby(["membrane of", "interface with"]):
         n = g["cells with an interface"].to_numpy(dtype=float)
-        v = g["median stdDevs above mean"].to_numpy(dtype=float)
+        v = g[VALUE].to_numpy(dtype=float)
         value = float(np.sum(n * v) / n.sum()) if n.sum() else np.nan
         out[(str(m), str(w))] = {"value": value, "show": value, "ok": n.sum() >= MIN_INTERFACES,
                                  "checks": set(g["marker check"].fillna("").astype(str))}

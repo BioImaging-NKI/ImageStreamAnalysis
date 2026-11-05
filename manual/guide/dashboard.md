@@ -182,8 +182,9 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
 ![Membrane enrichment](../images/dash_membrane.png)
 
 - **Histogram**: the enrichment at the interface (aqua) of every cell with an interface, compared with random control
-  windows on cells without an interface (dashed). The enrichment is expressed in standard deviations above the mean of
-  the free membrane, that is, the membrane that touches no other cell. The histograms start at −5 SD. By default the
+  windows on cells without an interface (dashed), in the measure chosen (below): by default the log2 ratio of the
+  interface and the free membrane, that is, the membrane that touches no other cell (1 = twice as bright). The
+  histograms start at −3 for the log2 ratio, and at −5 SD for the SD scores. By default the
   scale is automatic: the maximum is the 99th percentile of the interface values or of the control windows, whichever
   is higher, so that one extreme cell does not squeeze the rest into a few bins. The bin width is chosen to give at
   most 60 bins. Use the **−** and **+** buttons under the plot to change the *maximum* or the *bin width*, and
@@ -203,13 +204,15 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
 - **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the
   number of cells and the marker check of each pair. Use this table to compare pairs (see
   [The control](../analysis/membrane.md#the-control)). Click a number to show that pair.
-- **Measure**: how the interface is scored. *SD above own membrane* (the default) compares the interface with the
-  cell's own membrane that touches no cell. *SD above same-type contacts* subtracts the median score of the measured
-  cells at contacts with cells of their own kind, for a marker that the partners carry too; a dashed line in the
-  average profile marks that reference. *SD above both membranes (experimental)* also subtracts the partner's free
-  membrane at every interface point; it failed its own check on real data. The histograms, the heatmap, *All pairs*,
-  the cell card and the *Cells* table follow the choice, and the page remembers it. [Three ways to score an
-  interface](../analysis/membrane.md#three-ways-to-score-an-interface) explains when to use which.
+- **Measure**: how the interface is scored. *log2 ratio to own membrane* (the default) compares the interface with
+  the cell's own membrane that touches no cell, as a fold change: 0 = as bright, 1 = twice as bright. *log2 ratio above
+  same-type contacts* subtracts the median of the measured cells at contacts with cells of their own kind, for a
+  marker that the partners carry too; a dashed line in the average profile marks that reference. *SD above own
+  membrane* and *SD above same-type contacts* are the same in standard deviations of the free membrane (the macro's
+  score). *SD above both membranes (experimental)* also subtracts the partner's free membrane at every interface
+  point; it failed its own check on real data. The histograms, the heatmap, *All pairs*, the cell card and the
+  *Cells* table follow the choice, and the page remembers it. [Ways to score an
+  interface](../analysis/membrane.md#ways-to-score-an-interface) explains when to use which.
 - **Across the band**: *maximum* (the default, as the macro and the tables) takes the brightest sample across the
   membrane at every position; *sum* adds all samples. At an interface both membranes lie in the band, and only the
   sum adds them up, as *SD above both membranes* assumes. Everything in the card follows the switch; the tables of

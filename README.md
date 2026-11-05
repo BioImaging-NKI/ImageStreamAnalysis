@@ -1,3 +1,5 @@
+<img src="manual/images/logo.svg" alt="" width="72" align="right">
+
 # ImageStream Analysis (Python)
 
 Analysis of tumor–immune cell interactions in imaging flow cytometry (ImageStream) data: segmentation of the cells
