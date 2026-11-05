@@ -32,6 +32,8 @@ cell type it touches (column):
   row B.
 - **cells touching**: the number of cells of the row's type that touch at least one cell of the column's type, and
   the **fraction** of the row's cells that this represents.
+- **share of contacts**: the contacts with the column's type as a share of all contacts of the row's type (the bars
+  on the right of the dashboard's *Interactions* card).
 
 ## Partner preference: contacts compared with chance
 

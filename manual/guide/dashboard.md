@@ -166,6 +166,13 @@ its points to the front.
   out again.
 - **Share of contacts** (right): for each cell type, which cell types it touches, as a share of its contacts or as
   numbers. On the right, it also shows the share of its cells that touch any other cell.
+- **Save .tsv** (beside the tabs) saves the interactions as a tab-separated table, for the events shown (the filters
+  at the top) and with the subtypes of the sliders. With *partner preference* or *fraction touching*: one row per cell
+  type and the type it touches, with the columns of `Interactions.tsv` (contacts, cells touching, share of contacts,
+  observed and expected). With *among immune cells*: the subset preference with its 95 % interval, with the columns
+  of `Subset preference.tsv`. The result folder holds both tables already, for every event and the subtypes of the
+  run; save from the dashboard after changing the filters or the sliders. The intervals differ slightly from those in
+  the result folder, because the page draws fewer random resamples.
 
 [Cell contacts](../analysis/interactions.md) explains how contacts and chance are defined, and what they can and
 cannot tell you.

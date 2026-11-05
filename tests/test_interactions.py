@@ -44,6 +44,8 @@ def test_neighbours_contacts_and_multiplets():
     assert table.loc[("Tumor", "Immune A+"), "contacts"] == 1
     assert table.loc[("Tumor", "Immune A+"), "cells"] == 2  # two tumor cells, one touches an A+ cell
     assert table.loc[("Tumor", "Immune A+"), "fraction touching"] == 0.5
+    shares = table.loc["Tumor", "share of contacts"]  # the contacts of the tumor cells, divided over their partners
+    assert np.isclose(shares.sum(), 1) and np.isclose(shares["Immune A+"], 1 / table.loc["Tumor", "contacts"].sum())
     assert table.loc[("Immune A+", "Immune negative"), "contacts"] == 1
     m = multiplets(cells, pairs, 4)
     assert m["events with n cells"].tolist() == [1, 2, 0, 1]  # event 3 is empty; events 1, 2 one cell; event 0 three

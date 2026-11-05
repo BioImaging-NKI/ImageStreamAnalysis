@@ -139,7 +139,7 @@ button.on:hover { border-color: var(--s1); }
   display: inline-flex; align-items: center; justify-content: center; }
 .pairpick { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 4px 0 8px; }
 .pairpick label { color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
-.pairpick label[hidden] { display: none; }
+.pairpick label[hidden], .filters label[hidden] { display: none; }
 #applybar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20; max-width: min(640px, 92vw);
   background: var(--ink); color: var(--page); border-radius: 8px; padding: 8px 14px; font-size: 13px; display: none;
   box-shadow: 0 4px 14px rgba(0,0,0,.25); white-space: pre-wrap; }
@@ -218,7 +218,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
     <p class="sub" id="contacts-sub"></p>
     <div class="grid2">
       <div>
-        <div class="tabs"><button id="mx-ratio" class="on" title="All cell types: contacts against the cell types shuffled among the cells of each event (events of 3+ cells)">partner preference</button><button id="mx-subsets" title="The immune subtypes: contacts against the subtypes shuffled among the immune cells of each event (events with two or more immune cells), with a 95 % interval">among immune cells</button><button id="mx-fraction">fraction touching</button></div>
+        <div class="tabs"><button id="mx-ratio" class="on" title="All cell types: contacts against the cell types shuffled among the cells of each event (events of 3+ cells)">partner preference</button><button id="mx-subsets" title="The immune subtypes: contacts against the subtypes shuffled among the immune cells of each event (events with two or more immune cells), with a 95 % interval">among immune cells</button><button id="mx-fraction">fraction touching</button><button id="mx-save" class="small" style="margin-left:auto" title="Save the interactions as a tab-separated table, for the events shown (the filters above) and the subtypes of the sliders. Partner preference and fraction touching: one row per cell type and the type it touches (contacts, cells touching, share of contacts, observed and expected). Among immune cells: the subset preference with its 95 % interval">Save .tsv</button></div>
         <div class="legend" id="matrix-legend"></div>
         <div class="plot"><svg id="matrix"></svg></div>
         <p class="note">Rows: cell type; columns: the type it touches. Click a square to show the events with that contact.</p>
@@ -1593,11 +1593,14 @@ const EVENT_COLS = [["event", "event", e => e + 1], ["object", "object", e => E.
   ...EM.flatMap((m, k) => [["ti", "immune interface"], ["tr", "immune rest"], ["ui", "tumor interface"], ["ur", "tumor rest"], ["tratio", "immune ratio"], ["uratio", "tumor ratio"]]
     .map(([c, label]) => [`${c}${k}`, `${label} (${m.name})`, e => m[{ ti: "t_interface", tr: "t_rest", ui: "tu_interface", ur: "tu_rest", tratio: "t_ratio", uratio: "tu_ratio" }[c]][e]]))];
 const CONTACT_COLS = [["a", "cell type", r => shortType(r.a)], ["b", "neighbour type", r => shortType(r.b)], ["cells", "cells", r => r.cells], ["o", "contacts", r => r.o],
-  ["touch", "cells touching", r => r.touch], ["frac", "fraction touching", r => r.frac], ["o3", "contacts (3+ cells)", r => r.o3],
+  ["touch", "cells touching", r => r.touch], ["frac", "fraction touching", r => r.frac], ["share", "share of contacts", r => r.share],
+  ["o3", "contacts (3+ cells)", r => r.o3],
   ["e", "expected (3+ cells)", r => r.e], ["oe", "observed / expected", r => r.oe]];
 const LIMIT = 2000;
 function contactRows() { const S = contactCache || contactStats(), out = [];
+  const total = S.obs.map(row => row.reduce((p, q) => p + q, 0));  // all contacts of the row type
   S.types.forEach((a, x) => S.types.forEach((b, y) => { if (S.obs[x][y] || S.exp[x][y] > 1e-9) out.push({ a, b, cells: S.nCells[x], o: S.obs[x][y], touch: S.touch[x][y].size,
+    share: total[x] ? S.obs[x][y] / total[x] : null,
     frac: S.nCells[x] ? S.touch[x][y].size / S.nCells[x] : null, o3: S.obs3[x][y], e: S.exp[x][y], oe: S.exp[x][y] > 0 ? S.obs3[x][y] / S.exp[x][y] : null }); })); return out; }
 function tableRows() {  // the columns and all rows of the current table, filtered and sorted as on the page
   const kind = state.tab, cols = kind === "cells" ? CELL_COLS : kind === "events" ? EVENT_COLS : CONTACT_COLS;
@@ -1606,15 +1609,32 @@ function tableRows() {  // the columns and all rows of the current table, filter
     ids.sort((a, b) => { const x = f(a), y = f(b); if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * (state.tableDesc ? -1 : 1); }); } }
   return { kind, cols, ids };
 }
-document.getElementById("download").onclick = () => {
-  const { kind, cols, ids } = tableRows();
+// a table as a tab-separated file (3 decimals and NaN, as the tables of the result folder)
+function saveTsv(name, cols, ids) {
   const cell = v => v == null || (typeof v === "number" && !isFinite(v)) ? "NaN" :
     typeof v === "number" ? String(Math.round(v * 1000) / 1000) : String(v).replace(/[\t\n]/g, " ");
   const text = [cols.map(c => c[1]).join("\t"), ...ids.map(id => cols.map(c => cell(c[2](id))).join("\t"))].join("\n") + "\n";
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "text/tab-separated-values" }));
-  a.download = `${D.name} - ${kind}.tsv`; document.body.append(a); a.click(); a.remove();
+  a.download = `${D.name} - ${name}.tsv`; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+document.getElementById("download").onclick = () => { const { kind, cols, ids } = tableRows(); saveTsv(kind, cols, ids); };
+// the Interactions card: what its matrix shows, for the events shown (the columns of Interactions.tsv and
+// Subset preference.tsv in the result folder, which hold every event and the subtypes of the run)
+const SUBSET_COLS = [["a", "cell type", r => shortType(r.a)], ["b", "neighbour type", r => shortType(r.b)], ["o", "contacts", r => r.o],
+  ["e", "expected (subtypes shuffled)", r => r.e], ["oe", "observed / expected (subtypes shuffled)", r => r.oe],
+  ["lo", "95% low", r => r.lo], ["hi", "95% high", r => r.hi]];
+function subsetRows() { const S = subsetStats(), out = []; if (!S) return out;
+  S.rows.forEach((a, x) => S.cols.forEach((b, y) => { const o = S.obs[x][y], e = S.exp[x][y];
+    const few = e < 5;  // no interval with fewer than 5 expected, as in the matrix (MIN_EXPECTED)
+    if (o || e > 1e-9) out.push({ a, b, o, e, oe: e > 0 ? o / e : null, lo: few ? null : S.ci[x][y][0], hi: few ? null : S.ci[x][y][1] }); }));
+  return out; }
+document.getElementById("mx-save").onclick = () => {
+  // the cell types by their full names, as in the tables of the result folder (Tumor, Immune Subtype A+, ...)
+  const full = cols => cols.map(([k, label, f]) => k === "a" ? [k, label, r => r.a] : k === "b" ? [k, label, r => r.b] : [k, label, f]);
+  if (state.matrix === "subsets") saveTsv("subset preference", full(SUBSET_COLS), subsetRows());
+  else saveTsv("interactions", full(CONTACT_COLS), contactRows());
 };
 function renderTable() {
   let { kind, cols, ids } = tableRows();

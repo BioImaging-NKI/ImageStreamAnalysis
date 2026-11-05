@@ -104,17 +104,19 @@ def contact_table(cells: pd.DataFrame, pairs: np.ndarray) -> pd.DataFrame:
         expected += n_pairs * 2 * p / (n * (n - 1))
     n_cells = np.bincount(type_idx, minlength=k)
     rows = []
+    total = observed.sum(axis=1)  # all contacts of the row type: the share of contacts (the dashboard's bars)
     for i in range(k):
         for j in range(k):
             if observed[i, j] or expected[i, j] > 1e-9:
                 rows.append({"cell type": names[i], "neighbour type": names[j], "cells": int(n_cells[i]),
                              "contacts": int(observed[i, j]), "cells touching": len(touching[i][j]),
                              "fraction touching": len(touching[i][j]) / n_cells[i],
+                             "share of contacts": observed[i, j] / total[i] if total[i] else np.nan,
                              "contacts (3+ cells)": int(observed_3[i, j]), "expected (3+ cells)": expected[i, j],
                              "observed / expected": (observed_3[i, j] / expected[i, j] if expected[i, j] > 0
                                                      else np.nan)})
     columns = ["cell type", "neighbour type", "cells", "contacts", "cells touching", "fraction touching",
-               "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
+               "share of contacts", "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
     return pd.DataFrame(rows, columns=columns)
 
 

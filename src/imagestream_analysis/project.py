@@ -548,11 +548,16 @@ def write_overview(folder: str | Path) -> pd.DataFrame:
                   .merge(each.drop_duplicates(["experiment", "dataset", "cell type"])
                          .groupby(["experiment", "cell type"], as_index=False)["cells"].sum(), on=keys[:2]))
         summed["fraction touching"] = summed["cells touching"] / summed["cells"]
+        row_total = summed.groupby(["experiment", "cell type"])["contacts"].transform("sum")
+        summed["share of contacts"] = summed["contacts"] / row_total.where(row_total > 0)
+        if "share of contacts" not in each:  # results from before 2026-11-06
+            each["share of contacts"] = np.nan
         summed["observed / expected"] = (summed["contacts (3+ cells)"]
                                          / summed["expected (3+ cells)"].where(summed["expected (3+ cells)"] > 0))
         summed.insert(1, "dataset", "(all)")
         columns = ["experiment", "dataset", "cell type", "neighbour type", "cells", "contacts", "cells touching",
-                   "fraction touching", "contacts (3+ cells)", "expected (3+ cells)", "observed / expected"]
+                   "fraction touching", "share of contacts", "contacts (3+ cells)", "expected (3+ cells)",
+                   "observed / expected"]
         save_table(pd.concat([each[columns], summed[columns]], ignore_index=True), folder / INTERACTIONS_FILE)
     write_subsets(folder, table)
     pairs = []
