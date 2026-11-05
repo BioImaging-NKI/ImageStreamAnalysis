@@ -194,8 +194,8 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
   most 60 bins. Use the **−** and **+** buttons under the plot to change the *maximum* or the *bin width*, and
   **auto** to return to the automatic scale. The page redraws the histograms immediately and remembers the scale.
   Values above the maximum are not counted; the note under the plot says how many cells that concerns.
-- **Average profile**: the average membrane profile of the cells with an interface, centered on the interface. Its
-  vertical axis fits the curve, so a small enrichment is not flattened.
+- **Average profile**: the average membrane profile of the cells with an interface, with the interface at 0 µm (as in
+  the heatmap and the cell card). Its vertical axis fits the curve, so a small enrichment is not flattened.
 - **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top. The colour scale is
   ±6 SD for the SD scores; for the log2 ratio it is set from the rows shown (the legend gives it). The **stripe** under
   it shows the rows averaged per position, on the same colour scale (the average profile as a colour band); hover

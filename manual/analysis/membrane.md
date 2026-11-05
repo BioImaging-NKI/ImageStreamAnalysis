@@ -229,8 +229,9 @@ standard deviations of the free membrane:
 
 $$\text{SD above mean} = \frac{\overline{\text{interface}} - \overline{\text{free}}}{\text{SD}(\text{free})}$$
 
-The profiles are aligned so that the center of the longest interface of each cell lies at position 20. Their
-average, over the cells with an interface, shows the shape of the enrichment.
+The profiles are aligned so that the center of the longest interface of each cell lies at the same place: position 20
+in the output files, 0 µm in the dashboard. Their average, over the cells with an interface, shows the shape of the
+enrichment.
 
 ![Membrane enrichment in the dashboard](../images/dash_membrane.png)
 

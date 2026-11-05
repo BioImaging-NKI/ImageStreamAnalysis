@@ -649,6 +649,10 @@ Deviation from the macro, which scores `stdDevs above mean` = (interface − fre
   `tools/stats/calibrate_comparison.py` simulates generic skewed scores and holds for either unit).
 - Dashboard: histograms from −3 (minimum top 2) for log2, from −5 SD for SD (`HIST_VIEWS` keeps a scale per kind;
   the settings `max_histogram_value` / `histogram_bin_width` apply to SD); heatmap ±2 in log2, ±6 SD.
+- **Positions relative to the interface** (the user, 2026-11-05): the dashboard's average profile, heatmap legend,
+  stripe and cell card give µm from the interface centre (0), not from the start of the aligned row (where the
+  interface lay at `INTERFACE_OFFSET` = 20 px). The output files keep position 20 (macro names). The cell card's
+  profile is labelled in the measure shown (it said SD also for the log2 ratio).
 - On the example data the pair table matches the dashboard's live values (Tumor with Immune 0.13 both).
 
 ## Zero intensities in the clustering (2026-11-03)
