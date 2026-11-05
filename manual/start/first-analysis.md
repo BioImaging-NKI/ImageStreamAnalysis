@@ -68,8 +68,8 @@ installed in a separate environment, fill in *Python with Cellpose* (see [Instal
 **Step 4, Run.** The list above the button shows what is still missing, if anything. Click *Run all datasets*. A bar under
 the button shows *Running…* with the dataset in progress, and the log below it shows the details; at the end the bar
 shows *Done*. First every dataset is segmented and measured, then the datasets of each experiment are
-classified together, and finally the analysis of every dataset is completed. With a GPU, the example takes about a
-minute.
+classified together, and finally the analysis of every dataset is completed. With a GPU, the example takes one to two
+minutes.
 
 ## 6. The overview
 

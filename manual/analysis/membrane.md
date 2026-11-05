@@ -1,86 +1,157 @@
 # Membrane enrichment
 
-This analysis asks whether a marker of interest is enriched in the membrane of one cell type at the places where it
-touches another cell type, compared with the rest of its membrane. Tick *Membrane profiles and enrichment* to switch
-it on. With several markers of interest, the analysis is done for each of them (see
-[Several markers of interest](#several-markers-of-interest)).
+This analysis asks a simple question: **is there more of a marker in a cell's membrane where it touches another
+cell than in the rest of its membrane?** For example: does a ligand on tumor cells gather where a T cell touches?
+Tick *Membrane profiles and enrichment* to switch it on. With several markers of interest, every marker is analyzed
+in the same way (see [Several markers of interest](#several-markers-of-interest)).
+
+The answer is less simple than the question. Images of touching cells contain several effects that look like
+enrichment but are not: two stained membranes lying side by side, a partner that carries the marker too, and an
+outline that does not lie exactly on the membrane. This page explains each step, what can go wrong, and what the
+program does about it. The main text is meant to be read from top to bottom; the folded *Technical* notes give the
+details for those who want them.
+
+**In short**, for every cell the program:
+
+1. traces the cell's outline and finds where the stained membrane lies relative to that outline;
+2. reads the marker along the membrane, as a line of values from one end of the membrane to the other (the
+   **membrane profile**);
+3. notes, for every point of that line, whether another cell touches there, and which one;
+4. compares the part that touches a partner (the **interface**) with the part that touches no cell at all (the
+   **free membrane**).
+
+The result is a score per cell, and a median per pair of cell types. Random stretches of free membrane serve as a
+control, and contacts between cells of the same kind serve as a reference for what touching alone does.
 
 ## The membrane profile
 
-For every cell, the outline is traced, smoothed and **straightened**. The marker of interest is sampled in a band
-across the membrane, and at every position along the outline the brightest sample across the band is kept. The width
-of the band is set by *Straightening width*; by default it is about 4.5 µm, which is 5 px at 20×, 9 px at 40× and
-13 px at 60×. The result is a background-subtracted profile along the membrane, with one value per pixel of perimeter.
+Imagine laying a ribbon along the edge of the cell, and reading the marker under the ribbon at every step along the
+edge. That is what the program does: it traces the cell's outline, smooths it, and takes a **band** of pixels across
+the membrane at every point along it. Laid out straight, the band becomes a strip; this is called *straightening*.
+At every point along the membrane, the brightest pixel across the band is kept. The result is the membrane profile:
+one value per pixel of perimeter, with the background subtracted.
 
-By default the band is **centred where the membrane lies**, not on the outline (*Band centred on*: *membrane*). The
-outline that Cellpose draws does not lie on the membrane: where a cell is free it usually lies outside the stained
-membrane, and where cells touch it lies on the boundary between their masks, which need not be the membrane either.
-The program therefore first finds the membrane in the data, for each cell type, at the free membrane and at the
-contacts with each cell type, and moves the band there. See
-[Where the membrane lies](#where-the-membrane-lies-and-a-false-enrichment-it-prevents).
+The width of the band is *Straightening width*. By default it is about 4.5 µm (5 px at 20×, 9 px at 40×, 13 px at
+60×). It has to be wide enough to contain the membrane everywhere, also where the outline does not lie exactly on it
+(see the next section).
 
-Along the same line, every position also records whether another cell lies within the interface width, and if so,
-which cell. This record is the cell's **neighbor track**.
+Along the same line, the program also records, for every point, whether another cell lies within *Membrane /
+interface width* (by default about 1.5 µm), and if so which cell. This record is the cell's **neighbor track**. It
+decides which points are interface and which are free membrane.
 
-??? note "Technical: one membrane per cell"
+??? note "Technical: one membrane per cell, and how the outline is traced"
 
     The Fiji macro straightened one ring for each blob of touching cells of the same type. Here every cell has its own
-    membrane, so two touching tumor cells give two membranes. The outline follows the pixel edges (marching squares)
-    and is smoothed with a Gaussian (σ = 2 samples), where Fiji fits a spline; it is then resampled at 1 px. At every
-    pixel of the cell that lies within the interface width of another cell, the neighbor track stores the label of the
-    nearest other cell. The length of every profile is stored, so a value of 0 is data and does not mark the end of the
+    membrane, so two touching tumor cells give two membranes. The outline follows the pixel edges of the cell's mask
+    (marching squares) and is smoothed with a Gaussian (σ = 2 samples), where Fiji fits a spline; it is then resampled
+    at 1 px, so a profile has one value per pixel of perimeter. For the neighbor track, every pixel of the cell that
+    lies within the interface width of another cell gets the label of the nearest other cell; the track is read along
+    the outline. The length of every profile is stored, so a value of 0 is data and does not mark the end of the
     profile (in the macro, zeros ended it).
 
-### Where the membrane lies, and a false enrichment it prevents
+## Where the band is placed
 
-Where a cell is free, the outline that Cellpose draws lies a little **outside** the stained membrane (by about 1 µm in
-the tests, after *Shrink cells*). Where two cells touch, it lies on the boundary between the two masks, which is
-close to the membrane. A band centred on the outline then reaches less of the free membrane than of an interface. If
-the band is too narrow, the brightest sample at the free membrane misses part of the membrane, while at a contact it
-does not, and the interface looks enriched for any membrane marker, without any biological cause.
+### The problem: the outline is not the membrane
 
-**How the membrane is found.** For every measured cell, the marker of interest is sampled across the outline, 3 µm
-to each side, and averaged along the free membrane and along the contacts with each cell type. These profiles are
-averaged over the cells of each type. Their peak is where the membrane lies, relative to the outline. The band is
-then centred there: at the free membrane on the free peak, at a contact on the peak for contacts with that cell type,
-with a smooth transition where a contact begins or ends. The neighbor track is still taken on the outline.
+The outline comes from the cell's mask, which Cellpose draws. It is close to the membrane, but not on it, and **how
+far off it is depends on where you look**:
 
-- The membrane of a cell type is located with a marker of interest that this cell type carries: its median
-  whole-cell intensity is at least half that of the brightest cell type, so a marker on both types locates both. A
-  marker that a cell type does not carry shows no membrane of that cell, or signal elsewhere in it. With several
-  markers carried by the same type, the one most specific to that type is used (then the one with the clearest
-  peak), and its place holds for all markers (the membrane is where it is, whatever the marker).
-- If no marker of interest is carried by a cell type, if fewer than 20 cells contribute, or if the average has no
-  clear peak, the band stays on the outline there. The log says so.
-- By default one place per cell type, the same for all its cells. With *Band centred on*: *cell*, every cell's
-  free membrane is placed on the peak of its own (from the same marker), and its contacts are moved by as much,
-  plus its type's difference between contact and free membrane. Contacts are not placed per cell: they are short,
-  so their peak is noisy, and letting the marker choose where to sample the interface would raise it. Cells with
-  fewer than 20 positions of free membrane, or without a clear peak, use the type's place. The log says how many
-  cells had a place of their own.
+- **Where a cell is free**, the mask usually reaches a little beyond the stained membrane, because the blurred edge
+  of the cell is included. The membrane then lies a little *inside* the outline, typically less than a micrometre
+  (about 1 µm in the synthetic tests).
+- **Where two cells touch**, the outline is the border between the two masks. Cellpose has to put that border
+  somewhere in the blurred contact, and it need not be exactly on the membrane either. On real data, it sometimes lay
+  a little into one of the two cells.
 
-**The check.** The log of every run says, for each cell type and place, where the membrane lies (in µm from the
-outline, + is outside) and how much single cells vary (the middle half). `Membrane location.tsv` holds the same per
-marker, and `Membrane location - profiles.tsv` the average profiles. The dashboard's membrane card shows them under
-*Across the membrane*. With the band on the outline (*Band centred on*: *outline*, as the macro), a warning is logged
-when the band does not reach at least a pixel beyond a membrane.
+So the distance between outline and membrane differs between the free membrane and the interface, and between cell
+types. If the band is centred on the outline, it can reach more of the membrane at the interface than at the free
+membrane. The interface then looks brighter than the free membrane even if the marker is spread evenly. This is a
+**false enrichment**: it comes from the geometry, not from the biology.
 
-On real data, the place of the membrane differed between the cell types, and between the free membrane and the
-contacts: for one cell type the outline lay outside the membrane everywhere, so a band on the outline was fair; for
-the other it lay outside at the free membrane but beyond the membrane at contacts, so a band on the outline
-favoured the interface. Single cells also varied by about as much as these distances, and the variation was real: the place found on one
-half of a cell's free membrane agreed well with that on the other half. *cell* follows it; on the test data it
-lowered the enrichment of the affected pairs a little further than *membrane*. A wide band (the default 4.5 µm)
-still matters: centring removes the systematic difference between free membrane and interface, and the width takes
-up what remains of the variation. A dependence on the width that remains after centring comes mostly from the
-partner's membrane, which a wider band reaches at a contact (see
-[Where the marker is expressed](#where-the-marker-is-expressed)).
+### What the program does: find the membrane first
+
+Before it measures anything, the program finds out where the membrane really lies. For each cell type, it averages
+the marker across the outline (3 µm to each side) over all its cells: once along the free membrane, and once along
+the contacts with each other cell type. The peak of each average is where the membrane lies. The band is then
+centred on that peak: at the free membrane on the free peak, at a contact on the peak for that kind of contact.
+Where a contact begins or ends, the band moves over smoothly.
+
+You can see the result in the dashboard: the membrane card has a folded section *Across the membrane*, which shows
+these averages and where the band lies; and in the *Cell* card, *membrane band* (or the space bar) draws the band of
+a cell over its images.
+
+*Band centred on* has three choices:
+
+| Choice | The band lies | Use it |
+|---|---|---|
+| *membrane* (default) | where the membrane lies, for each cell type (one place for all cells of a type, at the free membrane and at each kind of contact) | in general |
+| *cell* | as *membrane*, but each cell's free membrane on its own peak | when the cells differ a lot in how far the outline lies from the membrane |
+| *outline* | on the outline, as the Fiji macro did | to compare with the macro, or to see how much the placement matters |
+
+The *Straightening width* still matters, but much less. Centring removes the systematic difference between free
+membrane and interface; the width takes up what remains (cells differ from each other). Keep the default width
+unless you have a reason to change it.
+
+??? note "Technical: how the membrane is found"
+
+    For every measured cell, every marker of interest is sampled along lines perpendicular to the outline, from 3 µm
+    inside to 3 µm outside, in steps of a quarter pixel. These samples are averaged along the points of the cell that
+    are free membrane (if there are at least 5), and separately along the points that touch each cell type. The cell
+    averages are then averaged over all cells of the same type. The peak of such an average (refined with a parabola
+    through the three highest points) is the distance from the outline to the membrane for that cell type and place.
+    A peak at the very end of the 3 µm window is not accepted.
+
+    **Which marker places the band.** The membrane of a cell type is located with a marker of interest that this cell
+    type carries: its free membrane must be at least half as bright as that of the brightest cell type (measured on the
+    same averages). A marker that a cell type does not carry shows no membrane of that cell, or signal somewhere else in
+    it (on real data, one marker showed a sharp peak well inside the other cell type, probably signal inside the cell).
+    With several markers carried by the same type, the marker most specific to that type is used, and if two are
+    equally specific, the one with the clearest peak. Its place then holds for all markers, because the membrane is
+    where it is, whatever the marker.
+
+    **When the band stays on the outline.** If no marker of interest is carried by a cell type, if fewer than 20 cells
+    contribute to an average, or if the average has no clear peak (its peak must stand out by at least 30 % of its
+    range above the ends of the window), the band stays on the outline there. The log says so for every cell type and
+    place.
+
+    The neighbor track is always read along the outline itself, so moving the band does not change which points are
+    interface and which are free membrane.
+
+??? note "Technical: *cell* — a place per cell, and why not at the contacts"
+
+    With *cell*, every cell's free membrane is placed on the peak of its own average (from the same marker as its
+    type), and its contacts are moved by the same amount, plus its type's difference between contact and free
+    membrane. Example: if tumor cells have their free membrane on average 0.9 µm inside the outline and their contacts
+    with immune cells 0.3 µm outside it, a tumor cell whose own free membrane lies 1.2 µm inside gets its contacts
+    with immune cells at 0.0 µm.
+
+    Contacts are never placed per cell, for two reasons. They are short, so the peak of a single contact is noisy. And
+    letting the marker choose where to sample exactly the place that is tested would push the interface up: the
+    brightest spot nearby always looks a little enriched. Cells with fewer than 20 points of free membrane, or without
+    a clear peak of their own, use the type's place. The log says how many cells had a place of their own.
+
+    Is the per-cell place real, or noise? On real datasets, the place found on one half of a cell's free membrane
+    agreed well with the place found on the other half, and cells differed from each other by about as much as the
+    type's average distance. *cell* follows that variation.
+
+??? note "Technical: what was seen on real data"
+
+    On real data, the free membrane of both cell types lay on average somewhat inside the outline (less than a
+    micrometre), and single cells varied around that by about as much. At contacts, the two cell types differed. For one
+    type, the membrane lay just as far inside the outline at contacts as at the free membrane, so a band on the
+    outline treated both alike. For the other type, the membrane at contacts lay on or slightly beyond the outline,
+    while the free membrane lay inside it. A band on the outline then reached the two places differently, and how
+    that shifted the score depended on the band width: with a narrow band it could raise the score of some pairs and
+    lower that of others. Centring the band on the membrane made the scores depend much less on the width.
+
+    Contacts between cells of the same type, where no enrichment is expected, came out lower once the band was
+    centred, which is what removing a false enrichment should do.
 
 ??? note "Technical: the straightening width with the band on the outline"
 
-    In a test at 40× (0.5 µm per pixel), with the band on the outline, a ligand on the tumor membrane was enriched
-    only where Beta+ immune cells touched. The tumor cells' interface with Beta− cells, which has no enrichment,
-    measured:
+    In a synthetic test at 40× (0.5 µm per pixel), with the band on the outline, a ligand on the tumor membrane was
+    enriched only where Beta+ immune cells touched. The tumor cells' interface with Beta− cells, which has no
+    enrichment, measured:
 
     | Straightening width | Beta− contacts (truth: none) | Beta+ contacts (truth: enriched) |
     |---|---|---|
@@ -88,21 +159,23 @@ partner's membrane, which a wider band reaches at a contact (see
     | 9 px (4.5 µm) | 0.35 SD, ratio 1.05 | 6.5–6.7 SD, ratio 1.95–2.0 |
     | 13 px (6.5 µm) | 0.2 SD, ratio 1.03 | 6.6–7.1 SD, ratio 1.9 |
 
-    The default is therefore about 4.5 µm: the odd number of pixels nearest to $4.5\,\mu\mathrm{m}$ / pixel size,
-    with a minimum of 5. A wider band somewhat lowers the ratio of a real enrichment, because the free membrane is now
-    measured at its true brightness, but the real enrichment stays clearly separate from the false one. If you set
+    This is why the default width is about 4.5 µm: the odd number of pixels nearest to 4.5 µm divided by the pixel
+    size, with a minimum of 5. A wider band somewhat lowers the ratio of a real enrichment, because the free membrane
+    is now measured at its true brightness, but the real enrichment stays clearly apart from the false one. If you set
     the width in pixels (`membrane.straightening_width`), that value is used as it is. The comparison with the Fiji
-    macro uses the macro's 5 px, with the band on the outline. With the band centred on the membrane (the default),
-    the result depends much less on the width: in a synthetic test with an evenly stained membrane, a 3 px band on
-    the outline made the interface look about 30 % brighter than the free membrane, and centred on the membrane both
-    3 px and 9 px gave no enrichment.
+    macro uses the macro's 5 px with the band on the outline.
 
-    A wider band also reaches further into a touching partner. This matters only when the partner carries the marker
+    With the band centred on the membrane, the width matters much less: in a synthetic test with an evenly stained
+    membrane that lay 2 px inside a free outline, a 3 px band on the outline made the interface look about 30 %
+    brighter than the free membrane; centred on the membrane, a 3 px and a 9 px band both showed no enrichment.
+
+    A wider band also reaches further into a touching partner. This matters when the partner carries the marker
     (see [Where the marker is expressed](#where-the-marker-is-expressed)).
 
 ## A pair of cell types
 
-**Membrane of** and **Interface with** choose the pair of cell types. Each can be:
+**Membrane of** and **Interface with** choose the pair of cell types: whose membrane is measured, and which
+partners make up the interface. Each can be:
 
 - a cell type (*Tumor*, *Immune*);
 - an immune subtype as it is named in the tables (*Immune Subtype A+*, or *Immune negative* for the immune cells that
@@ -112,60 +185,138 @@ partner's membrane, which a wider band reaches at a contact (see
 Anything else (for example *Immune Subtype A* without the +) stops the run before it starts, with a message that
 suggests what was probably meant.
 
-If *Membrane of* is left empty, the measured cells are the cell type that **carries the marker**: the tumor cells or
+If *Membrane of* is left empty, the program measures the cell type that **carries the marker**: the tumor cells or
 the immune cells, whichever has the brighter membrane. This is decided from the data, for each marker of interest
-separately. If *Interface with* is left empty, the partners are the other cell type. Every marker of interest has
-a pair of its own, and each side is set on its own: a marker can, for example, be measured on the tumor cells
-against *Subtype A+* cells, and another one on the *Subtype A+* cells against the tumor cells. In the [dashboard](../guide/dashboard.md#membrane-enrichment) you can change the pair
-directly.
+separately. If *Interface with* is left empty, the partners are the other cell type. Every marker of interest has a
+pair of its own, and each side is set on its own. In the [dashboard](../guide/dashboard.md#membrane-enrichment) you
+can change the pair directly.
 
-The log says which cell type carries each marker. In the example (Donor 1): "Marker: carried by the tumor cells (medians
-tumor 31.64, immune 4.478, membrane that touches no cell): membranes of Tumor with Immune". The same is recorded in `run.json`
-(*markers of interest*), in the column *marker on* of `Membrane pairs.tsv`, and in the overview column *MOI on* of each
-marker.
+The log says which cell type carries each marker, and how clearly. In the example (Donor 1): "Marker: carried by the
+tumor cells (...): membranes of Tumor with Immune". The same is recorded in `run.json` (*markers of interest*), in
+the column *marker on* of `Membrane pairs.tsv`, and in the overview column *MOI on* of each marker. **If the two cell
+types carry the marker at a similar level** (the weaker one at 80 % of the stronger or more), the choice is made by a
+small margin, and the log warns. Then set the pair yourself, so that it does not depend on that margin.
 
 ??? note "Technical: how the carrying cell type is decided"
 
-    The measure is the one of the [marker check](#where-the-marker-is-expressed): the median free-membrane intensity,
-    background-subtracted, of the tumor cells and of the immune cells (all immune cells together, whatever their
-    subtype). The type with the higher median carries the marker. Without the membrane analysis, the mean intensity of
-    the whole cell is used instead. Before November 2026, this choice was a setting (*Marker of interest expressed in*).
-    A settings file or project that still has it (`channels.cell_of_interest`) loads without an error; the setting is
-    ignored, and the log says so.
+    With the membrane analysis, the measure is the height of the free membrane in the marker averaged across the
+    outline (the same averages that place the band): the peak of that average above its ends, for the tumor cells and
+    for the immune cells. The type with the higher peak carries the marker. This measure does not depend on the band's
+    width or place. (Until November 2026 the band's own free-membrane values were used; when a marker was on both cell
+    types at a similar level, the choice could then flip when only the band width changed.) Without the membrane
+    analysis, the median whole-cell intensity is used instead.
 
-    Because the default pair always measures the brighter type, the marker check of that pair cannot show "brighter on
-    the partners". It can still show that the partners carry part of the marker, or as much of it.
+    Before November 2026, the measured type was a setting (*Marker of interest expressed in*). A settings file or
+    project that still has it (`channels.cell_of_interest`) loads without an error; the setting is ignored, and the
+    log says so.
 
 For the measured cells, the **interface** is the part of the membrane where the neighbor track shows a partner. The
-**free membrane** is the part that touches no cell at all.
+**free membrane** is the part that touches no cell at all. Contacts with cells that are not partners belong to
+neither: they are left out of the comparison.
 
-## The enrichment
+## The score
 
 For every measured cell that has an interface, the analysis reports:
 
 - **interface Mean** and **non-interface Mean**: the mean of the profile at the interface and on the free membrane,
   and the ratio of the two;
-- **stdDevs above mean**: how far the interface lies above the free membrane, expressed in standard deviations of the
-  free membrane:
+- **stdDevs above mean**: how far the interface lies above the free membrane, in standard deviations of the free
+  membrane:
 
 $$\text{SD above mean} = \frac{\overline{\text{interface}} - \overline{\text{free}}}{\text{SD}(\text{free})}$$
 
-The profiles are normalized in the same way, and aligned so that the center of the longest interface of each cell lies
-at position 20. Their average, over the cells with an interface only, shows the shape of the enrichment.
+A score of 2 means: the interface is as much brighter than the average free membrane as two standard deviations of
+the free membrane. The profiles are expressed in the same unit, and aligned so that the center of the longest
+interface of each cell lies at position 20. Their average, over the cells with an interface, shows the shape of the
+enrichment.
 
 ![Membrane enrichment in the dashboard](../images/dash_membrane.png)
 
 ??? note "Technical: why the free membrane is the baseline"
 
     The macro compared the interface with the rest of the membrane, including the parts that touch other cells. A
-    contact with another cell that carries the marker (for example between two tumor cells, when the marker is on tumor
-    cells) places two membranes side by side and is therefore brighter. It would raise the baseline and lower the
-    enrichment. Here the baseline is the membrane that touches no cell. On validation data, this raised the median
+    contact with another cell that carries the marker (for example between two tumor cells, when the marker is on
+    tumor cells) places two membranes side by side and is therefore brighter. It would raise the baseline and lower
+    the enrichment. Here the baseline is the membrane that touches no cell. On validation data, this raised the median
     enrichment by about 0.2 SD, while the control stayed the same.
+
+### Three ways to score an interface
+
+The dashboard's *Measure* menu offers three scores. The tables of the output folder contain all three.
+
+| Measure | What it compares | When to use it |
+|---|---|---|
+| **SD above own membrane** (default) | the interface with the cell's own free membrane | when the partners carry little or none of the marker (the marker check is green) |
+| **SD above same-type contacts** | the same score, minus the median score of the measured cells at contacts with cells of their own kind | when the partners carry the marker too: it asks whether the contact with *this* partner is brighter than a contact between two cells of the measured kind |
+| **SD above both membranes** (experimental) | the interface with the own free membrane plus the partner's free membrane | to explore; read the note below before relying on it |
+
+Why a second and a third measure? At an interface, the membranes of the two cells lie so close together that the
+microscope cannot separate them. If the partner carries the marker too, the interface contains two stained
+membranes, and it looks brighter even without any enrichment. *SD above own membrane* cannot tell this apart from a
+real enrichment.
+
+*SD above same-type contacts* uses the data themselves as the reference. A contact between two tumor cells also
+places two stained membranes side by side, with the same kind of geometry, but with no partner-specific biology. If
+a tumor–immune contact scores higher than a tumor–tumor contact, that difference is what the immune partner adds. A
+score of 0 means "as bright as a contact between two cells of the measured kind".
+
+??? note "Technical: SD above same-type contacts, exactly"
+
+    For the measured cells of a pair (*Membrane of*), the program takes the score (*SD above mean*) of each of them at
+    its contacts with cells of the same selection: tumor cells with tumor cells, *Immune Subtype A+* cells with
+    *Immune Subtype A+* cells, and so on. The median of these scores is the **reference**; it needs at least 10 cells
+    with such a contact (otherwise the measure is empty). Each cell's score minus the reference is its *SD above
+    same-type contacts*. In the files: the column `stdDevs above same-type contacts` of `Membrane intensity analysis -
+    <marker>.tsv`, and `median above same-type contacts` in `Membrane pairs.tsv`. In the dashboard, the histograms,
+    the heatmap order, the *All pairs* table, the cell card and the *Cells* table follow the measure; the average
+    profile stays in SD above the own membrane, with a dashed line at the reference.
+
+    **When it is not a fair reference.** It assumes that a contact with the partner is, apart from the biology,
+    like a contact between two measured cells. That holds best when the partner carries about as much of the marker as
+    the measured cells (the marker check says *on both cells*). If the partner carries much less, the same-type
+    contacts contain more marker than a fair reference would, and the measure is too strict: it can hide an
+    enrichment. If the partner carries more, the reference is too lenient. Cells of different sizes also touch in
+    different ways. Read it together with the marker check, and with *SD above own membrane*.
+
+??? note "Technical: SD above both membranes (experimental), and why it fails its own check"
+
+    The idea: if the intensities of two touching membranes simply add, the partner's share can be subtracted. For
+    every measured cell with an interface:
+
+    $$\text{excess} = \frac{\overline{\text{interface}} - \overline{\text{free}} -
+    \overline{\text{partner free}}}{\text{SD}(\text{free})}$$
+
+    Here *partner free* is, at every interface point, the mean free-membrane intensity of the partner cell that
+    touches there, averaged over the interface. A partner without any free membrane is left out; if no partner of the
+    cell has a free membrane, the excess is empty. The control windows have no partner, so their excess is the control
+    itself. Files: the column `excess stdDevs above both membranes` of the membrane table, `excess profile` in the
+    average profile, and `median excess above both membranes` in `Membrane pairs.tsv`.
+
+    **The check it fails.** For contacts between cells of the same type, where both carry the marker and nothing is
+    expected, the excess should be about 0. On real data it was clearly negative for every band placement (outline,
+    per type, per cell), every width tried (3, 5 and 9 px) and both ways of reading across the band (*maximum* and
+    *sum*): the subtraction takes away more than the partner adds. Centring the band on the membrane even made it more
+    negative, because the free membrane is then measured at its peak. So it is not a matter of where the band lies.
+    Likely reasons, not proven: the images are 2D projections of 3D cells, so a contact that is tilted is not seen as
+    two membranes side by side, and cells that overlap in depth blur differently than free membranes; and a membrane
+    may carry less marker per area where it is pressed against another cell.
+
+    **How to read it, if at all.** A positive excess means more marker at the contact than both membranes carry
+    elsewhere, whichever cell holds it. Because it tends to be too low, a negative value is not evidence of depletion.
+    Check the same-type contacts of your own data in the *All pairs* table first. The comparison of conditions uses
+    *SD above own membrane*.
+
+??? note "Technical: across the band — maximum or sum"
+
+    The dashboard's switch *across the band* chooses how the band becomes one value per point. *maximum* (the
+    default, as the macro and the tables) keeps the brightest pixel across the band. *sum* adds all pixels across the
+    band. At an interface both membranes lie in the band; only the sum adds them up, which is what *SD above both
+    membranes* assumes. The sum also counts the inside of the cell within the band, so it depends more on the band
+    width. Everything in the membrane card follows the switch; the tables of the output folder keep the maximum.
 
 ## The control
 
-Cells without an interface get **control windows**: *Control windows per cell* (default 10) windows at random positions
+Cells without an interface get **control windows**: *Control windows per cell* (default 10) windows at random places
 on their free membrane. Each window is as long as the median interface and is scored like an interface. The histogram
 of the controls shows how much a stretch of free membrane varies by chance in this dataset.
 
@@ -178,24 +329,21 @@ Values above the maximum are not counted. You can change the scale in the dashbo
 again.
 
 **The control windows are not a control for the interface itself.** Because they lie on free membrane, they cannot
-show what the contact does to the measurement, independently of the marker. A contact can change the measurement in
-several ways: two stained membranes lie side by side (see below), the outline runs a little outside the membrane where
-the cell is free but not at a contact, and the partner's signal blurs into the interface. In a test on synthetic data
-without any enrichment, the outline effect alone gave a ratio of about 1.3 and 1–1.5 SD with the macro's
-straightening width, and very small p-values against the control windows. The default width now removes most of this
-effect (see the technical note on the straightening width), but not the other effects. Therefore:
+show what touching does to the measurement apart from the marker: two stained membranes side by side, a partner's
+signal blurring into the interface, and the outline lying differently at a contact. Therefore:
 
 - **Compare pairs**, not an interface with the control windows. Compare the same measured cells with partners that do
   carry a receptor or ligand and with partners that do not (for example *Immune A+* against *Immune negative*). Or
-  compare cells in which you expect the marker to be enriched with cells of the same type (set *Interface with* to
+  compare with contacts between cells of the measured kind (*SD above same-type contacts*, or set *Interface with* to
   the measured type itself). The dashboard shows all pairs at once (*All pairs* in the membrane card). In the example
-  below, the tumor cells' membrane is enriched only at contacts with *Subtype A+* cells.
+  below, the tumor cells' membrane is enriched mainly at contacts with *Subtype A+* cells.
 
 ![All pairs of the membrane card](../images/dash_pairs.png)
 
-- A small shift (a ratio below about 1.5, or 1–2 SD) is within what geometry alone can produce; a large effect that
+- A small shift (a ratio below about 1.5, or 1–2 SD) is within what the effects above can produce; a large effect that
   is specific to one pair is not.
-- Check in the dashboard that the outlines lie on the membrane (*Events*, overlay *outlines*).
+- Check in the dashboard that the band lies on the membrane (*Cell* card, *membrane band*; membrane card, *Across the
+  membrane*).
 - A p-value from thousands of cells against thousands of windows says nothing about biological replicates. Compare
   datasets (donors, replicates) instead. A change between conditions is tested across the donors in the overview; see
   [Comparing conditions](comparing-conditions.md).
@@ -203,20 +351,19 @@ effect (see the technical note on the straightening width), but not the other ef
 ??? note "Technical: comparing pairs, and why there is no reference channel"
 
     **The pair table.** For every selection under *Membrane of* (rows) and every cell type or subtype under
-    *Interface with* (columns), the dashboard computes the median *SD above mean* of the measured cells that have an
-    interface with that partner, and the number of such cells. The median is computed exactly as for the chosen pair,
-    but without the control windows. A pair in which the measured cells or the partners do not carry the marker is the
+    *Interface with* (columns), the dashboard computes the median score of the measured cells that have an interface
+    with that partner, and the number of such cells. The median is computed exactly as for the chosen pair, but
+    without the control windows. A pair in which the measured cells or the partners do not carry the marker is the
     geometry-matched control for a pair in which they do: the same cells, the same kind of contact and the same
-    segmentation. Contacts between cells of the same type are the control for two stained membranes side by side:
-    their enrichment shows what the doubling alone produces. Each entry carries the marker check of its pair: "!" when
-    the partners carry part of the marker or as much as the measured cells, "!!" when they carry more, and "–" when the
-    measured cells hardly carry it.
+    segmentation. Contacts between cells of the same type show what two stained membranes side by side produce. Each
+    entry carries the marker check of its pair: "!" when the partners carry part of the marker or as much as the
+    measured cells, "!!" when they carry more, and "–" when the measured cells hardly carry it.
 
     **No reference channel.** A second channel, measured like the marker of interest but not expected to be enriched,
-    seemed a natural control. The cells' own tracker dye was tested as such a reference in the 40× test described
-    above. Because the dye is cytoplasmic, it fills the band at a contact but not at the free edge, and it showed 4.8 SD
-    (at 5 px) and 2.7 SD (at 9 px) of "enrichment". A reference must be stained in the same way as the marker (a
-    membrane stain on the same cells), which a panel rarely includes. The pair comparison needs no extra channel.
+    seemed a natural control. The cells' own tracker dye was tested as such a reference. Because the dye fills the
+    cell, it fills the band at a contact but not at the free edge, and it showed 4.8 SD (at 5 px) and 2.7 SD (at 9 px)
+    of "enrichment". A reference must be stained in the same way as the marker (a membrane stain on the same cells),
+    which a panel rarely includes. The pair comparison needs no extra channel.
 
 ??? note "Technical: the control windows"
 
@@ -228,9 +375,9 @@ effect (see the technical note on the straightening width), but not the other ef
 
 ## Where the marker is expressed
 
-**The marker of interest must be on the measured cells, not on their partners.** At an interface, the membranes of the
-two cells lie against each other. If the partner also carries the marker, its membrane is measured together with that
-of the measured cell, and the interface looks enriched even when both cells are stained evenly.
+**The marker of interest should be on the measured cells, not on their partners.** At an interface, the membranes of
+the two cells lie against each other. If the partner also carries the marker, its membrane is measured together with
+that of the measured cell, and the interface looks enriched even when both cells are stained evenly.
 
 The analysis checks this. It compares the median free-membrane intensity of the partners with that of the measured
 cells. The result is reported in the log, in `run.json`, in the overview (*MOI partners / measured*) and as a badge in
@@ -240,14 +387,14 @@ the dashboard:
 |---|---|---|
 | below 25 % | ✓ green | The marker is mainly on the measured cells. |
 | 25–80 % | ! amber | The partners carry part of the marker, so part of the interface signal may come from them. |
-| 80–125 % | ! amber | The marker is on both cell types at a similar level. Two stained membranes side by side look like enrichment; compare with contacts between cells of the same type. |
+| 80–125 % | ! amber | The marker is on both cell types at a similar level. Two stained membranes side by side look like enrichment; use *SD above same-type contacts*, or compare with contacts between cells of the same type. |
 | 125 % or more | ! red | The marker is brighter on the partners. Check the pair (*Membrane of*, *Interface with*). |
 | (any) | – gray | The measured cells hardly carry the marker (below 25 % of the brightest cell type), so their enrichment is not informative. |
 
 ??? note "Technical: the marker check, exactly"
 
-    Every cell gets a **free-membrane intensity**: the mean of its straightened profile where its neighbor track shows
-    no cell (background-subtracted). Without the membrane analysis, the mean of the whole cell is used instead.
+    Every cell gets a **free-membrane intensity**: the mean of its membrane profile where its neighbor track shows no
+    cell (background-subtracted). Without the membrane analysis, the mean of the whole cell is used instead.
     *Measured* and *partners* are the medians of this intensity over the cells of each selection. The **brightest cell
     type** is the highest median over the cell types and immune subtypes, excluding artefacts. The rules are applied
     in this order:
@@ -262,8 +409,9 @@ the dashboard:
     every interface pixel it reaches. At 80–125 %, an interface between two equally stained membranes looks like a
     doubling, whatever the biology.
 
-If the badge is amber or red, you can choose the pair the other way round (if the marker is on the partners), compare
-the enrichment with that of a pair whose partners do not carry the marker, or treat the result as an upper limit.
+If the badge is amber or red, you can choose the pair the other way round (if the marker is on the partners), use
+*SD above same-type contacts*, compare with a pair whose partners do not carry the marker, or treat the result as an
+upper limit.
 
 **Look at the subsets, on both sides.** The default pair (all cells of the type that carries the marker, with all
 cells of the other type) can hide an effect that only one subset shows. In one test, a receptor that was strongly
@@ -272,53 +420,18 @@ where *B+* cells touched gave 0.7 SD with all immune cells. The *All pairs* tabl
 `Membrane pairs.tsv` give every combination of *Membrane of* and *Interface with* at once. Read them before you conclude
 that there is no enrichment.
 
-??? note "Technical: the excess over both membranes, and why it is no cure either"
-
-    At an interface the band holds both membranes, which lie closer together than the resolution. If the
-    background-subtracted intensities of the two membranes simply add, a partner that carries the marker can be
-    corrected for by subtracting its own membrane as it is elsewhere. For every measured cell with an interface:
-
-    $$\text{excess} = \frac{\overline{\text{interface}} - \overline{\text{free}} -
-    \overline{\text{partner free}}}{\text{SD}(\text{free})}$$
-
-    Here *partner free* is, at every interface position, the mean free-membrane intensity of the partner cell that
-    touches there (the same per-cell value as the [marker check](#where-the-marker-is-expressed)), averaged over the
-    interface. It equals *SD above mean* minus that average divided by SD(free). A partner without any free membrane
-    is left out of the average; if no partner of the cell has a free membrane, the excess is empty. The control
-    windows have no partner, so their excess is the control itself: the same null distribution. The membrane table
-    has the excess in the column `excess stdDevs above both membranes`, the average profile in the column
-    `excess profile`, and `Membrane pairs.tsv` the median per pair (`median excess above both membranes`). The
-    dashboard shows it with *Measure: SD above both membranes*.
-
-    **How to read it.** A positive excess means more marker at the contact than both membranes carry elsewhere. It
-    says nothing about which of the two cells holds it. If the band captures only part of the partner's membrane, the
-    correction subtracts too much: it is conservative, and can hide an enrichment but not invent one.
-
-    **The assumption does not always hold.** The profile is the brightest sample across the band, and two membranes
-    that are blurred together give a peak that is lower than the sum of their two peaks unless they coincide. In a
-    simulation with thin membranes that touch exactly (`tools/stats/simulate_excess.py`), the excess of two evenly
-    stained cells without enrichment was close to 0, where *SD above mean* was clearly positive. On real data, however,
-    contacts between cells of the same type (where both carry the marker and no enrichment is expected) gave a
-    clearly negative excess: there the correction subtracts more than the partner adds. The dashboard's switch
-    *across the band: sum* adds all samples across the band instead of taking the brightest, which does add two
-    membranes up; on real data it brought the same-type contacts much closer to 0, though mostly still below it.
-    Check this on your own data in the *All pairs* table, with the contacts between cells of the same type (with
-    either projection), before you read the excess of another pair. The comparison of conditions uses *SD above
-    mean* with the maximum.
-
 ??? note "Technical: inside only, and why it is no cure"
 
-    *Straighten inside the measured cell only* takes the brightest sample only from the part of the band that lies
-    inside the measured cell, so that the band does not reach into the partner. This is a **sensitivity test, not a
-    separation**. Touching membranes are nanometers apart, far below the resolution of the ImageStream, so the blur
-    mixes both membranes in every pixel near the interface, whichever pixels are sampled. If the enrichment drops
-    clearly with *inside only*, part of it comes from the partner side. If it stays the same, that is reassuring but
-    not proof.
+    *Straighten inside the measured cell only* reads the band only where it lies inside the measured cell, so that it
+    does not reach into the partner. This is a **sensitivity test, not a separation**. Touching membranes are
+    nanometers apart, far below the resolution of the ImageStream, so the blur mixes both membranes in every pixel
+    near the interface, whichever pixels are read. If the enrichment drops clearly with *inside only*, part of it may
+    come from the partner side. If it stays the same, that is reassuring but not proof.
 
-    *Inside only* can also cut away the measured cell's **own** membrane at a contact: the boundary between two
-    masks need not lie on the membrane, and on real data the measured cells' membrane at a contact lay partly on the
-    partner's side of it. A drop with *inside only* is therefore not by itself proof that the signal came from the
-    partner. *Across the membrane* in the dashboard shows where the membrane lies at the contacts.
+    *Inside only* can also cut away the measured cell's **own** membrane at a contact. The border between two masks
+    need not lie on the membrane, and on real data the measured cells' membrane at a contact lay partly on the
+    partner's side of that border. A drop with *inside only* is therefore not by itself proof that the signal came
+    from the partner. *Across the membrane* in the dashboard shows where the membrane lies at the contacts.
 
 ## Several markers of interest
 
@@ -348,5 +461,4 @@ type together, has no control, and does not follow the chosen membrane pair. A p
 stained membranes side by side, raise it as much as a real enrichment does (in a test without any enrichment it was
 1.27). The overview column *median … membrane ratio, doublets* shows this measure for the cell type that carries the
 marker, and the dashboard shows it in the *Events* table and in the sort *membrane ratio per event*. Read it together with
-the marker check, and base your conclusions on the pair comparisons. The pair comparisons replace the per-event plot
-that earlier versions of the dashboard showed.
+the marker check, and base your conclusions on the pair comparisons.

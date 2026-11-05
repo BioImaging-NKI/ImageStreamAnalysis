@@ -42,6 +42,8 @@ def _clean(v: Any) -> Any:
     if isinstance(v, dict):
         return {k: _clean(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
+        if all(type(x) is int or type(x) is str for x in v):  # outlines, labels: nothing to clean (fast)
+            return list(v)
         return [_clean(x) for x in v]
     if isinstance(v, (float, np.floating)):
         f = float(v)
@@ -116,12 +118,25 @@ def _outlines_of_masks(mask: np.ndarray) -> list[list[int]]:
 
 
 def _display_range(channel: np.ndarray, background: float, brightfield: bool) -> tuple[float, float]:
-    sample = channel[:: max(1, len(channel) // 300)]  # a few hundred events are enough
+    sample = channel[:: max(1, len(channel) // 300)].astype(np.float32)  # a few hundred events are enough
     if brightfield:  # brightfield: around its background
         lo, hi = np.percentile(sample, [0.2, 99.8])
         return float(lo), float(hi)
     hi = float(np.percentile(sample, 99.8))
     return background, max(hi, background + 1)
+
+
+def _to_bytes(data: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    """The display range lo..hi as 0..255. Integer images of up to 16 bits through a lookup table (2026-11-05: the
+    same bytes as the float computation, without a float copy of the whole channel)."""
+    if data.dtype.kind in "ui" and data.dtype.itemsize <= 2:
+        offset = int(np.iinfo(data.dtype).min)
+        values = np.arange(offset, offset + 2 ** (8 * data.dtype.itemsize), dtype=np.float32)
+        lut = np.clip((values - np.float32(lo)) / np.float32(hi - lo) * np.float32(255.0), 0, 255).astype(np.uint8)
+        out: np.ndarray = lut[data.astype(np.int64) - offset] if offset else lut[data]
+        return out
+    scaled: np.ndarray = np.clip((data.astype(np.float32) - lo) / (hi - lo) * 255.0, 0, 255).astype(np.uint8)
+    return scaled
 
 
 def write_sheets(result: Result, settings: Settings, folder: Path) -> list[dict[str, Any]]:
@@ -140,9 +155,9 @@ def write_sheets(result: Result, settings: Settings, folder: Path) -> list[dict[
     others = iter(OTHER_LUTS * 4)
     for i, (number, name) in enumerate(zip(numbers, stack.channel_names, strict=True)):
         role = roles.get(number, "")
-        data = stack.data[:, i].astype(np.float32)
-        lo, hi = _display_range(data, stack.medians[i] if stack.medians else 0.0, role == "brightfield")
-        scaled = np.clip((data - lo) / (hi - lo) * 255.0, 0, 255).astype(np.uint8)
+        raw = stack.data[:, i]
+        lo, hi = _display_range(raw, stack.medians[i] if stack.medians else 0.0, role == "brightfield")
+        scaled = _to_bytes(raw, lo, hi)
         for s in range(math.ceil(t / per_sheet)):
             part = scaled[s * per_sheet : (s + 1) * per_sheet]
             sheet = np.zeros((SHEET_ROWS * h, SHEET_COLUMNS * w), dtype=np.uint8)

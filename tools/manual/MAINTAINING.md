@@ -77,15 +77,7 @@ the screenshots, and look at every changed image.
 Small changes to the program whose screenshots are not retaken yet (the user prefers to retake them together, with
 a larger change). Retake them at the next refresh and empty this list.
 
-- 2026-11-03, the excess over both membranes: the membrane card has a *Measure* menu, and the *All pairs* note
-  changed. Retake `dash_membrane` and `dash_pairs` (and `dash_cell` if its rows matter there). Make the example
-  project again first.
-- 2026-11-04, the cell card: a channel montage under the measurements, and the *membrane band* tick box (space bar).
-  Retake `dash_cell` (consider one with the band on, for the membrane page). The demo needs rebuilding (the page and
-  its data changed). Make the example project again first.
-- 2026-11-04, the band centred on the membrane: a new setting *Band centred on* in step 3 (`gui_settings`), the
-  folded *Across the membrane* in the membrane card (consider a screenshot of it opened, for the membrane page), and
-  the band in `dash_cell` moves. The numbers of the walk-through may change slightly: check them after the remake.
+(Empty: refreshed on 2026-11-05.)
 
 ## Refresh, check, publish
 

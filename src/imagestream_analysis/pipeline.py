@@ -176,9 +176,7 @@ def finish(measured: Measured, cells: pd.DataFrame, thresholds: pd.DataFrame, se
         width = straightening_px(m.straightening_width, stack.pixel_size)
         profiles = list(membrane_profiles_of(labels, cells, mois, [stack.median(r) for r in refs], width, reach,
                                              m.inside_only, str(m.band_centre), [n for _, _, n in named],
-                                             stack.pixel_size,
-                                             # which cells carry each marker (whole-cell medians per type)
-                                             [carrier(cells, None, column)[1] for _, column, _ in named]))
+                                             stack.pixel_size))
         location = profiles[0].location if profiles and profiles[0] is not None else None
         if location is not None:
             for level, text in location_notes(location, width, stack.pixel_size):
@@ -200,19 +198,34 @@ def marker_names(cells: pd.DataFrame, numbers: list[int]) -> list[tuple[int, str
     return [(k, c, n if names.count(n) == 1 else f"{n} (ch{k})") for k, c, n in out]
 
 
+CARRIER_CLOSE = 0.8  # the other type at this fraction of the carrier's level or more: a warning (chosen narrowly)
+
+
 def marker_result(cells: pd.DataFrame, number: int, column: str, name: str, profiles: Profiles | None,
                   settings: Settings) -> MarkerResult:
     """One marker of interest: the cell type that carries it (unless membrane.cells is set), its pair, the marker
     check and, with profiles, the membrane analysis."""
     suffix = f" - {safe_name(name)}"
     m = settings.membrane
-    carried_by, medians = carrier(cells, profiles, column)
+    # the type that carries the marker: with membrane profiles, the type whose free membrane is the brightest in
+    # the marker averaged across the outline (it does not depend on the band's width or place, 2026-11-05: with the
+    # band's own free-membrane values it flipped with those settings); else the whole-cell medians
+    location = profiles.location if profiles is not None else None
+    carried_by, medians = location.carrier(name) if location is not None else carrier(cells, None, column)
+    if not carried_by and location is not None:
+        carried_by, medians = carrier(cells, None, column)
     wanted, partners = pair_of(m, carried_by, name)
-    source = "membrane that touches no cell" if profiles is not None else "whole cell"
+    source = ("height of the free membrane across the outline" if location is not None
+              and location.carrier(name)[0] else "median of the whole cell")
+    values = sorted((v for v in medians.values() if np.isfinite(v)), reverse=True)
+    if len(values) == 2 and values[0] > 0 and values[1] >= CARRIER_CLOSE * values[0]:
+        log.warning("%s: the tumor and immune cells carry it at a similar level (%s; %s): the measured cells (%s) "
+                    "are chosen by a small margin. Set the pair (membrane.pairs) to fix it.", name,
+                    ", ".join(f"{k.lower()} {v:.4g}" for k, v in medians.items()), source, carried_by.lower())
     set_cells, set_partners = m.pair_settings(name)
     chosen = ("set in membrane.pairs" if name in m.pairs else "set in membrane.cells / partners"
               if set_cells or set_partners else "automatic: the type that carries it")
-    log.info("%s: carried by the %s cells (medians %s, %s): membranes of %s with %s (%s)", name,
+    log.info("%s: carried by the %s cells (%s; %s): membranes of %s with %s (%s)", name,
              carried_by.lower() or "(no tumor or immune)",
              ", ".join(f"{k.lower()} {v:.4g}" for k, v in medians.items()), source, " / ".join(wanted),
              " / ".join(partners), chosen)

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Notes for Claude Code when working in this repository. Last updated 2026-10-22.
+Notes for Claude Code when working in this repository. Last updated 2026-11-05.
 
 ## This project: the Python port (started 2026-10-22)
 
@@ -40,7 +40,7 @@ A local guard backs this up:
   - `classification.py`: functional-marker thresholds (log, ImageJ MaxEntropy/Otsu), artefacts, k-means on the rest (tumor/immune), immune subtypes; `classify_pool` for several datasets at once; class map.
   - `interfaces.py`: membrane and interface masks, the per-event table, doublets.
   - `interactions.py`: touching cells per event (within the interface reach), neighbour lists, the contact table by cell type (replaces the notebook), multiplets.
-  - `membrane.py`: the optional membrane analysis (`membrane.analysis`): outline, straighten, profiles, unseeded bootstrap control, aligned average, histograms.
+  - `membrane.py`: the optional membrane analysis (`membrane.analysis`): outline, where the membrane lies (`locate`, `Location`), the band (`band_centre`), straighten, profiles (in worker processes from 2000 cells), unseeded control windows, the three measures (own, same-type, experimental excess), aligned average, histograms, the pairs table.
   - `pipeline.py`: `load(settings)` reads an IDEAS zip or a Combiner `.tif`; `run(settings)` writes the output folder.
   - `ideas.py`: reads IDEAS zips directly (replaces ImageStreamCombiner).
     - Events are ordered by object number, and the numbers are kept as an `Object ID` column.
@@ -77,7 +77,7 @@ A local guard backs this up:
 ### Commands
 
 - `uv sync`
-- `uv run pytest`: about 30 tests in under 10 s, including the reference comparison when its data are available.
+- `uv run pytest`: about 140 tests in under a minute, including the reference comparison when its data are available (`ISA_REFERENCE`).
 - `uv run ruff check`: line length 120, rules E, F, UP, B, SIM, I (taken from `rharkes/lif2ometiff`).
 - `uv run mypy`: **strict**; it must stay clean. `sklearn`, `cellpose` and `torch` are ignored as untyped; pandas-stubs and scipy-stubs are installed.
   - Pattern for returned numpy expressions: assign to a typed local first (`out: np.ndarray = ...; return out`).
@@ -213,6 +213,32 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   process).
 - The import page marks overview rows during a run, and leaves result folders that are not part of the project out
   of `overview.tsv` and the summed tables (their files are kept).
+- Cell card (dashboard): a montage of all channels, and the membrane band as straightened (space bar). Under the
+  membrane heatmap a stripe with the rows averaged.
+
+### Decisions by the user (2026-11-05)
+
+- **The carrier of a marker** (with the membrane analysis) is the type whose free membrane is the highest in the
+  marker averaged across the outline (`Location.height`), not the band's own free-membrane values (those flipped with
+  the band settings when a marker is on both types). A warning when the other type reaches 80 % of it.
+- **Measures of the interface**: *SD above own membrane* (default, the tables, the comparison of conditions);
+  *SD above same-type contacts* (new: minus the median at contacts with cells of the measured kind); *SD above both
+  membranes* stays but is **experimental**: re-checked with every band placement, width and projection, same-type
+  contacts stayed clearly negative (SPEC).
+- The example data of the manual are more realistic (sizes, shapes, noise, weaker and not universal enrichment).
+- Tooltips: every setting on the import page shows its comment from `config.py` (`config.setting_help`); new controls
+  get a `title`. The manual is written in plain English, with the intricacies in *Technical* notes.
+
+### Where things stand, for the next session (2026-11-05)
+
+- Everything is committed on `main` and pushed (with the demo uploaded to the `example-data` release first).
+- Open ideas, not started: the sum over a narrow window centred on the membrane as the projection; log2 ratio as
+  the main readout; control windows on the same cell's free membrane; flagging tilted contacts by the width of the
+  contact profile; per-cell offsets are an option (`band_centre = "cell"`), per type is the default.
+- Diagnostic scripts of the membrane-location and speed work: `data/diagnostics/2026-11-04_membrane_location_speed/`
+  (gitignored, synced with the folder), results in `CLAUDE.local.md`.
+- Git in a synced folder sometimes fails with "unable to append to .git/logs/...": commit with
+  `git -c windows.appendAtomically=false commit ...` (not set permanently).
 
 ### Git
 

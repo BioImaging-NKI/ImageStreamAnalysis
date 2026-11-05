@@ -58,6 +58,10 @@ class MembraneResult:
 
 
 EXCESS = "excess stdDevs above both membranes"  # the column of the excess (partner_excess) in the membrane table
+# the score minus the median score of the measured cells at contacts with cells of their own selection (2026-11-05):
+# an empirical reference for two stained membranes side by side, where the excess's assumption failed
+SAME = "stdDevs above same-type contacts"
+MIN_SAME = 10  # fewer measured cells with a same-type contact: no reference (NaN)
 
 
 def free_means(membranes: Profiles) -> dict[int, float]:
@@ -252,6 +256,24 @@ class Location:
                          "single cells p75 (µm)": q[2]})
         return pd.DataFrame(rows)
 
+    def height(self, typ: str, marker: str) -> float:
+        """How bright the free membrane of a cell type is in a marker: the peak of its average profile across the
+        outline above the ends of that profile (0 without a peak; NaN without cells). It does not depend on the
+        band (its width or place): the carrier of a marker is decided with it (2026-11-05)."""
+        prof = self.radial.get((typ, "", marker))
+        if prof is None:
+            return float("nan")
+        if not np.isfinite(_peak(self.distance, prof)):
+            return 0.0
+        k = max(1, len(prof) // 8)
+        return max(0.0, float(prof.max() - (prof[:k].mean() + prof[-k:].mean()) / 2))
+
+    def carrier(self, marker: str) -> tuple[str, dict[str, float]]:
+        """The cell type (Tumor or Immune) whose free membrane is the brightest in this marker, and the heights."""
+        heights = {t: self.height(t, marker) for t in ("Tumor", "Immune")}
+        finite = {t: h for t, h in heights.items() if np.isfinite(h)}
+        return (max(finite, key=lambda t: finite[t]) if finite and max(finite.values()) > 0 else ""), heights
+
     def profiles(self, pixel_size: float) -> pd.DataFrame:
         """The average profiles across the outline, long format (for plots)."""
         return pd.DataFrame([{"cell type": t, "at": f"contact with {w}" if w else "free membrane", "marker": m,
@@ -445,8 +467,11 @@ def locate(cells: list[_Cell], places: list[Across], frees: list[dict[str, np.nd
     for key, profs in sums.items():
         loc.radial[key] = np.mean(profs, axis=0)
         loc.cells[key] = len(profs)
+    if levels is None:  # how bright each type's free membrane is in each marker (Location.height)
+        types = sorted({t for t, _, _ in sums})
+        levels = [{t: loc.height(t, m) for t in types} for m in names]
     for typ, where in sorted({(t, w) for t, w, _ in sums}):
-        rel = {m: _relative(levels[k] if levels is not None else None, typ) for k, m in enumerate(names)}
+        rel = {m: _relative(levels[k], typ) for k, m in enumerate(names)}
         own = [m for m in names if rel[m] >= CARRY_FRACTION]
         if not own:
             loc.source[(typ, where)] = "no marker of interest is carried by these cells: on the outline"
@@ -883,6 +908,23 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
     free_of = np.full(top, np.nan)  # every cell's free mean, by label (free_means)
     free_of[membranes.labels.astype(np.int64)] = mean_free
     partner_free = free_of[np.clip(track, 0, None)]
+    same_of: dict[str, float] = {}
+
+    def _same_reference(rs: list[str]) -> float:
+        """The median score of these cells at contacts with cells of the same selection (SAME)."""
+        own = labels[select(cells, rs)].to_numpy(dtype=np.int64)
+        idx = np.array([index[int(lab)] for lab in own if int(lab) in index], dtype=np.int64)
+        member = np.zeros(top, dtype=bool)
+        member[own] = True
+        member[0] = False
+        f = member[np.clip(track, 0, None)] & (track > 0)
+        n_s = np.bincount(seg, f, n)
+        m_s = np.divide(np.bincount(seg, np.where(f, values, 0.0), n), n_s, out=np.full(n, np.nan), where=n_s > 0)
+        ok = idx[(n_s[idx] > 0) & (n_free[idx] > 1)]
+        sc = np.divide(m_s[ok] - mean_free[ok], sd_free[ok], out=np.full(len(ok), np.nan), where=sd_free[ok] > 0)
+        sc = sc[np.isfinite(sc)]
+        return float(np.median(sc)) if len(sc) >= MIN_SAME else float("nan")
+
     out = []
     for rs, cs in combos:
         r, c = " / ".join(rs), " / ".join(cs)
@@ -901,6 +943,7 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
         ok = chosen[(n_f[chosen] > 0) & (n_free[chosen] > 1)]
         sd = sd_free[ok]
         scores = np.divide(mean_f[ok] - mean_free[ok], sd, out=np.full(len(ok), np.nan), where=sd > 0)
+        same = same_of.setdefault(r, _same_reference(rs))
         excesses = np.divide(scores * sd - pm[ok], sd, out=np.full(len(ok), np.nan), where=sd > 0)
         ratios = np.divide(mean_f[ok], mean_free[ok], out=np.full(len(ok), np.nan), where=mean_free[ok] != 0)
         check = expression_check(cells, membranes, moi_column, rs, cs)
@@ -909,6 +952,8 @@ def pair_table(cells: pd.DataFrame, membranes: Profiles, moi_column: str,
                     "median ratio interface/free": float(np.nanmedian(ratios)) if np.isfinite(ratios).any() else np.nan,
                     "median excess above both membranes": (float(np.nanmedian(excesses))
                                                            if np.isfinite(excesses).any() else np.nan),
+                    "median above same-type contacts": (float(np.nanmedian(scores)) - same
+                                                        if np.isfinite(scores).any() else np.nan),
                     "marker check": check["level"], "partners / measured": check["partners / measured"]})
     return pd.DataFrame(out)
 
@@ -942,6 +987,15 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
             free_flags.append(track == 0)
             rows.append((frame_of[int(label)] + 1, int(label)))
     names = f"{' / '.join(wanted)} cells with {' / '.join(partners)}"
+    # the same-type reference: the measured cells' scores at contacts with cells of their own selection
+    own_labels = np.array(sorted(chosen), dtype=np.int64)
+    same_scores = [s for s in (_score(p[np.isin(t, own_labels)], p[t == 0]) for p, t in zip(raw_profiles, tracks,
+                                                                                          strict=True)
+                               if np.isin(t, own_labels).any()) if np.isfinite(s)]
+    same_ref = float(np.median(same_scores)) if len(same_scores) >= MIN_SAME else float("nan")
+    log.info("Same-type contacts of the %s cells: %s", " / ".join(wanted),
+             f"median {same_ref:.2f} SD above mean ({len(same_scores)} cells): the reference of '{SAME}'"
+             if np.isfinite(same_ref) else f"{len(same_scores)} cells, fewer than {MIN_SAME}: no reference")
 
     n = len(raw_profiles)
     lengths = np.array([len(p) for p in raw_profiles], dtype=int)
@@ -963,6 +1017,7 @@ def analyze_membranes(cells: pd.DataFrame, membranes: Profiles, carried_by: str,
         partner_mean, sub = partner_excess(p, f, track, free_of)
         ok_sd = bool(r_sd) and np.isfinite(r_sd)
         row[EXCESS] = row["stdDevs above mean"] - partner_mean / r_sd if ok_sd else float("nan")
+        row[SAME] = row["stdDevs above mean"] - same_ref
         normalized = (p - r_mean) / r_sd if ok_sd else np.full(len(p), np.nan)
         excess = normalized - sub / r_sd if ok_sd else normalized
         if f.any():

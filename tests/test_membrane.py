@@ -251,8 +251,8 @@ def _halo_events(n=24, inset=2, insets=None):
     yy, xx = np.mgrid[:h, :w]
     for t in range(n):
         a, b = disk((h, w), 30, 30, 15), disk((h, w), 30, 56, 15)
-        labels[t][a & (xx < 43)] = 1
-        labels[t][b & (xx >= 43)] = 2
+        labels[t][a & (xx < 43)] = 2 * t + 1  # unique labels, as Cellpose's montage gives
+        labels[t][b & (xx >= 43)] = 2 * t + 2
         # the stained membrane, a ridge of one shape everywhere: `inset` inside the free outline, but on the contact
         # line where the cells touch
         r = 15 - (insets[t] if insets is not None else inset)
@@ -260,7 +260,7 @@ def _halo_events(n=24, inset=2, insets=None):
         d = np.where((xx >= 39) & (xx <= 47), np.inf, d)
         d = np.minimum(d, np.where(labels[t] > 0, np.abs(xx - 42.5), np.inf))
         moi[t] = 100.0 * np.exp(-d**2 / (2 * 1.2**2))
-    cells = pd.DataFrame({"frame": np.repeat(np.arange(n), 2), "label": np.tile([1, 2], n),
+    cells = pd.DataFrame({"frame": np.repeat(np.arange(n), 2), "label": np.arange(1, 2 * n + 1),
                           "Cell type": np.tile(["Tumor", "Immune"], n)})
     return labels, cells, moi
 
@@ -338,3 +338,22 @@ def test_the_membranes_in_worker_processes_are_the_same_as_in_one(monkeypatch):
         assert all(np.array_equal(x, y) for x, y in zip(a, b, strict=True))
     assert one.location.offset == two.location.offset
     assert np.array_equal(one.location.cell_free, two.location.cell_free, equal_nan=True)
+
+
+def test_the_carrier_does_not_depend_on_the_band():
+    """Which cell type carries a marker is read from the marker averaged across the outline, which is the same for
+    every band width and place (before 2026-11-05 it came from the band's own free membrane and could flip)."""
+    from imagestream_analysis.membrane import SAME, membrane_profiles_of, pair_table
+
+    labels, cells, moi = _halo_events()
+    moi = moi.copy()
+    moi[:, :, 43:] *= 0.5  # the immune cells (right) carry half as much
+    found = set()
+    for centre in ("outline", "membrane", "cell"):
+        for width in (3, 9):
+            (prof,) = membrane_profiles_of(labels, cells, [moi], [0.0], width, 2, centre=centre, names=["M"],
+                                           pixel_size=0.5)
+            found.add((prof.location.carrier("M")[0], round(prof.location.height("Tumor", "M"), 6)))
+    assert len(found) == 1 and next(iter(found))[0] == "Tumor"
+    table = pair_table(cells.assign(**{"Mean ch1 (M)": 1.0}), prof, "Mean ch1 (M)")
+    assert "median above same-type contacts" in table and SAME == "stdDevs above same-type contacts"

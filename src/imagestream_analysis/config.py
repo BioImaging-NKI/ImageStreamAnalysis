@@ -380,3 +380,36 @@ def _from_dict(cls: Any, data: dict[str, Any]) -> Any:
         tp = hints[name]
         kwargs[name] = _from_dict(tp, value) if is_dataclass(tp) else _convert(tp, value)
     return cls(**kwargs)
+
+
+SETTING_CLASSES = {"input": "InputSettings", "channels": "ChannelSettings", "segmentation": "SegmentationSettings",
+                   "classification": "ClassificationSettings", "membrane": "MembraneSettings"}
+
+
+def setting_help() -> dict[str, str]:
+    """"section.name" -> the comment of that setting in this file (above it, and after it on its line): the hover
+    help of the import page (2026-11-05), the same text as the settings reference of the manual."""
+    import ast
+    import inspect
+    import sys
+
+    source = inspect.getsource(sys.modules[__name__])
+    lines = source.splitlines()
+    tree = ast.parse(source)
+    out: dict[str, str] = {}
+    for section, cls in SETTING_CLASSES.items():
+        node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls)
+        for stmt in node.body:
+            if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
+                continue
+            above: list[str] = []
+            k = stmt.lineno - 2
+            while k >= 0 and lines[k].strip().startswith("#"):
+                above.insert(0, lines[k].strip().lstrip("#").strip())
+                k -= 1
+            rest = lines[stmt.lineno - 1][stmt.end_col_offset or 0 :]
+            inline = rest.split("#", 1)[1].strip() if "#" in rest else ""
+            text = " ".join(c for c in [*above, inline] if c)
+            if text:
+                out[f"{section}.{stmt.target.id}"] = text
+    return out

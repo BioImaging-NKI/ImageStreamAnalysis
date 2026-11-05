@@ -161,7 +161,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
   <button id="theme" title="Light / dark">◐</button>
 </header>
 <div class="filters" id="filters" data-help-scope="guide/dashboard#top-counts-and-filters">
-  <label>Events <select id="f-events">
+  <label title="Which events to show in every view: all, only those with both cell types, with exactly one tumor and one immune cell, with an interface, or with touching cells">Events <select id="f-events">
     <option value="all">all</option>
     <option value="both">with immune cells and tumor cells</option>
     <option value="doublets">one tumor + one immune cell</option>
@@ -169,7 +169,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
     <option value="touching">with touching cells</option>
   </select></label>
   <span id="contact-chip" style="display:contents"></span>
-  <label>Sort <select id="f-sort"></select></label>
+  <label title="The order of the events in the gallery">Sort <select id="f-sort"></select></label>
   <label title="The size of the events; also Ctrl+scroll over the gallery">Size <input type="range" id="f-zoom" min="0.5" max="2.5" step="0.25" value="1"></label>
 </div>
 <main>
@@ -198,7 +198,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
         and the artefacts stay as computed.</p>
       <div id="markers"></div>
       <div class="tabs" style="margin-top:8px"><button class="apply">Apply to the project…</button>
-        <button id="export">Copy as settings</button><button id="reset-all">Reset all</button></div>
+        <button id="export" title="Copy the thresholds set here as lines for a settings file (classification.thresholds)">Copy as settings</button><button id="reset-all" title="Back to the thresholds of the run">Reset all</button></div>
       <pre class="export" id="export-text" hidden></pre>
     </div>
     <div class="card">
@@ -220,7 +220,7 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
         <p class="note">Rows: cell type; columns: the type it touches. Click a square to show the events with that contact.</p>
       </div>
       <div>
-        <div class="tabs"><button id="bars-share" class="on">share of contacts</button><button id="bars-count">number of contacts</button></div>
+        <div class="tabs"><button id="bars-share" class="on" title="Per cell type, the share of its contacts with each partner type">share of contacts</button><button id="bars-count" title="Per cell type, the number of its contacts with each partner type">number of contacts</button></div>
         <div class="legend" id="bars-legend"></div>
         <div class="plot"><svg id="bars"></svg></div>
         <p class="note">Whom each cell type touches; on the right the share of its cells that touch any cell.</p>
@@ -231,9 +231,9 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
     <h2 data-help="guide/dashboard#membrane-enrichment">Membrane enrichment</h2>
     <div class="pairpick">
       <label id="pair-marker-box" hidden title="The marker of interest whose enrichment is shown. Each marker has its own pair: by default the cell type that carries it (from the data) against the other type">Marker <select id="pair-marker"></select></label>
-      <label>Membrane of <select id="pair-cells"></select></label>
-      <label>interface with <select id="pair-partners"></select></label>
-      <label title="SD above own membrane: the interface against the cell's own membrane that touches no cell. SD above both membranes: the partner's free membrane is subtracted as well, at every interface position: more marker at the contact than both membranes carry elsewhere (whichever side holds it)">Measure <select id="pair-measure"><option value="own">SD above own membrane</option><option value="both">SD above both membranes</option></select></label>
+      <label title="The cells whose membrane is measured">Membrane of <select id="pair-cells"></select></label>
+      <label title="The partners: where they touch the measured cells is the interface; the membrane that touches no cell is the reference (contacts with other cells are left out)">interface with <select id="pair-partners"></select></label>
+      <label title="How the interface is scored. SD above own membrane: the interface against the cell's own membrane that touches no cell, in standard deviations of that membrane (the default; the tables). SD above same-type contacts: the same, minus the median of the measured cells at contacts with cells of their own kind: use it when the partners carry the marker too, since two stained membranes side by side look brighter even without enrichment. SD above both membranes (experimental): the partner's free membrane subtracted at every interface position; on real data it came out negative where nothing was expected, so read it with care">Measure <select id="pair-measure"><option value="own">SD above own membrane</option><option value="same">SD above same-type contacts</option><option value="both">SD above both membranes (experimental)</option></select></label>
       <span class="tabs" style="margin:0" title="How the band across the membrane becomes one value per position. Maximum: the brightest sample (the macro's). Sum: all samples added; at an interface both membranes lie in the band, and only a sum adds them up, as SD above both membranes assumes">across the band <button id="proj-max" class="on">maximum</button><button id="proj-sum">sum</button></span>
       <span id="expression-badge"></span>
       <span class="spacer"></span><button class="apply">Apply to the project…</button>
@@ -276,8 +276,8 @@ pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font
     </div>
   </div>
   <div class="card span2" data-help-scope="guide/dashboard#tables">
-    <div class="tabs"><button id="tab-cells" class="on">Cells</button><button id="tab-events">Events</button>
-      <button id="tab-contacts">Contacts</button><span class="note" id="table-note"></span><span class="spacer"></span>
+    <div class="tabs"><button id="tab-cells" class="on" title="One row per cell (of the events shown)">Cells</button><button id="tab-events" title="One row per event, with the per-event membrane measure of the macro">Events</button>
+      <button id="tab-contacts" title="The contacts between cell types, against chance">Contacts</button><span class="note" id="table-note"></span><span class="spacer"></span>
       <button id="download" title="This table as a tab-separated file (all rows, as filtered and sorted here, with the subtypes of the sliders)">Download .tsv</button><button class="hq" type="button" data-help-btn="guide/dashboard#tables" title="Explain this (opens the manual)">?</button></div>
     <div class="tablebox"><table id="table"></table></div>
   </div>
@@ -975,7 +975,7 @@ function decodeMembranes() {
 }
 // the measure of the card: "own" = SD above the own free membrane (stdDevs above mean); "both" = the excess over both
 // membranes (the partner's free membrane subtracted at the interface positions, membrane.partner_excess)
-const MEASURES = { own: "SD above own membrane", both: "SD above both membranes" };
+const MEASURES = { own: "SD above own membrane", same: "SD above same-type contacts", both: "SD above both membranes (experimental)" };
 let measure = "own";
 function partnerExcess(f, tr) {  // as membrane.partner_excess: [mean partner free intensity, per-position subtraction]
   const sub = new Array(f.length).fill(0), vals = [];
@@ -988,7 +988,9 @@ function partnerExcess(f, tr) {  // as membrane.partner_excess: [mean partner fr
 function applyMeasure() {  // the scores, profiles and average of the chosen measure in M.sd, M.profiles, M.average
   if (!M) return;
   const both = measure === "both";
-  M.sd = both ? M.excess : M.own; M.profiles = both ? M.profiles_excess : M.profiles_own; M.average = both ? M.average_excess : M.average_own;
+  // same-type contacts: the scores minus the reference; the profiles stay in SD above the own membrane (a line marks
+  // the reference in the average profile)
+  M.sd = both ? M.excess : measure === "same" ? M.same : M.own; M.profiles = both ? M.profiles_excess : M.profiles_own; M.average = both ? M.average_excess : M.average_own;
   binHist();
   eventEnrichment.fill(NaN); M.sd.forEach((v, k) => { if (v != null) { const e = C.event[M.cell[k]]; if (!(eventEnrichment[e] >= v)) eventEnrichment[e] = v; } });
 }
@@ -1009,7 +1011,7 @@ function setMarker(k) {  // show another marker of interest, with its own pair
 }
 document.getElementById("pair-marker").onchange = e => setMarker(+e.target.value);
 document.getElementById("pair-measure").onchange = e => {
-  measure = e.target.value === "both" ? "both" : "own"; pairTable = null; applyMeasure();
+  measure = e.target.value in MEASURES ? e.target.value : "own"; pairTable = null; applyMeasure();
   applyFilter(); relayout(); drawPlots(); renderTable(); if (state.selected >= 0 || state.event >= 0) renderCard(); saveView(); };
 function setProjection(v) {
   projection = v === "sum" ? "sum" : "max"; toggleOn("proj-" + projection, projection === "sum" ? "proj-max" : "proj-sum");
@@ -1134,6 +1136,7 @@ function computeM() {
     const pr = new Float32Array(out.cell.length * out.width).fill(NaN); al.forEach((a, k) => pr.set(a, k * out.width)); out["profiles_" + key] = pr;
     out["average_" + key] = Array.from({ length }, (_, j) => { const v = al.filter((_, k) => has[k]).map(a => a[j]).filter(x => x != null && isFinite(x)); return v.length ? mean(v) : null; });
   }
+  out.sameRef = sameReference(cellsSel); out.same = out.own.map(v => v == null || !isFinite(out.sameRef) ? null : nn(v - out.sameRef));
   out.expression = expressionCheck(cellsSel, partnerSel);
   M = out;
   memOfCell = new Int32Array(NC).fill(-1); M.cell.forEach((c, k) => memOfCell[c] = k);
@@ -1153,6 +1156,15 @@ function expressionCheck(cellsSel, partnerSel) {  // as membrane.expression_chec
     : ratio >= 0.8 ? "similar" : ratio >= 0.25 ? "warning" : "good";
   return { ma, mb, ratio, level, brightest, brightestType };
 }
+// the same-type reference (membrane.SAME): the median score of these cells at contacts with cells of the same
+// selection; NaN with fewer than 10 such cells
+function sameReference(sel) {
+  const sds = [];
+  for (let k = 0; k < MP.cell.length; k++) { if (!matches(MP.cell[k], sel)) continue; const s = [], f = [];
+    for (let j = OFFS[k]; j < OFFS[k + 1]; j++) { const t = TRACK[j]; if (t < 0) f.push(PROF[j]); else if (matches(t, sel)) s.push(PROF[j]); }
+    if (s.length) { const v = score(s, f); if (isFinite(v)) sds.push(v); } }
+  return sds.length >= 10 ? median(sds) : NaN;
+}
 // the median enrichment of every pair of selections (rows: membrane of; columns: interface with), as computeM
 // without the controls, of the marker shown; recomputed when the subtypes change (typesVersion) or the marker
 let typesVersion = 0, pairTable = null;
@@ -1167,7 +1179,8 @@ function pairTableStats() {
         const pv = [];  // the partners' free membrane at the interface positions (excess over both membranes)
         for (let j = OFFS[k]; j < OFFS[k + 1]; j++) { const t = TRACK[j]; if (t < 0) f.push(PROF[j]); else if (matches(t, w)) { s.push(PROF[j]); if (isFinite(FREE[t])) pv.push(FREE[t]); } }
         if (s.length) { let v = score(s, f); if (measure === "both") v = pv.length ? v - mean(pv) / sdev(f) : NaN; if (isFinite(v)) sds.push(v); } }
-      return { median: sds.length ? median(sds) : NaN, n: sds.length, check: expressionCheck(v, w).level };
+      const ref = measure === "same" ? sameReference(v) : 0;
+      return { median: sds.length ? median(sds) - ref : NaN, n: sds.length, check: expressionCheck(v, w).level };
     }) };
   });
   return pairTable = { version: typesVersion, marker: MI, measure, projection, rows, cols };
@@ -1229,7 +1242,9 @@ function drawMembranes() {
   document.getElementById("hmax").textContent = fmt(M.hist_top, M.hist_top % 1 ? 1 : 0) + " SD";
   document.getElementById("hbin").textContent = String(+M.hist_width.toFixed(3)) + " SD";
   document.getElementById("hist-auto").classList.toggle("on", auto);
-  document.getElementById("hist-note").textContent = (measure === "both" ? "Above both membranes: the partner's free membrane subtracted as well, in SD of the own membrane that touches no cell" : "Standard deviations above the mean of the membrane that touches no cell") + "; fraction of cells per bin" +
+  document.getElementById("hist-note").textContent = (measure === "both" ? "Above both membranes (experimental): the partner's free membrane subtracted as well, in SD of the own membrane that touches no cell"
+    : measure === "same" ? `Standard deviations above the own free membrane, minus ${isFinite(M.sameRef) ? fmt(M.sameRef, 2) + " SD, the median at contacts with cells of the same kind" : "(no reference: fewer than 10 cells with a same-type contact)"}`
+    : "Standard deviations above the mean of the membrane that touches no cell") + "; fraction of cells per bin" +
     `, ${M.hist_bin_start.length} bins from −5 SD` + (auto ? " (automatic scale)" : "") +
     (M.hist_above ? `. ${M.hist_above.toLocaleString()} ${M.hist_above === 1 ? "cell lies" : "cells lie"} above the maximum and ${M.hist_above === 1 ? "is" : "are"} not counted.` : ".");
   const ps = document.getElementById("profile"); ps.replaceChildren();
@@ -1238,6 +1253,9 @@ function drawMembranes() {
   const psx = scale([0, Math.max(1, (n - 1) * px)], [PAD.l, W - PAD.r]), psy = scale([lo, hi], [H - PAD.b, PAD.t]);
   svgAxes(ps, psx, psy, W, H, "position along the membrane (µm)", MEASURES[measure], niceTicks(psx.d[0], psx.d[1], 6), niceTicks(lo, hi, 4));
   ps.append(svgEl("line", { x1: psx(20 * px), x2: psx(20 * px), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "4 3" }));
+  if (measure === "same" && isFinite(M.sameRef) && M.sameRef >= lo && M.sameRef <= hi) {  // the same-type reference
+    const ref = svgEl("line", { x1: PAD.l, x2: W - PAD.r, y1: psy(M.sameRef), y2: psy(M.sameRef), stroke: "var(--ink-2)", "stroke-dasharray": "2 3" });
+    const tt = svgEl("title", {}); tt.textContent = `median at contacts with cells of the same kind: ${fmt(M.sameRef, 2)} SD (the reference of this measure)`; ref.append(tt); ps.append(ref); }
   const d = avg.map((v, i) => v == null ? "" : `${i && avg[i - 1] != null ? "L" : "M"}${psx(i * px)},${psy(v)}`).join("");
   ps.append(svgEl("path", { d, fill: "none", stroke: "var(--s3)", "stroke-width": 2 }));
   const hair = svgEl("line", { y1: PAD.t, y2: H - PAD.b, stroke: "var(--ink-2)", visibility: "hidden" }); ps.append(hair);
@@ -1679,7 +1697,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) saveV
 recomputeTypes();
 if (MP) {  // the remembered marker and pairs (a view saved before several markers: one pair, of the first marker)
   const k = MKS.findIndex(m => m.name === VIEW?.marker); if (k >= 0) MI = k;
-  if (VIEW?.measure === "both") { measure = "both"; document.getElementById("pair-measure").value = "both"; }
+  if (VIEW?.measure in MEASURES) { measure = VIEW.measure; document.getElementById("pair-measure").value = measure; }
   if (VIEW?.projection === "sum") { projection = "sum"; toggleOn("proj-sum", "proj-max"); }
   MKS.forEach((m, j) => { const v = VIEW?.pairs?.[m.name] || (j === MI && !VIEW?.pairs ? VIEW?.pair : null);
     if (v && typeof v.cells === "string" && typeof v.partners === "string") pairOfMarker[j] = { cells: v.cells, partners: v.partners }; });

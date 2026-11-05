@@ -245,6 +245,7 @@ const REQUIRED = ["brightfield", "tumor", "immune", "marker_of_interest"];
 const MAGNIFICATIONS = [["1", "20× (1 µm)"], ["0.5", "40× (0.5 µm)"], ["0.33", "60× (0.33 µm)"]];
 let state = { folder: "", settings: null, zips: [], reference: "" };  // zips: {path, name, pixel_size, channels, channel_names, roles, datasets, info}
 let defaults = null, choices = {}, logSince = 0, polling = null;
+let settingHelp = {};  // "section.name" -> the explanation of that setting (config.py), shown on hover
 
 async function api(name, data = {}) {
   const r = await fetch("/api/" + name, { method: "POST", headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
@@ -384,14 +385,14 @@ function renderZips() {
 function renderZip(z) {
   const info = z.info;
   const head = el("h3", {}, el("span", { class: "title" }, z.name, el("span", { class: "path" }, z.path)),
-    withIcon(el("button", { onclick: () => { state.zips = state.zips.filter(x => x !== z); renderZips(); renderProblems(); } }, "Remove"), "remove"));
+    withIcon(el("button", { title: "Take this zip out of the project (its files and results stay on disk)", onclick: () => { state.zips = state.zips.filter(x => x !== z); renderZips(); renderProblems(); } }, "Remove"), "remove"));
   const card = el("div", { class: "zip" }, head);
   if (!info) { card.append(el("p", { class: "hint" }, "Reading…")); return card; }
   if (info.error) { card.append(el("p", { class: "error" }, info.error)); return card; }
 
   // pixel size
   const custom = z.pixel_size && !MAGNIFICATIONS.some(([v]) => Number(v) === z.pixel_size);
-  const sel = el("select", { onchange: e => { if (e.target.value !== "custom") { z.pixel_size = Number(e.target.value) || null; renderProblems(); } else { z.pixel_size = z.pixel_size || null; } renderZips(); } },
+  const sel = el("select", { title: "The size of a pixel of this export: 1 µm at 20×, 0.5 µm at 40×, 0.33 µm at 60× (check your instrument). Distances in µm and the defaults in pixels follow from it", onchange: e => { if (e.target.value !== "custom") { z.pixel_size = Number(e.target.value) || null; renderProblems(); } else { z.pixel_size = z.pixel_size || null; } renderZips(); } },
     el("option", { value: "" }, "— choose —"),
     MAGNIFICATIONS.map(([v, t]) => el("option", { value: v, selected: Number(v) === z.pixel_size }, t)),
     el("option", { value: "custom", selected: custom }, "other…"));
@@ -410,10 +411,10 @@ function renderZip(z) {
   for (const d of z.datasets) {
     const di = info.datasets.find(x => x.name === d.name) || {};
     dt.append(el("tr", {},
-      el("td", {}, el("input", { type: "checkbox", checked: d.include, onchange: e => { d.include = e.target.checked;
+      el("td", {}, el("input", { type: "checkbox", title: "Analyse this dataset (unticked: left out of the runs and the overview; its results stay on disk)", checked: d.include, onchange: e => { d.include = e.target.checked;
         const b = e.target.closest("tr").querySelector("button.run-one"); if (b) b.dataset.off = d.include ? "" : "1"; renderProblems(); refreshOverview(); } })),
       el("td", {}, d.name), el("td", { class: "num" }, di.objects ?? ""), el("td", { class: "num", title: "objects with all channels" }, di.complete ?? ""),
-      el("td", {}, el("input", { type: "text", value: d.experiment, onchange: e => { d.experiment = e.target.value.trim(); refreshOverview(); } })),
+      el("td", {}, el("input", { type: "text", title: "Datasets with the same experiment are classified together (with Classify together: experiment) and shown together in the overview; the results go to a folder of this name", value: d.experiment, onchange: e => { d.experiment = e.target.value.trim(); refreshOverview(); } })),
       ["condition", "replicate"].map(k => el("td", {}, el("input", { type: "text", size: 10, value: d[k] || "",
         onchange: e => { d[k] = e.target.value.trim(); refreshOverview(); } }))),
       el("td", {}, withIcon(el("button", { class: "run-one", "data-name": d.name, "data-off": d.include ? "" : "1", disabled: !d.include || problems().length > 0 || !!polling,
@@ -432,7 +433,7 @@ function renderZip(z) {
     ct.append(el("tr", {},
       el("td", {}, "Ch" + c),
       el("td", {}, info.thumbnails[c] ? el("img", { class: "thumb", src: info.thumbnails[c], alt: "Ch" + c }) : ""),
-      el("td", {}, el("input", { type: "text", value: name, placeholder: "not used",
+      el("td", {}, el("input", { type: "text", value: name, placeholder: "not used", title: "The name of this channel (the marker). Roles are given by name, so exports with other channel numbers share them. Empty: the channel is not loaded",
         onchange: e => { setChannel(z, c, e.target.value.trim()); renderZips(); renderProblems(); } })),
       ROLES.map(([r, col, desc]) => el("td", { class: "role" }, el("input", { type: "checkbox", disabled: !name,
         title: name ? `${desc}: ${name}` : "Give the channel a name first", checked: !!name && hasRole(r, name),
@@ -612,7 +613,7 @@ function renderSettings() {
       const wide = fields.length === 1 && ["text", "list", "thresholds"].includes(fields[0][2]);
       group.append(el("div", { class: "settings-row" + (wide ? " wide" : fields.length === 3 ? " three" : "") },
         fields.map(([path, label, kind, list, placeholder]) =>  // a div, not a label, around a button (a click on a label clicks it)
-          el(kind === "thresholds" ? "div" : "label", {}, label, settingInput(path, kind, list, placeholder)))));
+          el(kind === "thresholds" ? "div" : "label", { title: settingHelp[path] || null }, label, settingInput(path, kind, list, placeholder)))));
     }
     const legend = el("legend", { "data-help": help }, title);
     if (k === 1) legend.append(el("span", { id: "cp-status" }));  // Segmentation (Cellpose)
@@ -852,8 +853,8 @@ async function refreshOverview() {
     const st = ROW_STATE[r.status], noResults = r.status === "waiting";
     const links = el("td", { class: "links" },
       r.error || noResults ? "" : el("a", { href: `/files/${TOKEN}/${r.folder.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}/dashboard.html`,
-                               target: "_blank", rel: "noopener" }, "dashboard"),
-      noResults ? "" : el("button", { class: "link", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"),
+                               target: "_blank", rel: "noopener", title: "The results of this dataset: events, cell types, contacts and membranes (opens in a new tab)" }, "dashboard"),
+      noResults ? "" : el("button", { class: "link", title: "Open the result folder of this dataset", onclick: () => api("open", { path: folder + "/" + r.folder }).catch(e => toast(e.message)) }, "folder"),
       r.status === "not in project" ? "" : el("button", { class: "link run-one", "data-name": String(r.dataset), disabled: problems().length > 0 || !!polling,
                      title: polling ? "A run is going on: wait for it to end, or Stop it" : runOneTitle(String(r.dataset)),
                      onclick: () => run([String(r.dataset)]) }, "run again"));
@@ -885,7 +886,7 @@ function comparisonTables(c) {
   if (c.error) { wrap.append(el("p", { class: "error" }, c.error)); return wrap; }
   if (!c.conditions.length) { wrap.append(el("p", { class: "hint" }, "Give the datasets a condition and a replicate (step 2, the dataset tables) to compare conditions.")); return wrap; }
   if (c.conditions.length > 1) wrap.append(el("div", { class: "row" }, el("label", {}, "Compare with"),
-    el("select", { onchange: e => { state.reference = e.target.value; refreshOverview(); } },
+    el("select", { title: "The condition that the others are compared with (for example the control)", onchange: e => { state.reference = e.target.value; refreshOverview(); } },
       c.conditions.map(x => el("option", { value: x, selected: x === c.reference }, x)))));
   for (const n of c.notes) wrap.append(el("p", { class: "hint" }, n));
   const short = t => String(t).replace(/^Immune /, "");
@@ -1002,6 +1003,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) saveD
   const s = await api("state");
   defaults = s.defaults; choices = { marker_locations: s.marker_locations,
              threshold_methods: s.threshold_methods, pools: s.pools, band_centres: s.band_centres };
+  settingHelp = s.help || {};
   if (s.theme) document.documentElement.dataset.theme = s.theme;
   if (s.project) loadProject(s.project);
   else { state.settings = newSettings(); state.settings.membrane.analysis = false; renderAll(); }

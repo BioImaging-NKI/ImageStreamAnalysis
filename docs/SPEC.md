@@ -595,6 +595,24 @@ experimental; same-type contacts remain the empirical reference (*All pairs*).
 Side finding: with a marker on both types at a similar level, the automatic carrier (free-membrane medians) can flip
 with the band's width and placement, and with it the default pair.
 
+### The carrier from the cross-membrane profile; SD above same-type contacts (the user, 2026-11-05)
+
+- **Carrier.** With the membrane analysis, the cell type that carries a marker is the one whose free membrane is the
+  highest in the marker averaged across the outline (`Location.height`: the peak of the average profile above its
+  ends; it does not depend on the band). The same heights decide which markers place a type's band
+  (`CARRY_FRACTION`), replacing the whole-cell medians (which favour small cells: more membrane per area). Without
+  the membrane analysis: whole-cell medians, as before. When the other type reaches `CARRIER_CLOSE` (80 %) of the
+  carrier, a warning says the choice is narrow and to set the pair. The marker check itself still uses the band's
+  free-membrane means (it compares the measured cells and partners as measured).
+- **SD above same-type contacts** (`membrane.SAME`): each measured cell's score minus the median score of the
+  measured cells at contacts with cells of their own selection (at least `MIN_SAME` = 10 cells, else NaN). Column in
+  the membrane table, `median above same-type contacts` in `Membrane pairs.tsv`, a third *Measure* in the
+  dashboard (live, `sameReference`; the average profile stays in SD above the own membrane with a dashed line at the
+  reference). It is the empirical answer to "two stained membranes side by side", where the excess's additivity
+  failed. Caveat (manual): too strict when the partner carries much less marker than the measured cells (the example
+  shows it: tumor-tumor contacts score higher than any tumor-immune pair), too lenient when it carries more.
+- The excess stays, labelled experimental everywhere (menu, tooltips, manual).
+
 ## Zero intensities in the clustering (2026-11-03)
 
 One IDEAS export had a block of zero pixels in one channel of one object; a cell inside it had a mean tumor intensity
@@ -711,7 +729,9 @@ with a fixed seed for the comparison only; they stay unseeded, I10).
 - Result on that dataset: identical outputs, a run (without Cellpose) about two and a half times faster (local
   notes). What remains is mostly the dashboard (image sheets, outlines) and reading the zip.
 - Not done: a cache of the loaded stack (with the faster reader not worth the disk space: about 1 GB per large
-  dataset); the dashboard's outlines and WebP sheets.
+  dataset).
+- Dashboard (2026-11-05): the image sheets of integer channels of up to 16 bits through a lookup table (the same
+  bytes as the float computation, checked), and the JSON clean-up skips lists of plain integers and strings.
 
 ## 11. Settings and outputs
 

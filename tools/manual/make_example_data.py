@@ -18,6 +18,10 @@ Events: mostly one tumor cell with one immune cell; also single cells, two cells
 cells. Subtype A cells sit next to the tumor cell more often than chance in events of three or more cells. About 2 %
 of the detections are artefacts: bright in Subtype A and Subtype B. Every image has its own size, as in IDEAS.
 Deterministic (fixed seeds).
+
+Made more like real data on 2026-11-05 (the user): cell sizes vary more (log-normal radii), outlines are not round
+(a few smooth bumps), markers vary more between cells and within a cell (texture, a patchy membrane), some events
+are out of focus, and the enrichment at Subtype A contacts is weaker and not at every contact.
 """
 
 from __future__ import annotations
@@ -40,11 +44,13 @@ COMPOSITIONS = [((1, 1), 0.46), ((2, 1), 0.12), ((1, 2), 0.14), ((1, 0), 0.06), 
                 ((0, 2), 0.04), ((2, 2), 0.04), ((1, 3), 0.04)]
 
 
-def ellipse(shape: tuple[int, int], cy: float, cx: float, ry: float, rx: float, angle: float) -> np.ndarray:
+def blob(shape: tuple[int, int], cy: float, cx: float, r: float, bumps: np.ndarray) -> np.ndarray:
+    """A cell that is not quite round: its radius varies smoothly with the angle (bumps: amplitude, phase per
+    harmonic 2, 3, 4)."""
     yy, xx = np.mgrid[: shape[0], : shape[1]]
-    c, s = np.cos(angle), np.sin(angle)
-    u, v = (xx - cx) * c + (yy - cy) * s, -(xx - cx) * s + (yy - cy) * c
-    out: np.ndarray = (u / rx) ** 2 + (v / ry) ** 2 <= 1
+    theta = np.arctan2(yy - cy, xx - cx)
+    edge = r * (1 + sum(a * np.cos((k + 2) * theta + ph) for k, (a, ph) in enumerate(bumps)))
+    out: np.ndarray = np.hypot(yy - cy, xx - cx) <= edge
     return out
 
 
@@ -53,7 +59,9 @@ def place(rng: np.random.Generator, kinds: list[str]) -> list[dict]:
     against a tumor cell when there is one."""
     cells: list[dict] = []
     for kind in kinds:
-        r = rng.uniform(11, 14) if kind == "tumor" else rng.uniform(6, 8)
+        # log-normal radii: some small, some large cells (tumor about 9-18 px, immune about 5-10 px)
+        r = float(np.clip(rng.lognormal(np.log(12.5), 0.17), 8.5, 19)) if kind == "tumor" else \
+            float(np.clip(rng.lognormal(np.log(7.0), 0.16), 4.8, 10.5))
         for _ in range(200):
             if not cells:
                 cy, cx = 0.0, 0.0
@@ -83,38 +91,48 @@ def draw_event(rng: np.random.Generator, cells: list[dict],
     shape = (max(h, 40), max(w, 40))
     labels = np.zeros(shape, np.int32)
     for k, c in enumerate(cells, start=1):
-        m = ellipse(shape, c["cy"] - y0, c["cx"] - x0, c["r"] * rng.uniform(0.92, 1.0), c["r"],
-                    rng.uniform(0, np.pi)) & (labels == 0)
+        bumps = np.column_stack([rng.uniform(0.02, 0.09, 3), rng.uniform(0, 2 * np.pi, 3)])
+        m = blob(shape, c["cy"] - y0, c["cx"] - x0, c["r"], bumps) & (labels == 0)
         labels[m] = k
     img = {ch: np.zeros(shape) for ch in CHANNELS}
     rim = {k: (labels == k) & ~ndi.binary_erosion(labels == k, iterations=2) for k in range(1, len(cells) + 1)}
+
+    def texture(sigma: float = 2.0, amount: float = 0.35) -> np.ndarray:  # smooth patchiness, mean about 1
+        f = ndi.gaussian_filter(rng.normal(0, 1, shape), sigma)
+        f /= f.std() or 1
+        out_: np.ndarray = np.clip(1 + amount * f, 0.2, None)
+        return out_
+
     for k, c in enumerate(cells, start=1):
         own = labels == k
         if c["kind"] == "tumor":
-            img[3][own] += rng.lognormal(np.log(420), 0.3) * brightness
-            img[2][rim[k]] += rng.lognormal(np.log(60), 0.35) * brightness
-            # the marker of interest gathers where the cell touches a Subtype A cell
+            img[3][own] += (rng.lognormal(np.log(380), 0.45) * brightness * texture(2.5, 0.3))[own]
+            img[2][rim[k]] += (rng.lognormal(np.log(55), 0.5) * brightness * texture(1.5, 0.45))[rim[k]]
+            img[2][own] += rng.lognormal(np.log(6), 0.5) * brightness  # a little inside the cell too
+            # the marker of interest gathers where the cell touches a Subtype A cell (not always, and less than before)
             for j, d in enumerate(cells, start=1):
-                if d["kind"] == "A" and ndi.binary_dilation(labels == j, iterations=2)[own].any():
+                touches = d["kind"] == "A" and ndi.binary_dilation(labels == j, iterations=2)[own].any()
+                if touches and rng.random() < 0.75:
                     zone = own & ndi.binary_dilation(labels == j, iterations=3)
-                    img[2][zone] += rng.lognormal(np.log(110), 0.3) * brightness
+                    img[2][zone] += rng.lognormal(np.log(38), 0.5) * brightness
         else:
-            img[4][own] += rng.lognormal(np.log(380), 0.3) * brightness
-            img[2][rim[k]] += rng.lognormal(np.log(6), 0.4) * brightness
+            img[4][own] += (rng.lognormal(np.log(340), 0.45) * brightness * texture(1.5, 0.3))[own]
+            img[2][rim[k]] += rng.lognormal(np.log(8), 0.6) * brightness
             if c["kind"] in ("A", "artefact"):
-                img[7][own] += rng.lognormal(np.log(160), 0.35) * brightness
+                img[7][own] += (rng.lognormal(np.log(130), 0.55) * brightness * texture(1.5, 0.3))[own]
             if c["kind"] in ("B", "artefact"):
-                img[8][own] += rng.lognormal(np.log(140), 0.35) * brightness
+                img[8][own] += (rng.lognormal(np.log(115), 0.55) * brightness * texture(1.5, 0.3))[own]
         # brightfield: darker cell, dark rim, texture
-        img[1][own] -= 120 + rng.normal(0, 25, own.sum())
+        img[1][own] -= 120 + rng.normal(0, 30, own.sum())
         img[1][rim[k]] -= 160
+    blur = 1.2 if rng.random() > 0.15 else rng.uniform(1.7, 2.4)  # some events are out of focus
     out = {}
     for ch, a in img.items():
         if ch != 1:
-            a = ndi.gaussian_filter(a, 1.2)  # the optics
-            a = rng.poisson(np.maximum(a, 0) + BACKGROUND[ch]).astype(float)
+            a = ndi.gaussian_filter(a, blur)  # the optics
+            a = rng.poisson(np.maximum(a, 0) + BACKGROUND[ch]).astype(float) + rng.normal(0, 3, shape)  # read noise
         else:
-            a = ndi.gaussian_filter(a, 0.8) + BACKGROUND[1] + rng.normal(0, 12, shape)
+            a = ndi.gaussian_filter(a, 0.8 * blur / 1.2) + BACKGROUND[1] + rng.normal(0, 14, shape)
         out[ch] = np.clip(a, 0, 4095).astype(np.uint16)
     return out, labels
 

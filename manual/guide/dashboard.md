@@ -203,12 +203,13 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
 - **All pairs** (folded): the median enrichment of every combination of *Membrane of* and *interface with*, with the
   number of cells and the marker check of each pair. Use this table to compare pairs (see
   [The control](../analysis/membrane.md#the-control)). Click a number to show that pair.
-- **Measure**: *SD above own membrane* (the default) scores the interface against the cell's own membrane that
-  touches no cell. *SD above both membranes* also subtracts the partner's free membrane at every interface position:
-  the excess over both membranes, for a marker that the partner carries too. The histograms, the average profile,
-  the heatmap, *All pairs*, the cell card and the *Cells* table follow the choice, and the page remembers it. Read
-  [the excess over both membranes](../analysis/membrane.md#where-the-marker-is-expressed) before you use it: check it
-  first on contacts between cells of the same type.
+- **Measure**: how the interface is scored. *SD above own membrane* (the default) compares the interface with the
+  cell's own membrane that touches no cell. *SD above same-type contacts* subtracts the median score of the measured
+  cells at contacts with cells of their own kind, for a marker that the partners carry too; a dashed line in the
+  average profile marks that reference. *SD above both membranes (experimental)* also subtracts the partner's free
+  membrane at every interface point; it failed its own check on real data. The histograms, the heatmap, *All pairs*,
+  the cell card and the *Cells* table follow the choice, and the page remembers it. [Three ways to score an
+  interface](../analysis/membrane.md#three-ways-to-score-an-interface) explains when to use which.
 - **Across the band**: *maximum* (the default, as the macro and the tables) takes the brightest sample across the
   membrane at every position; *sum* adds all samples. At an interface both membranes lie in the band, and only the
   sum adds them up, as *SD above both membranes* assumes. Everything in the card follows the switch; the tables of
