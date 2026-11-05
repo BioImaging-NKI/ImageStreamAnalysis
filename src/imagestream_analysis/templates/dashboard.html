@@ -124,7 +124,9 @@ tr.selected td { box-shadow: inset 0 -2px 0 var(--ink); }
 tbody tr { cursor: pointer; }
 .tablebox { max-height: 420px; overflow: auto; }
 .tabs { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; align-items: center; }
-.tabs button.on { border-color: var(--ink); font-weight: 600; }
+/* a pressed button (class on: tabs, switches, automatic): lightly filled in the accent colour, in every card */
+button.on { background: color-mix(in srgb, var(--s1) 16%, var(--surface)); border-color: var(--s1); font-weight: 600; }
+button.on:hover { border-color: var(--s1); }
 .note { color: var(--muted); font-size: 12px; }
 .marker { border-top: 1px solid var(--grid); padding-top: 6px; margin-top: 6px; }
 .marker:first-of-type { border-top: 0; margin-top: 0; }
@@ -147,7 +149,6 @@ tbody tr { cursor: pointer; }
 .histctl .grp { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .histctl button { font-size: 12px; padding: 0 7px; line-height: 18px; }
 .histctl .v { min-width: 3.4em; text-align: center; font-variant-numeric: tabular-nums; color: var(--ink); }
-.histctl #hist-auto.on { border-color: var(--ink); font-weight: 600; }
 pre.export { background: var(--chip); border-radius: 6px; padding: 6px 8px; font-size: 12px; white-space: pre-wrap; margin: 6px 0 0; }
 /*__ISA_HELP_CSS__*/
 </style>
