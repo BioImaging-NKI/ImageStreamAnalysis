@@ -71,6 +71,8 @@ page runs in that process with a state folder of its own; the user's settings ar
 
 After a change to a page of the program: remake the example project (its dashboards are written by the program), then
 the screenshots, and look at every changed image.
+Retake them as a full set: some shots depend on the steps before them (`dash_contact_filter` taken alone comes out cut
+off).
 
 ## Waiting for the next refresh
 

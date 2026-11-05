@@ -157,6 +157,10 @@ its points to the front.
   it shows whether that subtype is the one that touches the tumor cell (or another subtype) more often than expected
   by chance, in events that offer a choice. A square is colored only where the 95 % interval excludes 1. Hover over a
   square to see the counts and the interval.
+- Both matrices leave out the cell types that have nothing to show: no contact, and none expected (with *fraction
+  touching*: no contact at all). This happens with rare combinations of subtype markers. The note under the matrix
+  names them, with their number of cells; *Show them* puts them back (with empty squares), *Hide them* leaves them
+  out again.
 - **Share of contacts** (right): for each cell type, which cell types it touches, as a share of its contacts or as
   numbers. On the right, it also shows the share of its cells that touch any other cell.
 
