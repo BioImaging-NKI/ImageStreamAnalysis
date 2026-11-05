@@ -188,14 +188,16 @@ carries it. *Apply to the project…* and *Copy as settings* write the pair of t
 - **Histogram**: the enrichment at the interface (aqua) of every cell with an interface, compared with random control
   windows on cells without an interface (dashed), in the measure chosen (below): by default the log2 ratio of the
   interface and the free membrane, that is, the membrane that touches no other cell (1 = twice as bright). The
-  histograms start at −3 for the log2 ratio, and at −5 SD for the SD scores. By default the
+  histograms start at −2 for the log2 ratio, and at −5 SD for the SD scores. By default the
   scale is automatic: the maximum is the 99th percentile of the interface values or of the control windows, whichever
   is higher, so that one extreme cell does not squeeze the rest into a few bins. The bin width is chosen to give at
   most 60 bins. Use the **−** and **+** buttons under the plot to change the *maximum* or the *bin width*, and
   **auto** to return to the automatic scale. The page redraws the histograms immediately and remembers the scale.
   Values above the maximum are not counted; the note under the plot says how many cells that concerns.
-- **Average profile**: the average membrane profile of the cells with an interface, centered on the interface.
-- **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top. The **stripe** under
+- **Average profile**: the average membrane profile of the cells with an interface, centered on the interface. Its
+  vertical axis fits the curve, so a small enrichment is not flattened.
+- **Heatmap**: one row per cell with an interface, with the strongest enrichment at the top. The colour scale is
+  ±6 SD for the SD scores; for the log2 ratio it is set from the rows shown (the legend gives it). The **stripe** under
   it shows the rows averaged per position, on the same colour scale (the average profile as a colour band); hover
   over it to read the value and the number of cells at that position.
 - **Across the membrane: where the band lies** (folded): the marker of interest averaged across the outline of the

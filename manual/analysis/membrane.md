@@ -354,7 +354,7 @@ on their free membrane. Each window is as long as the median interface and is sc
 scores. The histogram of the controls shows how much a stretch of free membrane varies by chance in this dataset; its
 log2 ratio lies around 0.
 
-In the dashboard, both histograms share one scale. For the log2 ratio it starts at −3 (one eighth) and reaches at least
+In the dashboard, both histograms share one scale. For the log2 ratio it starts at −2 (one quarter) and reaches at least
 2 (four times). For the SD scores it starts at −5 SD, as in the files `Histogram_interface_stdDevs_above_mean -
 <marker>.tsv` and `Histogram_control_stdDevs_above_mean - <marker>.tsv` (which stay in SD, as the macro's). If
 *Histogram maximum* and *Histogram bin width* are left empty, the scale is automatic. The maximum is the 99th

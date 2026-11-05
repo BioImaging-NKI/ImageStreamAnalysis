@@ -1109,7 +1109,7 @@ const HIST_TOPS = [0, 1, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150,
 const HIST_WIDTHS = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2.5, 5, 10, 25];
 const HIST_VIEWS = { sd: { max: MP ? MP.max_histogram_value || null : null, bin: MP ? MP.bin_width || null : null }, log: { max: null, bin: null } };
 let histView = HIST_VIEWS.sd;
-const LOG_MIN = -3, LOG_MIN_TOP = 2, LOG_FALLBACK_TOP = 4;  // the log2 histograms: from 1/8, at least up to 4×
+const LOG_MIN = -2, LOG_MIN_TOP = 2, LOG_FALLBACK_TOP = 4;  // the log2 histograms: from 1/4, at least up to 4×
 const histMin = () => isLog() ? LOG_MIN : HIST_MIN;
 function niceStep(raw) {
   if (raw <= 0.1) return 0.1;
@@ -1300,11 +1300,13 @@ function drawMembranes() {
     : measure === "both" ? "Above both membranes (experimental): the partner's free membrane subtracted as well, in SD of the own membrane that touches no cell"
     : measure === "same" ? `Standard deviations above the own free membrane, minus ${refText}`
     : "Standard deviations above the mean of the membrane that touches no cell") + "; fraction of cells per bin" +
-    `, ${M.hist_bin_start.length} bins from ${isLog() ? "−3 (1/8)" : "−5 SD"}` + (auto ? " (automatic scale)" : "") +
+    `, ${M.hist_bin_start.length} bins from ${isLog() ? "−2 (1/4)" : "−5 SD"}` + (auto ? " (automatic scale)" : "") +
     (M.hist_above ? `. ${M.hist_above.toLocaleString()} ${M.hist_above === 1 ? "cell lies" : "cells lie"} above the maximum and ${M.hist_above === 1 ? "is" : "are"} not counted.` : ".");
   const ps = document.getElementById("profile"); ps.replaceChildren();
   const avg = M.average, px = D.pixel_size, n = avg.length;
-  const vals = avg.filter(v => v != null), lo = Math.min(0, ...vals), hi = Math.max(1, ...vals) * 1.1;
+  // the y axis fits the curve (and 0): a small enrichment fills the plot instead of lying flat at the bottom
+  const vals = avg.filter(v => v != null), lo0 = Math.min(0, ...vals), hi0 = Math.max(0, ...vals);
+  const pad = Math.max(0.1 * (hi0 - lo0), isLog() ? 0.02 : 0.1), lo = lo0 < 0 ? lo0 - pad : 0, hi = hi0 + pad;
   const psx = scale([0, Math.max(1, (n - 1) * px)], [PAD.l, W - PAD.r]), psy = scale([lo, hi], [H - PAD.b, PAD.t]);
   svgAxes(ps, psx, psy, W, H, "position along the membrane (µm)", MEASURES[measure], niceTicks(psx.d[0], psx.d[1], 6), niceTicks(lo, hi, 4));
   ps.append(svgEl("line", { x1: psx(20 * px), x2: psx(20 * px), y1: PAD.t, y2: H - PAD.b, stroke: "var(--axis)", "stroke-dasharray": "4 3" }));
@@ -1361,7 +1363,17 @@ function drawAcross() {
 }
 document.getElementById("pair-cells").onchange = e => { pair.cells = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
 document.getElementById("pair-partners").onchange = e => { pair.partners = e.target.value; computeM(); applyFilter(); drawPlots(); renderTable(); };
-const HEAT_RANGES = { sd: 6, log: 2 }, heatRange = () => HEAT_RANGES[isLog() ? "log" : "sd"];
+// the colour range of the heatmap: ±6 SD; for the log2 ratio from the data (the 98th percentile of |value| of the rows
+// shown, rounded up to a nice step), so that a modest enrichment still shows
+const HEAT_SD = 6, HEAT_LOG_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3];
+let heatLog = 1;
+const heatRange = () => isLog() ? heatLog : HEAT_SD;
+function fitHeatLog(rows, cols) {
+  const v = []; const step = Math.max(1, Math.floor(rows.length * cols / 20000));  // a sample is enough
+  let q = 0; for (const k of rows) for (let c = 0; c < cols; c++) { if (q++ % step) continue; const x = M.profiles[k * M.width + c]; if (!isNaN(x)) v.push(Math.abs(x)); }
+  const p = v.length ? percentile(v, 98) : 1;
+  heatLog = HEAT_LOG_STEPS.find(s => s >= p) ?? HEAT_LOG_STEPS[HEAT_LOG_STEPS.length - 1];
+}
 let heatBase = null, heatRows = [];
 function drawHeat(rows) {
   heatRows = [...rows].sort((a, b) => (M.sd[b] ?? -Infinity) - (M.sd[a] ?? -Infinity));
@@ -1369,6 +1381,7 @@ function drawHeat(rows) {
   const cols = Math.min(M.width, M.average.length || M.width);
   ctx.clearRect(0, 0, w, h);
   if (!heatRows.length || !cols) { heatBase = null; document.getElementById("heat-legend").replaceChildren(); return; }
+  if (isLog()) fitHeatLog(heatRows, cols);
   const img = ctx.createImageData(cols, heatRows.length);
   heatRows.forEach((k, r) => { for (let c = 0; c < cols; c++) { const v = M.profiles[k * M.width + c]; const o = (r * cols + c) * 4;
     if (isNaN(v)) { img.data[o + 3] = 0; continue; } img.data.set([...divergingRgb(v / heatRange()), 255], o); } });
