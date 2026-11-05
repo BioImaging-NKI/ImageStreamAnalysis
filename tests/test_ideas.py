@@ -49,6 +49,34 @@ def test_objects_without_all_channels_are_left_out(tmp_path):
     assert ideas.read_dataset(path, "Sample A", [1, 2]).object_ids.tolist() == [10, 20, 30]
 
 
+
+def test_file_names_with_a_prefix(tmp_path):
+    """IDEAS can put a prefix before the object number (<prefix>_<object>_Ch<N>, often the name of the data file).
+    One prefix: the folder is the dataset. Several prefixes in one folder (several data files exported together,
+    whose object numbers may clash): one dataset per prefix."""
+    import zipfile
+
+    data, _ = make_events(3)
+    path = write_ideas_zip(tmp_path / "x.zip", data, [10, 20, 30], [1, 2, 3, 4])
+    with zipfile.ZipFile(path) as z:
+        files = {n: z.read(n) for n in z.namelist()}
+    with zipfile.ZipFile(path, "w") as z:
+        for n, b in files.items():
+            z.writestr(n.replace("Sample A/", "Sample A/40_A1D3_2_"), b)
+    info = ideas.scan(path)
+    assert list(info) == ["Sample A"] and info["Sample A"].objects() == [10, 20, 30]
+    stack = ideas.read_dataset(path, "Sample A", [1, 2])
+    assert stack.object_ids.tolist() == [10, 20, 30] and np.array_equal(stack.channel(1), data[:, 0].astype(np.float32))
+    with zipfile.ZipFile(path, "w") as z:  # a second export in the same folder, with the same object numbers
+        for n, b in files.items():
+            z.writestr(n.replace("Sample A/", "Sample A/40_A1D3_2_"), b)
+            z.writestr(n.replace("Sample A/", "Sample A/5_B2_4_"), b)
+    info = ideas.scan(path)
+    assert list(info) == ["Sample A - 40_A1D3_2", "Sample A - 5_B2_4"]
+    assert all(d.objects() == [10, 20, 30] for d in info.values())
+    assert ideas.read_dataset(path, "Sample A - 5_B2_4", [1]).n_events == 3
+
+
 def test_max_events_and_errors(ideas_zip):
     stack = ideas.read_dataset(ideas_zip["zip"], "Sample A", [1], max_events=3)
     assert stack.object_ids.tolist() == sorted(IDEAS_IDS)[:3] and stack.n_events_in_file == len(IDEAS_IDS)

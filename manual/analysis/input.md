@@ -3,8 +3,15 @@
 ## IDEAS exports
 
 The input is an export from IDEAS: a zip file with one folder per **dataset**. Each folder holds one image per object
-and channel, named `<object>_Ch<N>.ome.tif`. Every object (an ImageStream *event*) becomes one image in the analysis.
-The images are ordered by object number, and the object number is kept with every result in the `Object ID` column.
+and channel, named `<object>_Ch<N>.ome.tif`. If a file-name prefix was set on export, the names read
+`<prefix>_<object>_Ch<N>.ome.tif` (the prefix is often the name of the data file); the object number is then the last
+number before `_Ch`. Every object (an ImageStream *event*) becomes one image in the analysis. The images are ordered
+by object number, and the object number is kept with every result in the `Object ID` column.
+
+If one folder holds files with **different prefixes**, for example the exports of two data files put into the same
+folder, each prefix becomes a dataset of its own, named *folder - prefix*. Their object numbers can be the same, so
+they are never mixed. A small extra dataset of this kind is often a few files copied into the wrong folder: check it,
+and untick it on the import page if it does not belong there.
 
 Only the channels that have been given a name are read. An object that lacks an image for one of these channels is
 left out, and the log reports how many objects were left out.

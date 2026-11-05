@@ -30,7 +30,11 @@ Immune cell`; `cell_of_interest` "T cell" → "Immune cell". Old settings files 
 
 **IDEAS zip, read directly (new; replaces ImageStreamCombiner, `ideas.py`)** ✅
 
-- An IDEAS export: a zip with one folder per dataset, one file per object and channel, `<object>_Ch<N>.ome.tif`
+- An IDEAS export: a zip with one folder per dataset, one file per object and channel, `<object>_Ch<N>.ome.tif`,
+  or `<prefix>_<object>_Ch<N>.ome.tif` with a prefix set on export (2026-11-05: such exports were read as empty;
+  the Combiner split on `_Ch` and accepted them). Several prefixes in one folder: one dataset per prefix
+  (`<folder> - <prefix>`), since their object numbers may clash; seen in a real export, where one folder also held
+  copies of another folder's objects.
   (uint16, sizes differ per object). The files hold no pixel size and no channel names (`input.pixel_size`,
   `input.channel_names`, from the user). Their OME metadata (operator, source path) is not read.
 - Only the channels with a role plus `input.channels` are loaded; the channel settings then use the IDEAS numbers.

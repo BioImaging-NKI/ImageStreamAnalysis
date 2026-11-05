@@ -1,6 +1,7 @@
 """Reading IDEAS exports directly (replaces ImageStreamCombiner).
 
-An export is a zip with one folder per dataset, holding one file per object and channel: `<object>_Ch<N>.ome.tif`.
+An export is a zip with one folder per dataset, holding one file per object and channel: `<object>_Ch<N>.ome.tif`,
+or `<prefix>_<object>_Ch<N>.ome.tif` when a file-name prefix was set on export (often the name of the data file).
 The files hold no pixel size and no channel names: those come from the user. Their OME metadata (operator, source
 path) is not read.
 
@@ -27,7 +28,10 @@ from .io import EventStack
 
 log = logging.getLogger(__name__)
 SUFFIX = ".ome.tif"
-FILE_RE = re.compile(r"^(?P<object>\d+)_Ch(?P<channel>\d+)" + re.escape(SUFFIX) + "$", re.IGNORECASE)
+# the object number is the last number before _Ch; anything before it is the export's prefix (2026-11-05: an export
+# with a prefix was read as empty)
+FILE_RE = re.compile(r"^(?:(?P<prefix>.*)_)?(?P<object>\d+)_Ch(?P<channel>\d+)" + re.escape(SUFFIX) + "$",
+                     re.IGNORECASE)
 logging.getLogger("tifffile").setLevel(logging.ERROR)  # IDEAS files have tags that tifffile warns about
 
 
@@ -47,15 +51,22 @@ class DatasetInfo:
 
 
 def scan(path: str | Path) -> dict[str, DatasetInfo]:
-    """The datasets (first-level folders) of an IDEAS zip. Files in the root or deeper folders are ignored."""
-    datasets: dict[str, DatasetInfo] = {}
+    """The datasets (first-level folders) of an IDEAS zip. Files in the root or deeper folders are ignored. A folder
+    whose files carry different prefixes (several data files exported into one folder: their object numbers may
+    clash) gives one dataset per prefix, named "<folder> - <prefix>"."""
+    found: dict[str, dict[str, dict[int, dict[int, str]]]] = {}  # folder -> prefix -> object -> channel -> name
     with zipfile.ZipFile(path) as z:
         for name in z.namelist():
             parts = name.split("/")
             if len(parts) != 2 or not (m := FILE_RE.match(parts[1])):
                 continue
-            ds = datasets.setdefault(parts[0], DatasetInfo(parts[0]))
-            ds.files.setdefault(int(m["object"]), {})[int(m["channel"])] = name
+            objects = found.setdefault(parts[0], {}).setdefault(m["prefix"] or "", {})
+            objects.setdefault(int(m["object"]), {})[int(m["channel"])] = name
+    datasets: dict[str, DatasetInfo] = {}
+    for folder, prefixes in found.items():
+        for prefix, objects in prefixes.items():
+            label = folder if len(prefixes) == 1 else f"{folder} - {prefix or '(no prefix)'}"
+            datasets[label] = DatasetInfo(label, objects)
     return dict(sorted(datasets.items()))
 
 
