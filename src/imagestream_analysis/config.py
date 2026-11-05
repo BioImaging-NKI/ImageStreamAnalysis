@@ -67,7 +67,8 @@ class ChannelSettings:
     # functional markers of macro 2.8).
     functional: list[Channel] = field(default_factory=list)
     # Where the tumor and immune markers stain: "nuclear" (the nucleus or the cytoplasm) or "membrane". This
-    # determines the image that Cellpose segments.
+    # determines the image that Cellpose 3 segments. Cellpose 4 (model cpsam) gets every segmentation channel on its
+    # own (brightfield variance, tumor marker, immune markers), so this setting does not matter there.
     marker_location: MarkerLocation = MarkerLocation.NUCLEAR
 
     @staticmethod

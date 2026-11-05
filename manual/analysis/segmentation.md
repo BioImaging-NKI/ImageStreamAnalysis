@@ -6,17 +6,26 @@ measured.
 ## The image for Cellpose
 
 Cellpose does not segment each event on its own. Instead, it receives one **montage** of all events of a dataset,
-placed side by side in a grid that is roughly square. What the montage contains depends on the setting
-*Tumor / immune markers*:
+placed side by side in a grid that is roughly square. The brightfield image is not used as it is, but as its **local
+variance**: how much the brightness varies within a small circle around each pixel (radius 2 px). The variance is
+high at the edges and in the texture of the cells and low in the empty background, so it outlines the cells.
 
-- **nuclear** (the markers stain the nucleus or the cytoplasm): the montage has two channels. Channel 1 is the local
-  variance of the brightfield image, which outlines the cells. Channel 2 is the sum of the normalized tumor and immune
-  markers.
-- **membrane**: the montage is a single image, the sum of the normalized markers and the normalized brightfield
-  variance.
+What the montage contains depends on the Cellpose version (the *Model*):
+
+- **Cellpose 3** (`cyto3`, as the Fiji macro). Cellpose 3 expects at most two channels with a fixed role: one that
+  shows the whole cell ("cytoplasm") and, optionally, one that shows the nucleus. The setting *Tumor / immune
+  markers* chooses the recipe:
+    - **nuclear** (the markers stain the nucleus or fill the cell): two channels. The brightfield variance is the
+      cytoplasm channel; the sum of the normalized tumor and immune markers is the nucleus channel.
+    - **membrane** (the markers stain the membrane): one channel, the sum of the normalized markers and the
+      normalized brightfield variance.
+- **Cellpose 4** (`cpsam`). Cellpose 4 has no cytoplasm or nucleus roles: it takes up to three channels as they
+  are. Every segmentation channel therefore goes in on its own: the brightfield variance, the tumor marker and the
+  immune markers (summed), each normalized. *Tumor / immune markers* does not matter here.
 
 *Cell diameter (px)* is the typical cell diameter in pixels. *Model* is `cyto3` (Cellpose 3), `cpsam` (Cellpose 4), or
-the path of a model of your own.
+the path of a model of your own. A model file of your own is treated as a Cellpose 3 model, unless its file name
+contains `cpsam`.
 
 ??? note "Technical: why a montage, and why a grid"
 

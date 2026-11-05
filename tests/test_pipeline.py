@@ -335,3 +335,27 @@ def test_two_markers_with_pairs_of_their_own(synthetic_two_markers):
     s.membrane.pairs = {"Other": {"cells": ["Tumor"]}}
     with pytest.raises(ValueError, match="'Other' is not a marker of interest"):
         run(s)
+
+
+def test_the_image_for_cellpose_3_and_4(synthetic):
+    """Cellpose 3: the macro's recipes (nuclear: brightfield variance + markers as two channels; membrane: one summed
+    channel). Cellpose 4 (cpsam): every segmentation channel on its own, whatever the marker location."""
+    from imagestream_analysis.config import MarkerLocation
+    from imagestream_analysis.pipeline import load
+    from imagestream_analysis.segmentation import cellpose_input, is_cellpose4, markers
+
+    s = settings_for(synthetic)
+    stack = load(s)
+    m = markers(stack, s)
+    image, channels = cellpose_input(stack, m, s)
+    assert image.ndim == 3 and image.shape[-1] == 2 and channels == [1, 2]
+    s.channels.marker_location = MarkerLocation.MEMBRANE
+    image, channels = cellpose_input(stack, m, s)
+    assert image.ndim == 2 and channels == [0, 0]
+    for model in ("cpsam", "C:/models/cpsam_finetuned"):
+        s.segmentation.model = model
+        assert is_cellpose4(model)
+        image, channels = cellpose_input(stack, m, s)
+        assert image.shape[-1] == 3 and channels == []
+        assert np.allclose(image[..., 1].max(), m.tumor.max()) and np.allclose(image[..., 2].max(), m.immune.max())
+    assert not is_cellpose4("cyto3")

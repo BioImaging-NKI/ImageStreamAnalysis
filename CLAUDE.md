@@ -225,6 +225,8 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   *SD above same-type contacts* (new: minus the median at contacts with cells of the measured kind); *SD above both
   membranes* stays but is **experimental**: re-checked with every band placement, width and projection, same-type
   contacts stayed clearly negative (SPEC).
+- **Cellpose 4 input**: with `cpsam` the montage has three separate channels (brightfield variance, tumor marker,
+  immune markers, each normalized); `marker_location` only chooses the Cellpose 3 recipe (as the macro).
 - The example data of the manual are more realistic (sizes, shapes, noise, weaker and not universal enrichment).
 - Tooltips: every setting on the import page shows its comment from `config.py` (`config.setting_help`); new controls
   get a `title`. The manual is written in plain English, with the intricacies in *Technical* notes.

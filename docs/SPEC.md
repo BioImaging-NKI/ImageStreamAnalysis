@@ -77,6 +77,12 @@ Cellpose input, all events side by side in **one row** (Make Montage, rows=1):
 **Port:** Cellpose runs in a subprocess (`_cellpose_runner.py`) with the Python of any environment
 (`segmentation.cellpose_python`), Cellpose 3 or 4. With Cellpose 4 the model is `cpsam`, which takes the channels as
 they are (no `channels` argument); the diameter is passed on (cpsam rescales by 30/diameter; 0 = no rescaling).
+**Cellpose 4 input (the user, 2026-11-05):** the nucleus/cytoplasm roles are gone in Cellpose 4, so with `cpsam`
+(`segmentation.is_cellpose4`: "cpsam" in the model's name) the montage has three channels, each on its own: the
+brightfield variance, the tumor marker and the summed immune markers, each normalized (median Otsu threshold);
+`marker_location` is ignored. On the synthetic example (Donor 1, 717 cells drawn): cpsam 716 cells, 99.7 % of the
+events with exactly the right number; cyto3 nuclear the same; cyto3 membrane 712 (98.4 %). Not yet compared on
+real data (no ground truth there).
 **Grid montage (default, decision on I2):** the events are put in an about-square grid, row by row
 (`io.grid_columns`), empty tiles at the end are 0. The labelmap is saved as the montage (`labelmap_cells.tif`);
 `read_labelmap` recognizes a row or a grid.

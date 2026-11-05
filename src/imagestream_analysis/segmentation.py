@@ -66,15 +66,29 @@ def montage_columns(stack: EventStack, settings: Settings) -> int:
     return min(columns, t) if columns > 0 else grid_columns(t, h, w)
 
 
+def is_cellpose4(model: str) -> bool:
+    """Whether the model runs with Cellpose 4: "cpsam", or a model file whose name says cpsam (Cellpose 4 has no
+    other built-in model; a model file of your own is taken as Cellpose 3 unless its name contains "cpsam")."""
+    return "cpsam" in Path(str(model)).name.lower()
+
+
 def cellpose_input(stack: EventStack, m: Markers, settings: Settings) -> tuple[np.ndarray, list[int]]:
     """The image for Cellpose: a montage of all events (a grid, row by row; the macro uses one row: SPEC I2), and
     the Cellpose 3 channels. Empty tiles at the end of the grid are 0.
 
-    nuclear markers: channel 1 = variance (r=2) of the brightfield, channel 2 = tumor + immune markers (normalized);
-    Cellpose with ch1=1, ch2=2. membrane markers: one channel, tumor + immune markers + brightfield variance, each
-    normalized; Cellpose with ch1=1, ch2=0 (grayscale)."""
+    Cellpose 3 (as the macro). nuclear markers: channel 1 = variance (r=2) of the brightfield, channel 2 = tumor +
+    immune markers (normalized); Cellpose with ch1=1, ch2=2. membrane markers: one channel, tumor + immune markers +
+    brightfield variance, each normalized; Cellpose with ch1=1, ch2=0 (grayscale).
+
+    Cellpose 4 (cpsam; 2026-11-05): it takes up to three channels as they are, without a cytoplasm / nucleus role,
+    so every segmentation channel goes in on its own: brightfield variance, tumor marker, immune markers (summed),
+    each normalized; marker_location does not matter."""
     columns = montage_columns(stack, settings)
     bf_var = imagej.variance_filter(stack.channel(settings.channels.brightfield), 2)
+    if is_cellpose4(settings.segmentation.model):
+        bf_norm, _ = normalize_marker(bf_var)
+        image = stack_to_montage(np.stack([bf_norm, m.tumor, m.immune], axis=-1), columns)
+        return image.astype(np.float32), []
     nuclei = m.tumor + m.immune
     if settings.channels.marker_location == MarkerLocation.NUCLEAR:
         image = stack_to_montage(np.stack([bf_var, nuclei], axis=-1), columns)

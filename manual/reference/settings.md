@@ -29,7 +29,7 @@ The role of each channel, given by channel number or by channel name.
 | `tumor` | `3` |  | The tumor-cell marker. |
 | `immune` | `[4]` |  | The immune-cell marker or markers, as a list. With several markers, each is normalized and the results are summed (the phenotypic markers of macro 2.8). |
 | `functional` | `[]` |  | The immune subtype markers, as a list. Each immune cell is called positive or negative for each of them (the functional markers of macro 2.8). |
-| `marker_location` | `'nuclear'` | Tumor / immune markers | Where the tumor and immune markers stain: "nuclear" (the nucleus or the cytoplasm) or "membrane". This determines the image that Cellpose segments. |
+| `marker_location` | `'nuclear'` | Tumor / immune markers | Where the tumor and immune markers stain: "nuclear" (the nucleus or the cytoplasm) or "membrane". This determines the image that Cellpose 3 segments. Cellpose 4 (model cpsam) gets every segmentation channel on its own (brightfield variance, tumor marker, immune markers), so this setting does not matter there. |
 
 ## `[segmentation]`
 
