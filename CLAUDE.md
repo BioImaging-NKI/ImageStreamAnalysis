@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Notes for Claude Code when working in this repository. Last updated 2026-11-05.
+Notes for Claude Code when working in this repository. Last updated 2026-11-06.
 
 ## This project: the Python port (started 2026-10-22)
 
@@ -249,10 +249,21 @@ v1.8 is the special case "one immune marker, no functional markers". Not built y
   holds (the chance model shuffles within events), yes for a gate on the contact itself; counts describe the gated
   events only (manual, *What the selection in IDEAS means*).
 
-### Where things stand, for the next session (2026-11-05)
+### Decisions by the user (2026-11-06)
 
-- Everything is committed on `main` and pushed (with the demo uploaded to the `example-data` release first), late on
-  2026-11-05: the log2 ratio as the main readout, the stronger example, the logo, the shortcut command.
+- **Interactions as tables from the dashboard**: *Save .tsv* on the Interactions card saves what the matrix tab shows,
+  for the events shown and the subtypes of the sliders: the contact table (partner preference, fraction touching) or
+  the subset preference with its 95 % interval (none below 5 expected), with the column and full cell-type names of
+  `Interactions.tsv` / `Subset preference.tsv` (one writer, `saveTsv`, also for the tables card). The contact tables
+  (`interactions.contact_table`, the project's `interactions.tsv`, the page) have `share of contacts` (the card's bars).
+- Elements of the filter row with `hidden` need `.filters label[hidden]` (its `display` overrode the attribute: the
+  *Part* menu showed empty on single-part datasets, fixed the same day).
+
+### Where things stand, for the next session (2026-11-06)
+
+- Everything is committed on `main` and pushed (with the demo uploaded to the `example-data` release first), on
+  2026-11-06: *Combine as* (parts of one sample), *Save .tsv* on the Interactions card, the share of contacts; the
+  manual's screenshots were retaken as a full set (none waiting). The user tried *Combine as* on real exports: it works.
 - Cellpose on a shared GPU: two runs at once (for example the user's `cpsam` project run and the example's `cyto3`)
   slowed each other from seconds to many minutes. Run the example when the GPU is free. Task Manager on this laptop
   shows no CUDA engine; use `nvidia-smi` (the Intel GPU's load is the desktop, not Cellpose).

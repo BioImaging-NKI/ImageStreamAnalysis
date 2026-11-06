@@ -743,7 +743,10 @@ flagged on thresholds over all cells, before the k-means, which then runs withou
   "Immune <subtype>"). Event table: `Artefacts`, `Interactions` (pairs), at the end, after the macro's columns.
 - `Interactions.tsv` (replaces the notebook): per cell type and neighbour type, the cells of the type, the contacts
   (each pair counts from both sides), the cells touching at least one such neighbour, and that fraction (all
-  events); and the **partner preference**: `contacts (3+ cells)` against `expected (3+ cells)` and their ratio.
+  events), `share of contacts` (the contacts with this neighbour type over all contacts of the type; 2026-11-06, the
+  bars of the dashboard); and the **partner preference**: `contacts (3+ cells)` against `expected (3+ cells)` and
+  their ratio. The dashboard's Interactions card saves the same table (or the subset preference) as `.tsv` for the
+  events shown and the subtypes of the sliders (2026-11-06).
   `Multiplets.tsv`: the number of events with n cells and with n interactions.
 - **Partner preference (decided with the user, 2026-11-01).** Expected = the mean over all ways of shuffling the cell
   types among the cells of each event (exact; same in the page). Only events of three or more cells: in an event of
